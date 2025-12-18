@@ -265,6 +265,108 @@ class QdrantIndexer:
             logger.info(f"Deleted collection '{self.collection_name}'")
         except Exception as e:
             logger.error(f"Failed to delete collection: {e}")
+    
+    def delete_by_document_id(self, document_id: str) -> int:
+        """
+        Delete all points (chunks) associated with a document_id.
+        
+        Args:
+            document_id: The document ID to delete
+            
+        Returns:
+            Number of points deleted
+        """
+        try:
+            # First, count how many points match
+            count_result = self.client.count(
+                collection_name=self.collection_name,
+                count_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="document_id",
+                            match=models.MatchValue(value=document_id),
+                        )
+                    ]
+                ),
+            )
+            points_count = count_result.count
+            
+            if points_count == 0:
+                logger.warning(f"No points found for document_id: {document_id}")
+                return 0
+            
+            # Delete points by filter
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="document_id",
+                                match=models.MatchValue(value=document_id),
+                            )
+                        ]
+                    )
+                ),
+            )
+            
+            logger.info(f"Deleted {points_count} points for document_id: {document_id}")
+            return points_count
+            
+        except Exception as e:
+            logger.error(f"Failed to delete document {document_id}: {e}")
+            raise
+    
+    def delete_by_filename(self, filename: str) -> int:
+        """
+        Delete all points (chunks) associated with a filename.
+        
+        Args:
+            filename: The source filename to delete
+            
+        Returns:
+            Number of points deleted
+        """
+        try:
+            # First, count how many points match
+            count_result = self.client.count(
+                collection_name=self.collection_name,
+                count_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="source",
+                            match=models.MatchValue(value=filename),
+                        )
+                    ]
+                ),
+            )
+            points_count = count_result.count
+            
+            if points_count == 0:
+                logger.warning(f"No points found for filename: {filename}")
+                return 0
+            
+            # Delete points by filter
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="source",
+                                match=models.MatchValue(value=filename),
+                            )
+                        ]
+                    )
+                ),
+            )
+            
+            logger.info(f"Deleted {points_count} points for filename: {filename}")
+            return points_count
+            
+        except Exception as e:
+            logger.error(f"Failed to delete by filename {filename}: {e}")
+            raise
 
 
 class LlamaIndexQdrantAdapter:

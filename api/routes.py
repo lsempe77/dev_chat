@@ -861,13 +861,78 @@ async def delete_document(document_id: str):
     """
     Delete a document and its vectors from the knowledge base.
     
-    TODO: 
-    - Delete from Qdrant
-    - Delete from R2
-    - Delete from metadata DB
+    Deletes:
+    - Vectors from Qdrant (by document_id or filename)
+    - Original PDF from R2 (if found)
+    - Processed outputs from R2 (if found)
     """
-    logger.info(f"Deleting document: {document_id}")
-    return {"success": True, "deleted": document_id}
+    deleted_vectors = 0
+    deleted_r2_files = []
+    errors = []
+    
+    try:
+        # 1. Delete from Qdrant
+        try:
+            indexer = QdrantIndexer()
+            # Try to delete by document_id first
+            deleted_vectors = indexer.delete_by_document_id(document_id)
+            
+            # If no vectors found by document_id, try by filename
+            if deleted_vectors == 0:
+                deleted_vectors = indexer.delete_by_filename(document_id)
+                
+            logger.info(f"Deleted {deleted_vectors} vectors for document: {document_id}")
+        except Exception as e:
+            errors.append(f"Qdrant delete failed: {str(e)}")
+            logger.error(f"Failed to delete from Qdrant: {e}")
+        
+        # 2. Delete from R2
+        try:
+            r2_client = get_r2_client()
+            bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+            
+            # Try to find and delete the original file
+            # Check both input-pdfs and outputs directories
+            prefixes_to_check = [
+                f"input-pdfs/{document_id}",
+                f"outputs/{document_id}",
+            ]
+            
+            for prefix in prefixes_to_check:
+                try:
+                    response = r2_client.list_objects_v2(
+                        Bucket=bucket_name,
+                        Prefix=prefix,
+                        MaxKeys=100,
+                    )
+                    
+                    for obj in response.get("Contents", []):
+                        try:
+                            r2_client.delete_object(Bucket=bucket_name, Key=obj["Key"])
+                            deleted_r2_files.append(obj["Key"])
+                            logger.info(f"Deleted R2 file: {obj['Key']}")
+                        except Exception as e:
+                            errors.append(f"R2 delete failed for {obj['Key']}: {str(e)}")
+                except Exception as e:
+                    logger.warning(f"Could not list R2 prefix {prefix}: {e}")
+                    
+        except Exception as e:
+            errors.append(f"R2 connection failed: {str(e)}")
+            logger.error(f"Failed to connect to R2: {e}")
+        
+        success = deleted_vectors > 0 or len(deleted_r2_files) > 0
+        
+        return {
+            "success": success,
+            "deleted": document_id,
+            "vectors_deleted": deleted_vectors,
+            "r2_files_deleted": deleted_r2_files,
+            "errors": errors if errors else None,
+        }
+        
+    except Exception as e:
+        logger.error(f"Delete document failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 
 @admin_router.post("/documents/{document_id}/reprocess")
