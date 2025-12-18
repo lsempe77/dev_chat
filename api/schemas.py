@@ -7,7 +7,7 @@ Pydantic models for API request/response validation.
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # =============================================================================
@@ -41,15 +41,23 @@ class StudyResponse(BaseModel):
     """A study in the format expected by the frontend."""
     id: str
     title: str
-    authors: str
-    year: int
-    country: str
-    sector: str
-    studyType: str
-    confidence: Literal["high", "medium", "low"]
-    snippet: str
-    score: float
+    authors: str = ""  # Can be empty string if not available
+    year: Optional[int] = None  # Can be None if not available
+    country: str = ""
+    sector: str = ""
+    studyType: str = ""
+    confidence: Literal["high", "medium", "low"] = "medium"
+    snippet: str = ""
+    score: float = 0.0
     pdfUrl: Optional[str] = None
+    
+    @field_validator('authors', mode='before')
+    @classmethod
+    def coerce_authors(cls, v):
+        """Convert list to comma-separated string."""
+        if isinstance(v, list):
+            return ", ".join(str(a) for a in v) if v else ""
+        return v or ""
 
 
 class CitationResponse(BaseModel):
