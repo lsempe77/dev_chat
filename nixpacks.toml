@@ -1,9 +1,11 @@
 # nixpacks.toml - Railway build configuration
+# IMPORTANT: This tells Railway to use Nixpacks instead of the Dockerfile
+
 [phases.setup]
 nixPkgs = ["python312"]
 
 [phases.install]
-cmds = ["pip install -r requirements-prod.txt"]
+cmds = ["pip install --upgrade pip", "pip install -r requirements-prod.txt"]
 
 [start]
 cmd = "uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-8000}"
