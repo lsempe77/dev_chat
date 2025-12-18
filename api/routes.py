@@ -998,19 +998,21 @@ async def delete_document(document_id: str):
             
             for prefix in prefixes_to_check:
                 try:
-                    response = r2_client.list_objects_v2(
+                    # Use paginator to handle folders with many files
+                    paginator = r2_client.get_paginator('list_objects_v2')
+                    pages = paginator.paginate(
                         Bucket=bucket_name,
                         Prefix=prefix,
-                        MaxKeys=100,
                     )
                     
-                    for obj in response.get("Contents", []):
-                        try:
-                            r2_client.delete_object(Bucket=bucket_name, Key=obj["Key"])
-                            deleted_r2_files.append(obj["Key"])
-                            logger.info(f"Deleted R2 file: {obj['Key']}")
-                        except Exception as e:
-                            errors.append(f"R2 delete failed for {obj['Key']}: {str(e)}")
+                    for page in pages:
+                        for obj in page.get("Contents", []):
+                            try:
+                                r2_client.delete_object(Bucket=bucket_name, Key=obj["Key"])
+                                deleted_r2_files.append(obj["Key"])
+                                logger.info(f"Deleted R2 file: {obj['Key']}")
+                            except Exception as e:
+                                errors.append(f"R2 delete failed for {obj['Key']}: {str(e)}")
                 except Exception as e:
                     logger.warning(f"Could not list R2 prefix {prefix}: {e}")
                     
