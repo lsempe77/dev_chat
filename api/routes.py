@@ -224,12 +224,21 @@ async def query_evidence(request: QueryRequest):
             coverageWarning=None if len(unique_studies) >= 3 else "Few studies found - consider broadening search",
         )
         
-        # Generate suggestions
-        suggestions = [
-            "Narrow to Sub-Saharan Africa?",
-            "Compare experimental vs quasi-experimental designs?",
-            "Focus on studies after 2020?",
-        ]
+        # Generate LLM-based suggestions
+        try:
+            suggestions = await agent.generate_suggestions(
+                query=request.query,
+                answer=response.answer,
+                citations=response.citations,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to generate suggestions: {e}")
+            # Fallback to default suggestions
+            suggestions = [
+                "Narrow to a specific region?",
+                "Compare different study designs?",
+                "Focus on more recent studies?",
+            ]
         
         return QueryResponse(
             answer=response.answer,

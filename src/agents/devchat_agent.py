@@ -337,6 +337,84 @@ class DevChatAgent:
     def get_history(self) -> List[Dict]:
         """Get conversation history."""
         return self.conversation_history
+    
+    async def generate_suggestions(
+        self,
+        query: str,
+        answer: str,
+        citations: List[Dict],
+    ) -> List[str]:
+        """
+        Generate LLM-based follow-up query suggestions.
+        
+        Args:
+            query: Original user query
+            answer: Generated answer
+            citations: List of citations used
+            
+        Returns:
+            List of 3 suggestion strings
+        """
+        from src.config.prompts import SUGGESTION_GENERATION_PROMPT
+        
+        # Extract topics from citations
+        topics = set()
+        for c in citations[:5]:  # Use top 5
+            if c.get("sector"):
+                topics.add(c["sector"])
+            if c.get("country"):
+                topics.add(c["country"])
+        topics_str = ", ".join(topics) if topics else "general development"
+        
+        # Truncate answer for prompt
+        answer_summary = answer[:500] + "..." if len(answer) > 500 else answer
+        
+        prompt = SUGGESTION_GENERATION_PROMPT.format(
+            query=query,
+            answer_summary=answer_summary,
+            study_count=len(citations),
+            topics=topics_str,
+        )
+        
+        try:
+            # Use fast model for suggestions
+            from llama_index.llms.openai_like import OpenAILike
+            
+            llm = OpenAILike(
+                model=settings.llm_fast_model,
+                api_base=settings.openrouter_base_url,
+                api_key=settings.openrouter_api_key,
+                temperature=0.7,
+                max_tokens=150,
+            )
+            
+            response = await llm.acomplete(prompt)
+            
+            # Parse response into list of suggestions
+            lines = response.text.strip().split("\n")
+            suggestions = [line.strip() for line in lines if line.strip()][:3]
+            
+            # Ensure we have 3 suggestions
+            if len(suggestions) < 3:
+                # Add default fallbacks
+                fallbacks = [
+                    "Focus on a specific region?",
+                    "Compare different intervention types?",
+                    "Look at more recent studies?",
+                ]
+                suggestions.extend(fallbacks[:(3 - len(suggestions))])
+            
+            logger.info(f"Generated {len(suggestions)} suggestions")
+            return suggestions[:3]
+            
+        except Exception as e:
+            logger.error(f"Failed to generate suggestions: {e}")
+            # Return default suggestions on error
+            return [
+                "Narrow to a specific country?",
+                "Compare different methodologies?",
+                "Focus on studies after 2020?",
+            ]
 
 
 class DevChatAgentFactory:

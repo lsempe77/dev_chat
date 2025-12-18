@@ -179,6 +179,29 @@ Provide the citation in APA format."""
 
 
 # =============================================================================
+# SUGGESTION GENERATION PROMPT
+# =============================================================================
+
+SUGGESTION_GENERATION_PROMPT = """Based on the user's research query and the answer provided, generate 3 helpful follow-up query suggestions.
+
+The suggestions should help the user:
+1. **Refine** - Narrow down or focus on a specific aspect
+2. **Expand** - Explore related topics or broaden the search
+3. **Compare** - Compare different approaches, regions, or methodologies
+
+Keep suggestions concise (under 10 words each) and phrase them as questions or commands.
+
+User Query: {query}
+
+Answer Summary: {answer_summary}
+
+Studies Found: {study_count}
+Topics Covered: {topics}
+
+Generate exactly 3 follow-up suggestions, one per line. No numbering or bullets."""
+
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
