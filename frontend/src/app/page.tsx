@@ -55,8 +55,8 @@ export default function Home() {
     setError(null);
     
     try {
-      // Call the real API
-      const response = await queryEvidence(searchQuery, filters);
+      // Call the real API with settings
+      const response = await queryEvidence(searchQuery, filters, searchSettings);
       
       setStudies(response.studies);
       setCitations(response.citations);
@@ -70,7 +70,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, [filters]);
+  }, [filters, searchSettings]);
 
   const handleCitationClick = useCallback((citationId: number) => {
     setHighlightedCitation(citationId);

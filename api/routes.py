@@ -124,15 +124,29 @@ async def query_evidence(request: QueryRequest):
                     study_types = study_types or []
                     study_types.append(f.value)
         
-        # Apply settings
+        # Apply settings to year filter
         if settings:
             if settings.yearCutoff and not year_min:
                 year_min = settings.yearCutoff
         
-        # Call the agent
+        # Convert API settings to agent SearchSettings
+        from src.agents.devchat_agent import SearchSettings as AgentSearchSettings
+        agent_settings = None
+        if settings:
+            agent_settings = AgentSearchSettings(
+                relevance_threshold=settings.relevanceThreshold,
+                max_studies=settings.maxStudies,
+                answer_style=settings.answerStyle,
+                use_reranking=settings.useReranking,
+                min_confidence=settings.minConfidence,
+                year_cutoff=settings.yearCutoff,
+            )
+        
+        # Call the agent with settings
         response = await agent.chat(
             query=request.query,
             include_citations=True,
+            search_settings=agent_settings,
         )
         
         # Convert backend response to frontend format

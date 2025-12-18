@@ -11,7 +11,7 @@ The central orchestrator that combines all components:
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import AsyncIterator, Dict, List, Optional
+from typing import AsyncIterator, Dict, List, Optional, Any
 
 from src.config.settings import settings
 from src.generation.citations import add_citations_to_answer
@@ -24,6 +24,31 @@ from src.retrieval.reranker import CohereReranker, Reranker, get_reranker
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class SearchSettings:
+    """Settings passed from frontend to control search behavior."""
+    relevance_threshold: float = 0.5
+    max_studies: int = 10
+    answer_style: str = "executive"
+    use_reranking: bool = True
+    min_confidence: str = "all"
+    year_cutoff: int = 2010
+    
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "SearchSettings":
+        """Create from dictionary (API request)."""
+        if not data:
+            return cls()
+        return cls(
+            relevance_threshold=data.get("relevanceThreshold", 0.5),
+            max_studies=data.get("maxStudies", 10),
+            answer_style=data.get("answerStyle", "executive"),
+            use_reranking=data.get("useReranking", True),
+            min_confidence=data.get("minConfidence", "all"),
+            year_cutoff=data.get("yearCutoff", 2010),
+        )
 
 
 @dataclass
@@ -101,6 +126,7 @@ class DevChatAgent:
         query: str,
         include_citations: bool = True,
         stream: bool = False,
+        search_settings: Optional[SearchSettings] = None,
     ) -> DevChatResponse:
         """
         Process a user query and generate a response.
@@ -109,11 +135,15 @@ class DevChatAgent:
             query: User's question
             include_citations: Whether to append reference list
             stream: Whether to stream the response (not implemented yet)
+            search_settings: Optional settings from frontend (relevance, max studies, etc.)
             
         Returns:
             DevChatResponse with answer and metadata
         """
         import time
+        
+        # Use provided settings or defaults
+        user_settings = search_settings or SearchSettings()
         
         total_start = time.time()
         
@@ -134,27 +164,47 @@ class DevChatAgent:
         if active_filters:
             logger.info(f"Applying filters: {active_filters}")
         
+        # Use maxStudies from settings for top_k (retrieve more, then filter)
+        retrieval_top_k = min(user_settings.max_studies * 3, settings.retrieval_top_k)
+        
         results = await self.retriever.retrieve(
             query=processed_query.primary_query,
-            top_k=settings.retrieval_top_k,
+            top_k=retrieval_top_k,
             filters=active_filters,
         )
         retrieval_time = (time.time() - retrieval_start) * 1000
         retrieval_count = len(results)
         
-        logger.info(f"Retrieved {retrieval_count} results")
+        logger.info(f"Retrieved {retrieval_count} results (settings.maxStudies={user_settings.max_studies})")
         
-        # Step 3: Reranking
+        # Step 3: Reranking (optional based on settings)
         rerank_start = time.time()
-        reranked_results = await self.reranker.rerank(
-            query=processed_query.original_query,
-            results=results,
-            top_n=settings.rerank_top_n,
-        )
+        if user_settings.use_reranking and self.reranker:
+            # Rerank to user's maxStudies count
+            rerank_top_n = min(user_settings.max_studies, settings.rerank_top_n)
+            reranked_results = await self.reranker.rerank(
+                query=processed_query.original_query,
+                results=results,
+                top_n=rerank_top_n,
+            )
+            logger.info(f"Reranked to {len(reranked_results)} results")
+        else:
+            # Skip reranking, just take top N
+            reranked_results = results[:user_settings.max_studies]
+            logger.info(f"Skipped reranking (useReranking=False), took top {len(reranked_results)}")
+        
+        # Apply relevance threshold filter
+        if user_settings.relevance_threshold > 0:
+            filtered_results = [
+                r for r in reranked_results 
+                if r.score >= user_settings.relevance_threshold
+            ]
+            if filtered_results:
+                reranked_results = filtered_results
+                logger.info(f"Applied relevance threshold {user_settings.relevance_threshold}, kept {len(reranked_results)}")
+        
         rerank_time = (time.time() - rerank_start) * 1000
         reranked_count = len(reranked_results)
-        
-        logger.info(f"Reranked to {reranked_count} results")
         
         # Step 4: Context Building
         context = self.context_builder.build(reranked_results)
