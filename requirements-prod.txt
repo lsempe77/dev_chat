@@ -1,18 +1,18 @@
-# DevChat v2.0 - Production API Requirements
+# DevChat v2.0 - Production API Requirements (Slim)
 # Minimal dependencies for FastAPI backend deployment
 # PDF processing handled by Modal (not included here)
+# IMPORTANT: No torch/huggingface - those are for Modal only
 
 # =============================================================================
 # Core Framework
 # =============================================================================
-llama-index>=0.12.0
 llama-index-core>=0.12.0
 
 # LLM Providers
 llama-index-llms-openai>=0.3.0
 llama-index-llms-anthropic>=0.6.0
 
-# Embeddings
+# Embeddings (NO huggingface - that pulls torch!)
 llama-index-embeddings-cohere>=0.4.0
 llama-index-embeddings-openai>=0.3.0
 
@@ -45,6 +45,7 @@ structlog>=24.4.0
 python-dotenv>=1.0.0
 tenacity>=9.0.0
 cohere>=5.0.0
+tiktoken>=0.7.0
 
 # =============================================================================
 # Cloud Storage (for R2 uploads from admin UI)
