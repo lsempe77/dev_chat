@@ -942,7 +942,7 @@ async def get_documents(
         )
 
 
-@admin_router.delete("/documents/{document_id}")
+@admin_router.delete("/documents/{document_id:path}")
 async def delete_document(document_id: str):
     """
     Delete a document and its vectors from the knowledge base.
