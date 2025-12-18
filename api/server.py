@@ -111,6 +111,14 @@ app.include_router(admin_router)
 app.include_router(api_router)  # Frontend API endpoints
 
 
+# Simple health endpoint that doesn't require any external connections
+# This is used by Railway healthcheck
+@app.get("/health")
+async def simple_health():
+    """Simple health check for Railway."""
+    return {"status": "ok", "service": "devchat-api", "version": "2.0.0"}
+
+
 # Root endpoint
 @app.get("/")
 async def root():
