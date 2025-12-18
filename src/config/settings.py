@@ -131,7 +131,7 @@ class Settings(BaseSettings):
     # =========================================================================
     # Retrieval
     # =========================================================================
-    hybrid_enabled: bool = Field(default=True, description="Enable hybrid search")
+    hybrid_enabled: bool = Field(default=False, description="Enable hybrid search (requires sparse vectors in Qdrant)")
     hybrid_alpha: float = Field(
         default=0.7, 
         ge=0.0, 
