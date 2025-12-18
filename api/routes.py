@@ -813,47 +813,113 @@ async def get_documents(
     offset: int = Query(0, ge=0),
 ):
     """
-    Get list of indexed documents.
+    Get list of indexed documents from Qdrant.
     
-    TODO: Query from Turso/PostgreSQL database
+    Aggregates unique documents from vector payloads.
     """
-    # Mock data - replace with actual database query
-    documents = [
-        DocumentMetadata(
-            id="doc-001",
-            title="The Impact of Cash Transfers on Educational Outcomes in Kenya",
-            filename="cash_transfers_kenya.pdf",
-            authors=["Smith, J.", "Ochieng, M."],
-            year=2023,
-            status="indexed",
-            page_count=45,
-            chunk_count=234,
-            uploaded_at=datetime.now(),
-            processed_at=datetime.now(),
-        ),
-        DocumentMetadata(
-            id="doc-002",
-            title="Systematic Review of Health Interventions in South Asia",
-            filename="health_interventions_sa.pdf",
-            authors=["Patel, R.", "Kumar, A."],
-            year=2022,
-            status="indexed",
-            page_count=128,
-            chunk_count=567,
-            uploaded_at=datetime.now(),
-            processed_at=datetime.now(),
-        ),
-    ]
-    
-    total_chunks = sum(d.chunk_count for d in documents)
-    total_pages = sum(d.page_count for d in documents)
-    
-    return DocumentsResponse(
-        documents=documents,
-        total_count=len(documents),
-        total_chunks=total_chunks,
-        total_pages=total_pages,
-    )
+    try:
+        indexer = QdrantIndexer()
+        
+        # Scroll through all points to get unique documents
+        # This is a simple approach - for production, use a metadata DB
+        all_points = []
+        next_offset = None
+        
+        while True:
+            results, next_offset = indexer.client.scroll(
+                collection_name=indexer.collection_name,
+                limit=100,
+                offset=next_offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            all_points.extend(results)
+            if next_offset is None or len(results) == 0:
+                break
+        
+        # Aggregate by source/document_id
+        doc_map = {}
+        for point in all_points:
+            payload = point.payload or {}
+            source = payload.get("source", payload.get("document_id", "unknown"))
+            
+            if source not in doc_map:
+                doc_map[source] = {
+                    "id": source,
+                    "title": payload.get("title", source),
+                    "filename": source,
+                    "authors": [],
+                    "year": payload.get("year"),
+                    "status": "indexed",
+                    "page_count": 0,
+                    "chunk_count": 0,
+                    "uploaded_at": datetime.now(),
+                    "processed_at": datetime.now(),
+                }
+            
+            doc_map[source]["chunk_count"] += 1
+            
+            # Try to get page info
+            if payload.get("page"):
+                doc_map[source]["page_count"] = max(
+                    doc_map[source]["page_count"], 
+                    int(payload.get("page", 0))
+                )
+            
+            # Get authors if available
+            if payload.get("authors") and not doc_map[source]["authors"]:
+                authors = payload.get("authors")
+                if isinstance(authors, list):
+                    doc_map[source]["authors"] = authors
+                elif isinstance(authors, str):
+                    doc_map[source]["authors"] = [authors]
+        
+        # Convert to list and apply filters
+        documents = []
+        for doc_data in doc_map.values():
+            # Apply search filter
+            if search:
+                search_lower = search.lower()
+                if (search_lower not in doc_data["title"].lower() and 
+                    search_lower not in doc_data["filename"].lower()):
+                    continue
+            
+            documents.append(DocumentMetadata(
+                id=doc_data["id"],
+                title=doc_data["title"],
+                filename=doc_data["filename"],
+                authors=doc_data["authors"],
+                year=doc_data["year"],
+                status=doc_data["status"],
+                page_count=doc_data["page_count"],
+                chunk_count=doc_data["chunk_count"],
+                uploaded_at=doc_data["uploaded_at"],
+                processed_at=doc_data["processed_at"],
+            ))
+        
+        # Apply pagination
+        total_count = len(documents)
+        documents = documents[offset:offset + limit]
+        
+        total_chunks = sum(d.chunk_count for d in documents)
+        total_pages = sum(d.page_count for d in documents)
+        
+        return DocumentsResponse(
+            documents=documents,
+            total_count=total_count,
+            total_chunks=total_chunks,
+            total_pages=total_pages,
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get documents: {e}")
+        # Return empty list on error
+        return DocumentsResponse(
+            documents=[],
+            total_count=0,
+            total_chunks=0,
+            total_pages=0,
+        )
 
 
 @admin_router.delete("/documents/{document_id}")
