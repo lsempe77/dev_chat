@@ -1,0 +1,53 @@
+# MinerU GPU Worker - Optimized for AWS g4dn/g5 instances
+# Build: docker build -f Dockerfile.mineru -t devchat-mineru .
+# Run: docker run --gpus all -v /data:/data devchat-mineru
+
+FROM nvidia/cuda:12.1-runtime-ubuntu22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Create app directory
+WORKDIR /app
+
+# Install MinerU with GPU support
+RUN pip install --no-cache-dir \
+    mineru[full] \
+    boto3 \
+    redis \
+    celery
+
+# Pre-download models during build (bakes into image)
+# This makes cold starts faster but increases image size to ~3GB
+RUN python -c "from mineru.cli.common import prepare_env; prepare_env()"
+
+# Copy worker code
+COPY src/ingestion/pdf_processor.py /app/pdf_processor.py
+COPY scripts/mineru_worker.py /app/worker.py
+
+# Environment variables
+ENV MINERU_DEVICE=cuda
+ENV HF_HOME=/app/.cache/huggingface
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
+    CMD python -c "import torch; print(torch.cuda.is_available())" || exit 1
+
+# Default command: run as Celery worker
+CMD ["celery", "-A", "worker", "worker", "--loglevel=info", "--concurrency=1"]

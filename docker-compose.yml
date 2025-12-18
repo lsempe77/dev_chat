@@ -1,0 +1,123 @@
+# DevChat v2.0 SOTA - Docker Compose Configuration
+
+services:
+  # ==========================================================================
+  # Core Services
+  # ==========================================================================
+  
+  devchat:
+    build:
+      context: .
+      target: production
+    container_name: devchat-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - QDRANT_URL=http://qdrant:6333
+      - LOG_LEVEL=INFO
+    env_file:
+      - .env
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health/live', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - devchat-network
+
+  gradio:
+    build:
+      context: .
+      target: production
+    container_name: devchat-gradio
+    ports:
+      - "7860:7860"
+    environment:
+      - ENVIRONMENT=production
+      - QDRANT_URL=http://qdrant:6333
+    env_file:
+      - .env
+    command: ["python", "ui/gradio_app.py"]
+    depends_on:
+      - devchat
+    restart: unless-stopped
+    networks:
+      - devchat-network
+
+  # ==========================================================================
+  # Vector Database
+  # ==========================================================================
+  
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: devchat-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"  # gRPC port
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - devchat-network
+
+  # ==========================================================================
+  # Observability (Optional)
+  # ==========================================================================
+  
+  # Uncomment to enable Langfuse for tracing
+  # langfuse:
+  #   image: langfuse/langfuse:latest
+  #   container_name: devchat-langfuse
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/langfuse
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - devchat-network
+  
+  # postgres:
+  #   image: postgres:16
+  #   container_name: devchat-postgres
+  #   environment:
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=langfuse
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - devchat-network
+
+# ==========================================================================
+# Development Override
+# ==========================================================================
+
+# For development, create docker-compose.override.yml with:
+# services:
+#   devchat:
+#     build:
+#       target: development
+#     volumes:
+#       - .:/app
+#     command: ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--reload"]
+
+networks:
+  devchat-network:
+    driver: bridge
+
+volumes:
+  qdrant_storage:
+  # postgres_data:

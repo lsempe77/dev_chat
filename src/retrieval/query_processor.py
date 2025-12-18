@@ -1,0 +1,305 @@
+"""
+DevChat v2.0 SOTA - Query Processor
+
+Handles query understanding before retrieval:
+- Query classification (simple, synthesis, comparison)
+- Query expansion (synonyms, acronyms, domain terms)
+- Metadata extraction (year, sector, country filters)
+"""
+
+import json
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Dict, List, Optional
+
+from src.config.prompts import (
+    METADATA_EXTRACTION_PROMPT,
+    QUERY_CLASSIFICATION_PROMPT,
+    QUERY_EXPANSION_PROMPT,
+)
+from src.config.settings import settings
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class QueryType(str, Enum):
+    """Types of user queries."""
+    SIMPLE = "simple"
+    LOOKUP = "lookup"
+    SYNTHESIS = "synthesis"
+    COMPARISON = "comparison"
+    METHODOLOGY = "methodology"
+
+
+@dataclass
+class ExtractedFilters:
+    """Metadata filters extracted from query."""
+    year_min: Optional[int] = None
+    year_max: Optional[int] = None
+    sectors: List[str] = field(default_factory=list)
+    countries: List[str] = field(default_factory=list)
+    study_types: List[str] = field(default_factory=list)
+    confidence_level: Optional[str] = None
+    
+    def has_filters(self) -> bool:
+        """Check if any filters are set."""
+        return any([
+            self.year_min,
+            self.year_max,
+            self.sectors,
+            self.countries,
+            self.study_types,
+            self.confidence_level,
+        ])
+    
+    def to_qdrant_filter(self):
+        """Convert to Qdrant filter format."""
+        from qdrant_client.models import Filter, FieldCondition, Range, MatchAny, MatchValue
+        
+        conditions = []
+        
+        if self.year_min or self.year_max:
+            year_range = Range(
+                gte=self.year_min,
+                lte=self.year_max,
+            )
+            conditions.append(FieldCondition(key="year", range=year_range))
+        
+        if self.sectors:
+            conditions.append(FieldCondition(
+                key="sector",
+                match=MatchAny(any=self.sectors),
+            ))
+        
+        if self.countries:
+            conditions.append(FieldCondition(
+                key="country",
+                match=MatchAny(any=self.countries),
+            ))
+        
+        if self.study_types:
+            conditions.append(FieldCondition(
+                key="study_type",
+                match=MatchAny(any=self.study_types),
+            ))
+        
+        if self.confidence_level:
+            conditions.append(FieldCondition(
+                key="confidence_rating",
+                match=MatchValue(value=self.confidence_level),
+            ))
+        
+        if conditions:
+            return Filter(must=conditions)
+        return None
+
+
+@dataclass
+class QueryClassification:
+    """Result of query processing."""
+    original_query: str
+    expanded_query: str
+    query_type: QueryType
+    filters: ExtractedFilters
+    search_queries: List[str] = field(default_factory=list)
+    
+    @property
+    def primary_query(self) -> str:
+        """Get the primary query for retrieval."""
+        return self.expanded_query or self.original_query
+
+
+class QueryProcessor:
+    """
+    Process user queries before retrieval.
+    
+    Pipeline:
+    1. Classify query type
+    2. Expand query with synonyms/acronyms
+    3. Extract metadata filters
+    """
+    
+    def __init__(self, llm=None):
+        """
+        Initialize query processor.
+        
+        Args:
+            llm: LLM for query processing (uses fast model by default)
+        """
+        self._llm = llm
+        
+    def _get_llm(self):
+        """Get or create LLM instance."""
+        if self._llm is None:
+            # Use OpenRouter via OpenAILike for unified API access
+            from llama_index.llms.openai_like import OpenAILike
+            self._llm = OpenAILike(
+                model=settings.llm_fast_model,
+                api_key=settings.openrouter_api_key,
+                api_base=settings.openrouter_base_url,
+                temperature=0.0,
+                max_tokens=1024,
+                is_chat_model=True,
+            )
+        return self._llm
+    
+    async def process(self, query: str) -> QueryClassification:
+        """
+        Process a user query.
+        
+        Args:
+            query: Raw user query
+            
+        Returns:
+            Classified and expanded query with filters
+        """
+        # Run all processing steps
+        query_type = await self._classify_query(query)
+        expanded_query = await self._expand_query(query)
+        filters = await self._extract_filters(query)
+        
+        result = QueryClassification(
+            original_query=query,
+            expanded_query=expanded_query,
+            query_type=query_type,
+            filters=filters,
+        )
+        
+        logger.info(
+            f"Query processed: type={query_type.value}, "
+            f"has_filters={filters.has_filters()}, "
+            f"expanded_length={len(expanded_query)}"
+        )
+        
+        return result
+    
+    def process_sync(self, query: str) -> QueryClassification:
+        """Synchronous version of process."""
+        import asyncio
+        return asyncio.run(self.process(query))
+    
+    async def _classify_query(self, query: str) -> QueryType:
+        """Classify the query type."""
+        if not settings.query_classification_enabled:
+            return QueryType.SYNTHESIS
+        
+        try:
+            llm = self._get_llm()
+            prompt = QUERY_CLASSIFICATION_PROMPT.format(query=query)
+            
+            response = await llm.acomplete(prompt)
+            classification = response.text.strip().lower()
+            
+            # Map to enum
+            type_map = {
+                "simple": QueryType.SIMPLE,
+                "lookup": QueryType.LOOKUP,
+                "synthesis": QueryType.SYNTHESIS,
+                "comparison": QueryType.COMPARISON,
+                "methodology": QueryType.METHODOLOGY,
+            }
+            
+            return type_map.get(classification, QueryType.SYNTHESIS)
+            
+        except Exception as e:
+            logger.warning(f"Query classification failed: {e}")
+            return QueryType.SYNTHESIS
+    
+    async def _expand_query(self, query: str) -> str:
+        """Expand query with synonyms and related terms."""
+        if not settings.query_expansion_enabled:
+            return query
+        
+        try:
+            llm = self._get_llm()
+            prompt = QUERY_EXPANSION_PROMPT.format(query=query)
+            
+            response = await llm.acomplete(prompt)
+            expanded = response.text.strip()
+            
+            # Sanity check - expansion shouldn't be too long
+            if len(expanded) > len(query) * 5:
+                logger.warning("Query expansion too long, truncating")
+                expanded = expanded[:len(query) * 5]
+            
+            return expanded
+            
+        except Exception as e:
+            logger.warning(f"Query expansion failed: {e}")
+            return query
+    
+    async def _extract_filters(self, query: str) -> ExtractedFilters:
+        """Extract metadata filters from query."""
+        try:
+            llm = self._get_llm()
+            prompt = METADATA_EXTRACTION_PROMPT.format(query=query)
+            
+            response = await llm.acomplete(prompt)
+            
+            # Parse JSON response
+            try:
+                data = json.loads(response.text.strip())
+            except json.JSONDecodeError:
+                # Try to extract JSON from response
+                import re
+                json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group())
+                else:
+                    return ExtractedFilters()
+            
+            return ExtractedFilters(
+                year_min=data.get("year_min"),
+                year_max=data.get("year_max"),
+                sectors=data.get("sectors", []),
+                countries=data.get("countries", []),
+                study_types=data.get("study_types", []),
+                confidence_level=data.get("confidence_level"),
+            )
+            
+        except Exception as e:
+            logger.warning(f"Filter extraction failed: {e}")
+            return ExtractedFilters()
+
+
+# Domain-specific query expansion rules (fallback if LLM fails)
+EXPANSION_RULES: Dict[str, List[str]] = {
+    # Acronyms
+    "cct": ["conditional cash transfer", "cash transfer program"],
+    "uct": ["unconditional cash transfer", "cash transfer"],
+    "rct": ["randomized controlled trial", "randomized experiment"],
+    "did": ["difference-in-differences", "difference in difference"],
+    "iv": ["instrumental variable", "instrumental variables"],
+    "psa": ["propensity score analysis", "propensity score matching"],
+    
+    # Sectors
+    "education": ["schooling", "learning", "enrollment", "school"],
+    "health": ["healthcare", "medical", "disease", "nutrition"],
+    "agriculture": ["farming", "crop", "livestock", "agricultural"],
+    "wash": ["water sanitation hygiene", "water supply", "sanitation"],
+    "governance": ["government", "public sector", "institutional"],
+    
+    # Interventions
+    "microfinance": ["microcredit", "microloans", "small loans"],
+    "deworming": ["mass drug administration", "anthelminthic"],
+    "school meals": ["school feeding", "midday meal", "food program"],
+}
+
+
+def rule_based_expansion(query: str) -> str:
+    """
+    Fallback rule-based query expansion.
+    
+    Uses predefined rules for common acronyms and terms.
+    """
+    query_lower = query.lower()
+    expansions = []
+    
+    for term, synonyms in EXPANSION_RULES.items():
+        if term in query_lower:
+            expansions.extend(synonyms)
+    
+    if expansions:
+        return f"{query} {' '.join(expansions)}"
+    return query

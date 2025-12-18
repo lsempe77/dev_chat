@@ -1,0 +1,52 @@
+# DevChat v2.0 - Production API Requirements
+# Minimal dependencies for FastAPI backend deployment
+# PDF processing handled by Modal (not included here)
+
+# =============================================================================
+# Core Framework
+# =============================================================================
+llama-index>=0.12.0
+llama-index-core>=0.12.0
+
+# LLM Providers
+llama-index-llms-openai>=0.3.0
+llama-index-llms-anthropic>=0.6.0
+
+# Embeddings
+llama-index-embeddings-cohere>=0.4.0
+llama-index-embeddings-openai>=0.3.0
+
+# Reranking
+llama-index-postprocessor-cohere-rerank>=0.3.0
+
+# Vector Database
+llama-index-vector-stores-qdrant>=0.4.0
+qdrant-client>=1.12.0
+
+# =============================================================================
+# API & Web
+# =============================================================================
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+python-multipart>=0.0.17
+httpx>=0.28.0
+
+# =============================================================================
+# Observability
+# =============================================================================
+langfuse>=2.50.0
+structlog>=24.4.0
+
+# =============================================================================
+# Utilities
+# =============================================================================
+python-dotenv>=1.0.0
+tenacity>=9.0.0
+cohere>=5.0.0
+
+# =============================================================================
+# Cloud Storage (for R2 uploads from admin UI)
+# =============================================================================
+boto3>=1.35.0

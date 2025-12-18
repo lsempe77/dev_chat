@@ -1,0 +1,66 @@
+{
+  "description": "Golden test cases for DevChat evaluation",
+  "version": "1.0",
+  "test_cases": [
+    {
+      "id": "simple_1",
+      "question": "What is a conditional cash transfer?",
+      "category": "simple",
+      "expected_answer": "A conditional cash transfer (CCT) is a social welfare program that provides cash payments to recipients contingent on them meeting certain conditions, typically related to education (school attendance) or health (vaccination, medical checkups)."
+    },
+    {
+      "id": "simple_2",
+      "question": "What is an RCT?",
+      "category": "simple",
+      "expected_answer": "A randomized controlled trial (RCT) is a research design where participants are randomly assigned to treatment or control groups to evaluate the causal effect of an intervention."
+    },
+    {
+      "id": "lookup_1",
+      "question": "Find studies on school meals programs in Africa",
+      "category": "lookup",
+      "expected_topics": ["school feeding", "education outcomes", "nutrition", "attendance"]
+    },
+    {
+      "id": "lookup_2",
+      "question": "List systematic reviews on microfinance",
+      "category": "lookup",
+      "expected_topics": ["microfinance", "microcredit", "poverty", "income"]
+    },
+    {
+      "id": "synthesis_1",
+      "question": "What do studies say about the effects of cash transfers on education outcomes?",
+      "category": "synthesis",
+      "expected_topics": ["enrollment", "attendance", "learning outcomes", "dropout rates"]
+    },
+    {
+      "id": "synthesis_2",
+      "question": "Summarize the evidence on deworming programs",
+      "category": "synthesis",
+      "expected_topics": ["health", "education", "cognition", "school attendance", "worm infections"]
+    },
+    {
+      "id": "comparison_1",
+      "question": "Compare conditional vs unconditional cash transfers for education",
+      "category": "comparison",
+      "expected_topics": ["CCT", "UCT", "conditions", "enrollment", "cost-effectiveness"]
+    },
+    {
+      "id": "comparison_2",
+      "question": "How do the effects of education interventions differ between boys and girls?",
+      "category": "comparison",
+      "expected_topics": ["gender", "girls education", "enrollment", "heterogeneous effects"]
+    },
+    {
+      "id": "methodology_1",
+      "question": "What methods are commonly used to evaluate education programs?",
+      "category": "methodology",
+      "expected_topics": ["RCT", "quasi-experimental", "difference-in-differences", "regression discontinuity"]
+    },
+    {
+      "id": "complex_1",
+      "question": "What is the evidence on long-term effects of early childhood interventions in low-income countries?",
+      "category": "synthesis",
+      "expected_topics": ["early childhood", "long-term", "cognitive development", "economic returns"]
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+# DevChat v2.0 SOTA - Requirements
+# Last updated: December 2025
+
+# =============================================================================
+# Core Framework
+# =============================================================================
+llama-index>=0.12.0
+llama-index-core>=0.12.0
+
+# LLM Providers
+# OpenRouter uses OpenAI-compatible API, so llama-index-llms-openai is sufficient
+llama-index-llms-openai>=0.3.0
+# Keep Anthropic as fallback option
+llama-index-llms-anthropic>=0.6.0
+
+# Embeddings
+llama-index-embeddings-cohere>=0.4.0
+llama-index-embeddings-openai>=0.3.0
+llama-index-embeddings-voyageai>=0.3.0
+
+# Reranking
+llama-index-postprocessor-cohere-rerank>=0.3.0
+
+# Vector Database
+llama-index-vector-stores-qdrant>=0.4.0
+qdrant-client>=1.12.0
+
+# =============================================================================
+# Document Processing
+# =============================================================================
+# PDF & Document Parsing
+unstructured[all-docs]>=0.16.0
+pypdf>=5.0.0
+pdfplumber>=0.11.0
+
+# MinerU - SOTA PDF parsing for academic papers
+# Extracts text, tables, formulas from complex PDFs
+# Note: AGPL-3.0 licensed (fine for internal processing)
+# Package renamed from magic-pdf to mineru in v2.6+
+# IMPORTANT: Enable Windows Long Path before installing (see SETUP_TRACKER.md)
+mineru[core]>=2.6.0
+
+# Markdown Processing  
+markdown>=3.7
+beautifulsoup4>=4.12.0
+
+# =============================================================================
+# API & Web
+# =============================================================================
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+python-multipart>=0.0.17
+
+# Frontend
+gradio>=5.0.0
+
+# =============================================================================
+# Observability & Logging
+# =============================================================================
+langfuse>=2.50.0
+opentelemetry-api>=1.28.0
+opentelemetry-sdk>=1.28.0
+structlog>=24.4.0
+rich>=13.9.0
+
+# =============================================================================
+# Evaluation
+# =============================================================================
+ragas>=0.2.0
+deepeval>=1.4.0
+datasets>=3.0.0
+
+# =============================================================================
+# Utilities
+# =============================================================================
+python-dotenv>=1.0.0
+httpx>=0.28.0
+tenacity>=9.0.0
+tqdm>=4.67.0
+numpy>=1.26.0
+pandas>=2.2.0
+
+# =============================================================================
+# Development & Testing
+# =============================================================================
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-cov>=6.0.0
+black>=24.10.0
+ruff>=0.8.0
+mypy>=1.13.0
+ipython>=8.29.0
+
+# =============================================================================
+# Optional: Local Models (uncomment if needed)
+# =============================================================================
+# llama-index-llms-ollama>=0.4.0
+# llama-index-embeddings-huggingface>=0.4.0
+# sentence-transformers>=3.3.0
+# torch>=2.5.0
