@@ -268,50 +268,56 @@ class QdrantIndexer:
     
     def delete_by_document_id(self, document_id: str) -> int:
         """
-        Delete all points (chunks) associated with a document_id.
+        Delete all points (chunks) associated with a document_id or source.
+        
+        Uses scroll to find matching points since payload fields may not be indexed.
         
         Args:
-            document_id: The document ID to delete
+            document_id: The document ID or source filename to delete
             
         Returns:
             Number of points deleted
         """
         try:
-            # First, count how many points match
-            count_result = self.client.count(
-                collection_name=self.collection_name,
-                count_filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="document_id",
-                            match=models.MatchValue(value=document_id),
-                        )
-                    ]
-                ),
-            )
-            points_count = count_result.count
+            # Scroll through all points to find matches
+            # This is safer than filter-based delete when indexes may not exist
+            matching_point_ids = []
+            next_offset = None
             
-            if points_count == 0:
+            while True:
+                results, next_offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=100,
+                    offset=next_offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                
+                for point in results:
+                    payload = point.payload or {}
+                    # Match on document_id OR source field
+                    if (payload.get("document_id") == document_id or 
+                        payload.get("source") == document_id or
+                        payload.get("filename") == document_id):
+                        matching_point_ids.append(point.id)
+                
+                if next_offset is None or len(results) == 0:
+                    break
+            
+            if not matching_point_ids:
                 logger.warning(f"No points found for document_id: {document_id}")
                 return 0
             
-            # Delete points by filter
+            # Delete the matching points by ID
             self.client.delete(
                 collection_name=self.collection_name,
-                points_selector=models.FilterSelector(
-                    filter=models.Filter(
-                        must=[
-                            models.FieldCondition(
-                                key="document_id",
-                                match=models.MatchValue(value=document_id),
-                            )
-                        ]
-                    )
+                points_selector=models.PointIdsList(
+                    points=matching_point_ids,
                 ),
             )
             
-            logger.info(f"Deleted {points_count} points for document_id: {document_id}")
-            return points_count
+            logger.info(f"Deleted {len(matching_point_ids)} points for document_id: {document_id}")
+            return len(matching_point_ids)
             
         except Exception as e:
             logger.error(f"Failed to delete document {document_id}: {e}")
@@ -321,6 +327,8 @@ class QdrantIndexer:
         """
         Delete all points (chunks) associated with a filename.
         
+        Uses scroll to find matching points since payload fields may not be indexed.
+        
         Args:
             filename: The source filename to delete
             
@@ -328,41 +336,43 @@ class QdrantIndexer:
             Number of points deleted
         """
         try:
-            # First, count how many points match
-            count_result = self.client.count(
-                collection_name=self.collection_name,
-                count_filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="source",
-                            match=models.MatchValue(value=filename),
-                        )
-                    ]
-                ),
-            )
-            points_count = count_result.count
+            # Scroll through all points to find matches
+            matching_point_ids = []
+            next_offset = None
             
-            if points_count == 0:
+            while True:
+                results, next_offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=100,
+                    offset=next_offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                
+                for point in results:
+                    payload = point.payload or {}
+                    source = payload.get("source", "")
+                    # Match if filename is in the source path
+                    if filename in source or source == filename:
+                        matching_point_ids.append(point.id)
+                
+                if next_offset is None or len(results) == 0:
+                    break
+            
+            if not matching_point_ids:
                 logger.warning(f"No points found for filename: {filename}")
                 return 0
             
-            # Delete points by filter
+            # Delete the matching points by ID
             self.client.delete(
                 collection_name=self.collection_name,
-                points_selector=models.FilterSelector(
-                    filter=models.Filter(
-                        must=[
-                            models.FieldCondition(
-                                key="source",
-                                match=models.MatchValue(value=filename),
-                            )
-                        ]
-                    )
+                points_selector=models.PointIdsList(
+                    points=matching_point_ids,
                 ),
             )
             
-            logger.info(f"Deleted {points_count} points for filename: {filename}")
-            return points_count
+            logger.info(f"Deleted {len(matching_point_ids)} points for filename: {filename}")
+            return len(matching_point_ids)
             
         except Exception as e:
             logger.error(f"Failed to delete by filename {filename}: {e}")
