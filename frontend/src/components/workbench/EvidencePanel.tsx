@@ -129,18 +129,30 @@ export function EvidencePanel({
 
       <ScrollArea className="flex-1">
         <div className="space-y-3 pr-4">
-          {studies.map((study) => (
-            <StudyCard
-              key={study.id}
-              study={study}
-              citationNumber={getCitationNumber(study.id)}
-              isHighlighted={isHighlighted(study)}
-              isSelected={isSelected(study)}
-              onSelect={onSelectStudy}
-              onExclude={onExcludeStudy}
-              onOpenPdf={onOpenPdf}
-            />
-          ))}
+          {studies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="text-4xl mb-4">🔍</div>
+              <h3 className="text-lg font-medium text-muted-foreground mb-2">
+                No studies found
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                Try adjusting your search terms or filters to find relevant evidence.
+              </p>
+            </div>
+          ) : (
+            studies.map((study) => (
+              <StudyCard
+                key={study.id}
+                study={study}
+                citationNumber={getCitationNumber(study.id)}
+                isHighlighted={isHighlighted(study)}
+                isSelected={isSelected(study)}
+                onSelect={onSelectStudy}
+                onExclude={onExcludeStudy}
+                onOpenPdf={onOpenPdf}
+              />
+            ))
+          )}
         </div>
       </ScrollArea>
     </div>

@@ -222,10 +222,30 @@ class DevChatAgent:
         )
         synthesis_time = (time.time() - synthesis_start) * 1000
         
-        # Add citations if requested
+        # Add citations if requested AND answer has useful content
         answer = synthesis_result.answer
-        if include_citations and context.citations:
+        
+        # Check if answer indicates no relevant information found
+        no_info_indicators = [
+            "does not contain",
+            "no relevant",
+            "no information",
+            "unable to",
+            "cannot find",
+            "no studies found",
+            "no evidence found",
+            "i don't have",
+            "i do not have",
+        ]
+        answer_lower = answer.lower()
+        has_useful_content = not any(indicator in answer_lower for indicator in no_info_indicators)
+        
+        # Only add citations if we have useful content AND citations exist
+        if include_citations and context.citations and has_useful_content:
             answer = add_citations_to_answer(answer, context.citations)
+        
+        # If no useful content, clear the citations to avoid showing empty references
+        final_citations = context.citations if has_useful_content else []
         
         # Calculate total time
         total_time = (time.time() - total_start) * 1000
@@ -235,8 +255,8 @@ class DevChatAgent:
             answer=answer,
             query_type=processed_query.query_type.value,
             model_used=synthesis_result.model_used,
-            num_sources=context.num_studies,
-            citations=context.citations,
+            num_sources=len(final_citations),
+            citations=final_citations,
             query_time_ms=query_time,
             retrieval_time_ms=retrieval_time,
             rerank_time_ms=rerank_time,

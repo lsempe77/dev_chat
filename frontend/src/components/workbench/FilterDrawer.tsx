@@ -78,7 +78,7 @@ export function FilterDrawer({
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent side="right" className="w-[350px] sm:w-[400px]">
+      <SheetContent side="right" className="w-[350px] sm:w-[400px] px-6">
         <SheetHeader>
           <SheetTitle>Add Filters</SheetTitle>
         </SheetHeader>
