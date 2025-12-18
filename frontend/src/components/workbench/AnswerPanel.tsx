@@ -272,29 +272,46 @@ export function AnswerPanel({
           <Separator />
 
           {/* Evidence Health */}
-          <Card className="bg-muted/50">
-            <CardContent className="pt-4">
-              <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-                <Info className="h-4 w-4" />
-                Evidence Health
-              </h3>
-              <div className="space-y-1 text-sm">
-                <p>• {evidenceHealth.studyCount} studies used</p>
-                <p>• {evidenceHealth.dateRange} coverage</p>
-                {evidenceHealth.gaps.map((gap, i) => (
-                  <p key={i} className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
-                    <AlertTriangle className="h-3 w-3" />
-                    {gap}
-                  </p>
-                ))}
-                {evidenceHealth.coverageWarning && (
-                  <p className="text-yellow-600 dark:text-yellow-400">
-                    ⚠️ {evidenceHealth.coverageWarning}
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          {(evidenceHealth.studyCount > 0 || evidenceHealth.gaps.length > 0) && (
+            <Card className="bg-muted/50">
+              <CardContent className="pt-4">
+                <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Info className="h-4 w-4" />
+                  Evidence Quality
+                </h3>
+                <div className="space-y-2 text-sm">
+                  {evidenceHealth.studyCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant={evidenceHealth.studyCount >= 5 ? "default" : "secondary"}>
+                        {evidenceHealth.studyCount} studies
+                      </Badge>
+                      {evidenceHealth.dateRange && (
+                        <span className="text-muted-foreground">
+                          {evidenceHealth.dateRange}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {evidenceHealth.gaps.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-muted">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Gaps identified:</p>
+                      {evidenceHealth.gaps.map((gap, i) => (
+                        <p key={i} className="flex items-start gap-1.5 text-yellow-600 dark:text-yellow-400 text-xs">
+                          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                          <span>{gap}</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {evidenceHealth.coverageWarning && (
+                    <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-2">
+                      ⚠️ {evidenceHealth.coverageWarning}
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Query Coaching */}
           {suggestions.length > 0 && (

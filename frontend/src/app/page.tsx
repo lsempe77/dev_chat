@@ -46,6 +46,7 @@ export default function Home() {
   const [answerStyle, setAnswerStyle] = useState<AnswerStyle>("executive");
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const [searchSettings, setSearchSettings] = useState<SearchSettings>(defaultSettings);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
   const handleSearch = useCallback(async (searchQuery: string) => {
     setQuery(searchQuery);
@@ -162,9 +163,11 @@ export default function Home() {
             <FilterChips
               filters={filters}
               onRemove={handleRemoveFilter}
-              onAdd={() => {}}
+              onAdd={() => setIsFilterDrawerOpen(true)}
             />
             <FilterDrawer
+              isOpen={isFilterDrawerOpen}
+              onOpenChange={setIsFilterDrawerOpen}
               currentFilters={filters}
               onAddFilter={handleAddFilter}
               onRemoveFilter={handleRemoveFilter}

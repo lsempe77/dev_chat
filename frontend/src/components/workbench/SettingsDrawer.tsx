@@ -83,7 +83,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           Settings
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-[350px] sm:w-[400px]">
+      <SheetContent side="right" className="w-[350px] sm:w-[400px] px-6">
         <SheetHeader>
           <SheetTitle>Search Settings</SheetTitle>
           <SheetDescription>
@@ -91,7 +91,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="mt-6 space-y-6 pl-0">
           {/* Relevance Threshold */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">

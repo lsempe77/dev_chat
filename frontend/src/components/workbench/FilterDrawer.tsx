@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Check } from "lucide-react";
 
 interface FilterDrawerProps {
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   currentFilters: Filter[];
   onAddFilter: (filter: Filter) => void;
   onRemoveFilter: (filter: Filter) => void;
@@ -43,8 +45,18 @@ const filterOptions: Record<string, { type: Filter["type"]; values: string[] }> 
   },
 };
 
-export function FilterDrawer({ currentFilters, onAddFilter, onRemoveFilter }: FilterDrawerProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function FilterDrawer({ 
+  isOpen: controlledIsOpen, 
+  onOpenChange, 
+  currentFilters, 
+  onAddFilter, 
+  onRemoveFilter 
+}: FilterDrawerProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  
+  // Use controlled state if provided, otherwise use internal state
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  const setIsOpen = onOpenChange || setInternalIsOpen;
 
   const isFilterActive = (type: Filter["type"], value: string) => {
     return currentFilters.some((f) => f.type === type && f.value.toLowerCase() === value.toLowerCase());
