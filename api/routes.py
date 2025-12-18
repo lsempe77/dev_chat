@@ -494,6 +494,26 @@ async def get_collection_info():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.post("/indexes")
+async def ensure_indexes():
+    """
+    Create or ensure all required payload indexes exist on the Qdrant collection.
+    This enables efficient filtering by document_id, source, etc.
+    Safe to call multiple times - will skip already existing indexes.
+    """
+    try:
+        indexer = QdrantIndexer()
+        results = indexer.ensure_indexes()
+        return {
+            "success": True,
+            "message": "Payload indexes ensured",
+            "indexes": results,
+        }
+    except Exception as e:
+        logger.error(f"Failed to ensure indexes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.post("/ingest", response_model=IngestResponse)
 async def ingest_documents(request: IngestRequest):
     """

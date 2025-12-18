@@ -112,6 +112,8 @@ class QdrantIndexer:
         # Index commonly filtered fields
         index_fields = [
             ("study_id", models.PayloadSchemaType.KEYWORD),
+            ("document_id", models.PayloadSchemaType.KEYWORD),
+            ("source", models.PayloadSchemaType.KEYWORD),
             ("year", models.PayloadSchemaType.INTEGER),
             ("sector", models.PayloadSchemaType.KEYWORD),
             ("country", models.PayloadSchemaType.KEYWORD),
@@ -130,6 +132,46 @@ class QdrantIndexer:
             except Exception as e:
                 logger.debug(f"Index for '{field_name}' may already exist: {e}")
     
+    def ensure_indexes(self) -> Dict[str, bool]:
+        """
+        Ensure all required payload indexes exist on the collection.
+        Can be called on existing collections to add missing indexes.
+        
+        Returns:
+            Dict of field_name -> success status
+        """
+        index_fields = [
+            ("study_id", models.PayloadSchemaType.KEYWORD),
+            ("document_id", models.PayloadSchemaType.KEYWORD),
+            ("source", models.PayloadSchemaType.KEYWORD),
+            ("year", models.PayloadSchemaType.INTEGER),
+            ("sector", models.PayloadSchemaType.KEYWORD),
+            ("country", models.PayloadSchemaType.KEYWORD),
+            ("region", models.PayloadSchemaType.KEYWORD),
+            ("study_type", models.PayloadSchemaType.KEYWORD),
+            ("confidence_rating", models.PayloadSchemaType.KEYWORD),
+        ]
+        
+        results = {}
+        for field_name, field_type in index_fields:
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=field_name,
+                    field_schema=field_type,
+                )
+                results[field_name] = True
+                logger.info(f"Created index for '{field_name}'")
+            except Exception as e:
+                if "already exists" in str(e).lower():
+                    results[field_name] = True
+                    logger.debug(f"Index for '{field_name}' already exists")
+                else:
+                    results[field_name] = False
+                    logger.warning(f"Failed to create index for '{field_name}': {e}")
+        
+        return results
+
     def index_nodes(
         self,
         nodes: List,
