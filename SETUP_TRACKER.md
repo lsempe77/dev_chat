@@ -22,16 +22,10 @@
 
 ## 🚨 What's Missing (Critical)
 
-### 1. 🚀 DEPLOYMENT (Backend + Frontend)
-**Current State:** Running locally only (localhost:8000 + localhost:3000)  
-**Required:** Deploy to cloud for external access  
-**Options:**
-| Service | Backend | Frontend | Cost |
-|---------|---------|----------|------|
-| **Railway** | FastAPI | Next.js | ~$5/mo |
-| **Render** | FastAPI | Static/Vercel | Free tier |
-| **Vercel + Railway** | Railway | Vercel | Free-$5/mo |
-| **Fly.io** | FastAPI | Next.js | ~$5/mo |
+### 1. 🚀 DEPLOYMENT ✅ COMPLETE
+**Frontend:** https://frontend-amber-seven-55.vercel.app (Vercel)  
+**Backend:** https://3iechat.up.railway.app (Railway)  
+**GitHub:** https://github.com/lsempe77/dev_chat
 
 ### 2. Real Document Corpus
 **Current State:** Only 1 test paper (ALCE, 31 chunks) indexed  
@@ -50,6 +44,53 @@ Admin UI (drop PDFs) → FastAPI /admin/upload → R2 bucket → Modal process
 - [ ] Run RAGAS evaluation on real queries
 - [ ] Test with 3ie subject matter experts
 - [ ] Benchmark retrieval precision/recall
+
+### 5. Wire Frontend Settings to Backend
+**Current State:** Settings UI exists but not sent to API  
+**Required:** Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking`, `minConfidence` to `/api/query`  
+**Files to update:**
+- `frontend/src/lib/api.ts` - add settings to request body
+- `api/routes.py` - accept settings in QueryRequest
+- `src/agents/devchat_agent.py` - use settings in retrieval/generation
+
+### 6. LLM-Based Suggestions ("Try Next")
+**Current State:** Hardcoded or empty suggestions  
+**Required:** Generate contextual follow-up questions based on query + answer
+
+---
+
+## 🔮 Future Roadmap
+
+### Multi-Tenant / White-Label Architecture
+**Goal:** Teams can deploy their own instance ("mirror") of the chatbot
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Config-driven branding** | Logo, colors, name via env vars | ❌ Not started |
+| **Collection isolation** | Each team has own Qdrant collection | ❌ Not started |
+| **Custom prompts** | Team-specific system prompts | ❌ Not started |
+| **Deploy template** | 1-click deploy to Railway/Vercel | ❌ Not started |
+| **API key management** | Teams provide own API keys | ❌ Not started |
+| **Usage tracking** | Per-team query/token metrics | ❌ Not started |
+
+**Deployment Model:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Team A Instance                                         │
+│  ├── Vercel Frontend (team-a.vercel.app)                │
+│  ├── Railway Backend (team-a-api.railway.app)           │
+│  ├── Qdrant Collection: team_a_docs                      │
+│  └── R2 Bucket: team-a-pdfs                              │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  Team B Instance (same code, different config)          │
+│  ├── Vercel Frontend (team-b.vercel.app)                │
+│  ├── Railway Backend (team-b-api.railway.app)           │
+│  ├── Qdrant Collection: team_b_docs                      │
+│  └── R2 Bucket: team-b-pdfs                              │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
