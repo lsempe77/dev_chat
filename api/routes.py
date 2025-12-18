@@ -977,12 +977,24 @@ async def delete_document(document_id: str):
             r2_client = get_r2_client()
             bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
             
-            # Try to find and delete the original file
-            # Check both input-pdfs and outputs directories
+            # Extract the base filename from the document_id
+            # document_id could be "input-pdfs/xxx.pdf" or just "xxx.pdf"
+            if "/" in document_id:
+                # Already has a path - use it directly as a prefix
+                base_filename = document_id.split("/")[-1]  # Get just the filename
+                base_name = os.path.splitext(base_filename)[0]  # Remove extension
+            else:
+                base_filename = document_id
+                base_name = os.path.splitext(document_id)[0]
+            
+            # Check these prefixes for files to delete
             prefixes_to_check = [
-                f"input-pdfs/{document_id}",
-                f"outputs/{document_id}",
+                document_id,  # Exact path if provided (e.g., "input-pdfs/xxx.pdf")
+                f"input-pdfs/{base_filename}",  # Input PDF
+                f"outputs/{base_name}",  # Outputs folder (MinerU creates folders)
             ]
+            
+            logger.info(f"Looking for R2 files with prefixes: {prefixes_to_check}")
             
             for prefix in prefixes_to_check:
                 try:
