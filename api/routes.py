@@ -54,6 +54,7 @@ from api.schemas import (
 from src.agents.devchat_agent import DevChatAgent
 from src.config.settings import settings
 from src.ingestion.indexer import QdrantIndexer
+from src.retrieval.context_builder import clean_text_for_display
 from src.utils.logging import get_logger
 from src.utils.metrics import get_metrics_tracker
 
@@ -140,17 +141,39 @@ async def query_evidence(request: QueryRequest):
         
         # Process citations from agent response
         for i, c in enumerate(response.citations):
+            # Clean the snippet text for display
+            raw_snippet = c.get("snippet", c.get("text", ""))
+            clean_snippet = clean_text_for_display(raw_snippet, max_length=300)
+            
+            # Handle authors - could be list, string, or missing
+            raw_authors = c.get("authors")
+            if isinstance(raw_authors, list):
+                authors_str = ", ".join(str(a) for a in raw_authors) if raw_authors else ""
+            elif raw_authors:
+                authors_str = str(raw_authors)
+            else:
+                authors_str = ""
+            
+            # Handle year - could be None, empty, or invalid
+            raw_year = c.get("year")
+            year_val = None
+            if raw_year:
+                try:
+                    year_val = int(raw_year)
+                except (ValueError, TypeError):
+                    year_val = None
+            
             study = StudyResponse(
                 id=c.get("study_id", f"STUDY{i+1:03d}"),
                 title=c.get("title", "Unknown Study"),
-                authors=c.get("authors", "Unknown"),
-                year=c.get("year", 2020),
-                country=c.get("country", "Unknown"),
-                sector=c.get("sector", "Unknown"),
-                studyType=c.get("study_type", "Unknown"),
-                confidence="high" if c.get("confidence", 0.8) > 0.7 else "medium" if c.get("confidence", 0.5) > 0.4 else "low",
-                snippet=c.get("snippet", c.get("text", ""))[:300],
-                score=c.get("score", 0.8),
+                authors=authors_str,
+                year=year_val,
+                country=c.get("country", ""),
+                sector=c.get("sector", ""),
+                studyType=c.get("study_type", ""),
+                confidence="high" if c.get("score", 0.5) > 0.7 else "medium" if c.get("score", 0.5) > 0.4 else "low",
+                snippet=clean_snippet,
+                score=c.get("score", 0.0),
                 pdfUrl=c.get("url"),
             )
             studies.append(study)
@@ -158,7 +181,7 @@ async def query_evidence(request: QueryRequest):
             citation = CitationResponse(
                 id=i + 1,
                 studyId=study.id,
-                text=c.get("snippet", c.get("text", ""))[:200],
+                text=clean_text_for_display(raw_snippet, max_length=200),
                 study=study,
             )
             citations.append(citation)
