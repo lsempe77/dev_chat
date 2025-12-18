@@ -14,7 +14,7 @@ import {
 } from "@/components/workbench";
 import type { SearchSettings } from "@/components/workbench";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Settings } from "lucide-react";
+import { ArrowLeft, Database } from "lucide-react";
 import Link from "next/link";
 import { Study, Citation, Filter, EvidenceHealth, AnswerStyle } from "@/types";
 import { queryEvidence } from "@/lib/api";
@@ -145,8 +145,8 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
               <Link href="/admin">
-                <Button variant="ghost" size="sm" className="gap-1">
-                  <Settings className="h-4 w-4" />
+                <Button variant="outline" size="sm" className="gap-1">
+                  <Database className="h-4 w-4" />
                   Admin
                 </Button>
               </Link>
