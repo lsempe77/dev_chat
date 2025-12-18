@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,11 @@ import {
   Loader2,
   FileText
 } from "lucide-react";
+import { 
+  getProcessingJobs, 
+  triggerProcessing,
+  type ProcessingJob as APIProcessingJob 
+} from "@/lib/admin-api";
 
 interface ProcessingJob {
   id: string;
@@ -29,46 +34,55 @@ interface ProcessingJob {
   chunks?: number;
 }
 
-// Mock data - replace with API calls
-const mockJobs: ProcessingJob[] = [
-  {
-    id: "1",
-    filename: "systematic_review_education_kenya.pdf",
-    status: "processing",
-    progress: 65,
-    startedAt: new Date(Date.now() - 180000).toISOString(),
-    pages: 45,
-  },
-  {
-    id: "2",
-    filename: "rct_cash_transfers_2023.pdf",
-    status: "queued",
-    progress: 0,
-  },
-  {
-    id: "3",
-    filename: "impact_evaluation_health_india.pdf",
-    status: "completed",
-    progress: 100,
-    startedAt: new Date(Date.now() - 600000).toISOString(),
-    completedAt: new Date(Date.now() - 300000).toISOString(),
-    pages: 32,
-    chunks: 156,
-  },
-  {
-    id: "4",
-    filename: "meta_analysis_agriculture.pdf",
-    status: "failed",
-    progress: 45,
-    startedAt: new Date(Date.now() - 900000).toISOString(),
-    error: "PDF extraction failed: corrupted file",
-  },
-];
-
 export function ProcessingTab() {
-  const [jobs, setJobs] = useState<ProcessingJob[]>(mockJobs);
+  const [jobs, setJobs] = useState<ProcessingJob[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [processingCount, setProcessingCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
+
+  // Fetch jobs from API
+  const refreshJobs = useCallback(async () => {
+    setIsRefreshing(true);
+    setError(null);
+    
+    try {
+      const response = await getProcessingJobs();
+      
+      // Map API response to component format
+      const mappedJobs: ProcessingJob[] = response.jobs.map(j => ({
+        id: j.id,
+        filename: j.filename,
+        status: j.status,
+        progress: j.progress,
+        startedAt: j.started_at,
+        completedAt: j.completed_at,
+        error: j.error,
+        pages: j.pages,
+        chunks: j.chunks,
+      }));
+      
+      setJobs(mappedJobs);
+      setQueuedCount(response.queued_count);
+      setProcessingCount(response.processing_count);
+      setCompletedCount(response.completed_count);
+      setFailedCount(response.failed_count);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch jobs");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    refreshJobs();
+  }, [refreshJobs]);
 
   // Auto-refresh every 5 seconds
   useEffect(() => {
@@ -79,40 +93,35 @@ export function ProcessingTab() {
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [autoRefresh]);
-
-  const refreshJobs = async () => {
-    setIsRefreshing(true);
-    
-    // TODO: Replace with actual API call
-    // const response = await fetch("/api/admin/jobs");
-    // const data = await response.json();
-    // setJobs(data.jobs);
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsRefreshing(false);
-  };
+  }, [autoRefresh, refreshJobs]);
 
   const retryJob = async (jobId: string) => {
-    // TODO: Implement retry API call
+    // TODO: Implement retry via specific endpoint when available
     console.log("Retrying job:", jobId);
+    await refreshJobs();
   };
 
   const cancelJob = async (jobId: string) => {
-    // TODO: Implement cancel API call
+    // TODO: Implement cancel via specific endpoint when available
     console.log("Cancelling job:", jobId);
   };
 
   const startBatchProcessing = async () => {
-    // TODO: Trigger Modal orchestrator
-    console.log("Starting batch processing...");
+    setIsTriggering(true);
+    setTriggerMessage(null);
+    setError(null);
+    
+    try {
+      const response = await triggerProcessing({ max_documents: 10 });
+      setTriggerMessage(response.message);
+      // Refresh jobs after triggering
+      await refreshJobs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to trigger processing");
+    } finally {
+      setIsTriggering(false);
+    }
   };
-
-  const queuedCount = jobs.filter(j => j.status === "queued").length;
-  const processingCount = jobs.filter(j => j.status === "processing").length;
-  const completedCount = jobs.filter(j => j.status === "completed").length;
-  const failedCount = jobs.filter(j => j.status === "failed").length;
 
   const getStatusIcon = (status: ProcessingJob["status"]) => {
     switch (status) {
@@ -152,6 +161,28 @@ export function ProcessingTab() {
 
   return (
     <div className="space-y-6">
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          <span>{error}</span>
+          <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
+            Dismiss
+          </Button>
+        </div>
+      )}
+      
+      {/* Success Message */}
+      {triggerMessage && (
+        <div className="bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle className="h-4 w-4" />
+          <span>{triggerMessage}</span>
+          <Button variant="ghost" size="sm" onClick={() => setTriggerMessage(null)} className="ml-auto">
+            Dismiss
+          </Button>
+        </div>
+      )}
+      
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -172,7 +203,11 @@ export function ProcessingTab() {
                 <p className="text-sm text-muted-foreground">Processing</p>
                 <p className="text-2xl font-bold">{processingCount}</p>
               </div>
-              <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+              {processingCount > 0 ? (
+                <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+              ) : (
+                <Activity className="h-8 w-8 text-muted-foreground" />
+              )}
             </div>
           </CardContent>
         </Card>
@@ -243,10 +278,19 @@ export function ProcessingTab() {
               <Button
                 size="sm"
                 onClick={startBatchProcessing}
-                disabled={queuedCount === 0}
+                disabled={isTriggering}
               >
-                <Play className="h-4 w-4 mr-1" />
-                Start Processing
+                {isTriggering ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Triggering...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-1" />
+                    Start Processing
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -256,6 +300,7 @@ export function ProcessingTab() {
             <div className="text-center py-8 text-muted-foreground">
               <Activity className="h-10 w-10 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No processing jobs</p>
+              <p className="text-xs mt-1">Upload documents to start processing</p>
             </div>
           ) : (
             <ScrollArea className="h-[400px]">

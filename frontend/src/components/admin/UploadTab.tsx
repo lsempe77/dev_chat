@@ -15,12 +15,14 @@ import {
   AlertCircle,
   Loader2
 } from "lucide-react";
+import { uploadDocument } from "@/lib/admin-api";
 
 interface FileToUpload {
   file: File;
   status: "pending" | "uploading" | "completed" | "error";
   progress: number;
   error?: string;
+  r2Key?: string;
 }
 
 export function UploadTab() {
@@ -84,35 +86,39 @@ export function UploadTab() {
       
       // Update status to uploading
       setFiles(prev => prev.map((f, idx) => 
-        idx === i ? { ...f, status: "uploading" as const, progress: 0 } : f
+        idx === i ? { ...f, status: "uploading" as const, progress: 10 } : f
       ));
       
       try {
-        // Simulate upload progress
-        for (let p = 0; p <= 100; p += 20) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+        // Simulated progress updates while uploading
+        const progressInterval = setInterval(() => {
           setFiles(prev => prev.map((f, idx) => 
-            idx === i ? { ...f, progress: p } : f
+            idx === i && f.progress < 90 ? { ...f, progress: f.progress + 10 } : f
           ));
-        }
+        }, 200);
         
-        // TODO: Replace with actual API call
-        const formData = new FormData();
-        formData.append("file", files[i].file);
+        // Call real API
+        const result = await uploadDocument(files[i].file);
         
-        const response = await fetch("/api/admin/upload", {
-          method: "POST",
-          body: formData,
-        }).catch(() => null);
+        clearInterval(progressInterval);
         
-        // For now, simulate success
+        // Update status to completed
         setFiles(prev => prev.map((f, idx) => 
-          idx === i ? { ...f, status: "completed" as const, progress: 100 } : f
+          idx === i ? { 
+            ...f, 
+            status: "completed" as const, 
+            progress: 100,
+            r2Key: result.r2_key,
+          } : f
         ));
         
       } catch (error) {
         setFiles(prev => prev.map((f, idx) => 
-          idx === i ? { ...f, status: "error" as const, error: String(error) } : f
+          idx === i ? { 
+            ...f, 
+            status: "error" as const, 
+            error: error instanceof Error ? error.message : String(error) 
+          } : f
         ));
       }
     }

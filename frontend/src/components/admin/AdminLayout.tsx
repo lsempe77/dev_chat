@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { 
@@ -9,16 +9,45 @@ import {
   Activity, 
   Settings, 
   ArrowLeft,
-  Database
+  Database,
+  Loader2
 } from "lucide-react";
 import Link from "next/link";
 import { UploadTab } from "./UploadTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { ProcessingTab } from "./ProcessingTab";
 import { SettingsTab } from "./SettingsTab";
+import { checkHealth, getCollectionInfo } from "@/lib/admin-api";
 
 export function AdminLayout() {
   const [activeTab, setActiveTab] = useState("upload");
+  const [connectionStatus, setConnectionStatus] = useState<{
+    modal: boolean;
+    qdrant: boolean;
+    loading: boolean;
+  }>({ modal: false, qdrant: false, loading: true });
+
+  // Check connections on mount
+  useEffect(() => {
+    const checkConnections = async () => {
+      try {
+        const [healthResult, collectionResult] = await Promise.allSettled([
+          checkHealth(),
+          getCollectionInfo(),
+        ]);
+        
+        setConnectionStatus({
+          modal: healthResult.status === "fulfilled",
+          qdrant: collectionResult.status === "fulfilled",
+          loading: false,
+        });
+      } catch {
+        setConnectionStatus({ modal: false, qdrant: false, loading: false });
+      }
+    };
+    
+    checkConnections();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -40,15 +69,24 @@ export function AdminLayout() {
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                Modal Connected
-              </span>
-              <span className="text-border">|</span>
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                Qdrant Online
-              </span>
+              {connectionStatus.loading ? (
+                <span className="flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Checking connections...
+                </span>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1">
+                    <span className={`h-2 w-2 rounded-full ${connectionStatus.modal ? "bg-green-500" : "bg-red-500"}`} />
+                    Backend {connectionStatus.modal ? "Online" : "Offline"}
+                  </span>
+                  <span className="text-border">|</span>
+                  <span className="flex items-center gap-1">
+                    <span className={`h-2 w-2 rounded-full ${connectionStatus.qdrant ? "bg-green-500" : "bg-red-500"}`} />
+                    Qdrant {connectionStatus.qdrant ? "Online" : "Offline"}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

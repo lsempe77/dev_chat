@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +16,10 @@ import {
   Loader2,
   Database,
   Cloud,
-  Cpu
+  Cpu,
+  RefreshCw
 } from "lucide-react";
+import { getAdminStatus, checkHealth, getCollectionInfo } from "@/lib/admin-api";
 
 interface ConnectionStatus {
   name: string;
@@ -27,11 +29,12 @@ interface ConnectionStatus {
 
 export function SettingsTab() {
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [connections, setConnections] = useState<ConnectionStatus[]>([
-    { name: "Cloudflare R2", status: "connected", details: "devchat-pdfs bucket" },
-    { name: "Qdrant Cloud", status: "connected", details: "1,234 vectors" },
-    { name: "Modal", status: "connected", details: "2 workers available" },
-    { name: "Cohere API", status: "connected", details: "embed-v4.0" },
+    { name: "Cloudflare R2", status: "checking", details: "Checking..." },
+    { name: "Qdrant Cloud", status: "checking", details: "Checking..." },
+    { name: "Modal", status: "checking", details: "Checking..." },
+    { name: "Cohere API", status: "checking", details: "Checking..." },
   ]);
 
   // MinerU Settings
@@ -53,23 +56,90 @@ export function SettingsTab() {
     maxRetries: 3,
   });
 
+  // Fetch connection status from backend
+  const fetchStatus = useCallback(async () => {
+    setIsLoading(true);
+    
+    try {
+      // Fetch health and collection info in parallel
+      const [healthResult, collectionResult] = await Promise.allSettled([
+        checkHealth(),
+        getCollectionInfo(),
+      ]);
+
+      const newConnections: ConnectionStatus[] = [];
+
+      // Check R2 (from health)
+      if (healthResult.status === "fulfilled") {
+        const health = healthResult.value;
+        newConnections.push({
+          name: "Cloudflare R2",
+          status: health.components?.r2 ? "connected" : "disconnected",
+          details: health.components?.r2 ? "devchat-pdfs bucket" : "Connection failed",
+        });
+        newConnections.push({
+          name: "Cohere API",
+          status: health.components?.cohere ? "connected" : "disconnected",
+          details: health.components?.cohere ? "embed-v4.0 / rerank-v3.5" : "Connection failed",
+        });
+        newConnections.push({
+          name: "Modal",
+          status: "connected",  // Assume connected if backend is working
+          details: "GPU workers available",
+        });
+      } else {
+        newConnections.push({ name: "Cloudflare R2", status: "disconnected", details: "Backend unreachable" });
+        newConnections.push({ name: "Cohere API", status: "disconnected", details: "Backend unreachable" });
+        newConnections.push({ name: "Modal", status: "disconnected", details: "Backend unreachable" });
+      }
+
+      // Check Qdrant
+      if (collectionResult.status === "fulfilled") {
+        const collection = collectionResult.value;
+        newConnections.push({
+          name: "Qdrant Cloud",
+          status: "connected",
+          details: `${collection.points_count.toLocaleString()} vectors indexed`,
+        });
+      } else {
+        newConnections.push({
+          name: "Qdrant Cloud",
+          status: "disconnected",
+          details: "Connection failed",
+        });
+      }
+
+      setConnections(newConnections);
+    } catch (err) {
+      console.error("Failed to fetch status:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchStatus();
+  }, [fetchStatus]);
+
   const testConnection = async (name: string) => {
     setConnections(prev => prev.map(c => 
       c.name === name ? { ...c, status: "checking" as const } : c
     ));
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setConnections(prev => prev.map(c => 
-      c.name === name ? { ...c, status: "connected" as const } : c
-    ));
+    // Re-fetch all status to test connections
+    await fetchStatus();
+  };
+
+  const testAllConnections = async () => {
+    setConnections(prev => prev.map(c => ({ ...c, status: "checking" as const })));
+    await fetchStatus();
   };
 
   const saveSettings = async () => {
     setIsSaving(true);
     
-    // TODO: Save to backend
+    // TODO: Save to backend when settings endpoint is available
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     setIsSaving(false);
@@ -100,6 +170,17 @@ export function SettingsTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={testAllConnections}
+              disabled={isLoading}
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh All
+            </Button>
+          </div>
           {connections.map((conn) => (
             <div 
               key={conn.name}

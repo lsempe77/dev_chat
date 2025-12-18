@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +16,16 @@ import {
   CheckCircle,
   Calendar,
   User,
-  Hash
+  Hash,
+  Loader2,
+  AlertCircle
 } from "lucide-react";
+import { 
+  getDocuments, 
+  deleteDocument, 
+  reprocessDocument,
+  type DocumentMetadata 
+} from "@/lib/admin-api";
 
 interface Document {
   id: string;
@@ -32,61 +40,50 @@ interface Document {
   processedAt?: string;
 }
 
-// Mock data - replace with API calls
-const mockDocuments: Document[] = [
-  {
-    id: "1",
-    title: "The Impact of Cash Transfers on Educational Outcomes in Kenya",
-    filename: "cash_transfers_kenya_2023.pdf",
-    authors: ["Smith, J.", "Ochieng, M.", "Johnson, L."],
-    year: 2023,
-    status: "indexed",
-    pageCount: 45,
-    chunkCount: 234,
-    uploadedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    processedAt: new Date(Date.now() - 86400000 * 3 + 3600000).toISOString(),
-  },
-  {
-    id: "2",
-    title: "Systematic Review of Health Interventions in South Asia",
-    filename: "health_interventions_sa.pdf",
-    authors: ["Patel, R.", "Kumar, A."],
-    year: 2022,
-    status: "indexed",
-    pageCount: 128,
-    chunkCount: 567,
-    uploadedAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-    processedAt: new Date(Date.now() - 86400000 * 7 + 7200000).toISOString(),
-  },
-  {
-    id: "3",
-    title: "Agricultural Productivity Programs: A Meta-Analysis",
-    filename: "agriculture_meta_2024.pdf",
-    authors: ["Chen, W.", "Müller, H.", "Santos, P."],
-    year: 2024,
-    status: "indexed",
-    pageCount: 67,
-    chunkCount: 312,
-    uploadedAt: new Date(Date.now() - 86400000).toISOString(),
-    processedAt: new Date(Date.now() - 86400000 + 1800000).toISOString(),
-  },
-  {
-    id: "4",
-    title: "Water and Sanitation RCT Results",
-    filename: "wash_rct_results.pdf",
-    authors: ["Brown, A."],
-    year: 2021,
-    status: "pending",
-    pageCount: 32,
-    chunkCount: 0,
-    uploadedAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
-
 export function DocumentsTab() {
-  const [documents, setDocuments] = useState<Document[]>(mockDocuments);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [totalChunks, setTotalChunks] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  // Fetch documents from API
+  const fetchDocuments = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await getDocuments({ search: searchQuery || undefined });
+      // Map API response to component format
+      const docs: Document[] = response.documents.map(d => ({
+        id: d.id,
+        title: d.title,
+        filename: d.filename,
+        authors: d.authors,
+        year: d.year,
+        status: d.status,
+        pageCount: d.page_count,
+        chunkCount: d.chunk_count,
+        uploadedAt: d.uploaded_at,
+        processedAt: d.processed_at,
+      }));
+      setDocuments(docs);
+      setTotalChunks(response.total_chunks);
+      setTotalPages(response.total_pages);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load documents");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery]);
+
+  // Initial load
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
   const filteredDocs = documents.filter(doc => 
     doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -115,20 +112,64 @@ export function DocumentsTab() {
   };
 
   const deleteSelected = async () => {
-    // TODO: Implement delete API call
-    console.log("Deleting:", Array.from(selectedDocs));
-    setDocuments(prev => prev.filter(d => !selectedDocs.has(d.id)));
-    setSelectedDocs(new Set());
+    if (!confirm(`Delete ${selectedDocs.size} document(s)? This cannot be undone.`)) {
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      // Delete all selected documents
+      for (const docId of selectedDocs) {
+        await deleteDocument(docId);
+      }
+      // Refresh the list
+      await fetchDocuments();
+      setSelectedDocs(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete documents");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const reprocessSelected = async () => {
-    // TODO: Implement reprocess API call
-    console.log("Reprocessing:", Array.from(selectedDocs));
+    setIsReprocessing(true);
+    try {
+      for (const docId of selectedDocs) {
+        await reprocessDocument(docId);
+      }
+      // Refresh the list
+      await fetchDocuments();
+      setSelectedDocs(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reprocess documents");
+    } finally {
+      setIsReprocessing(false);
+    }
   };
 
   const exportDocuments = async () => {
-    // TODO: Implement export functionality
-    console.log("Exporting documents metadata...");
+    // Export as CSV
+    const headers = ["Title", "Filename", "Authors", "Year", "Status", "Pages", "Chunks", "Uploaded"];
+    const rows = documents.map(d => [
+      d.title,
+      d.filename,
+      d.authors.join("; "),
+      d.year || "",
+      d.status,
+      d.pageCount,
+      d.chunkCount,
+      formatDate(d.uploadedAt),
+    ]);
+    
+    const csv = [headers.join(","), ...rows.map(r => r.map(c => `"${c}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `documents_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const formatDate = (dateStr: string) => {
@@ -139,12 +180,21 @@ export function DocumentsTab() {
     });
   };
 
-  const totalChunks = documents.reduce((sum, d) => sum + d.chunkCount, 0);
-  const totalPages = documents.reduce((sum, d) => sum + d.pageCount, 0);
   const indexedCount = documents.filter(d => d.status === "indexed").length;
 
   return (
     <div className="space-y-6">
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          <span>{error}</span>
+          <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
+            Dismiss
+          </Button>
+        </div>
+      )}
+      
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -152,7 +202,9 @@ export function DocumentsTab() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Documents</p>
-                <p className="text-2xl font-bold">{documents.length}</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : documents.length}
+                </p>
               </div>
               <FileText className="h-8 w-8 text-muted-foreground" />
             </div>
