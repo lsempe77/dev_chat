@@ -5,9 +5,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including bash
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only production requirements
@@ -21,8 +22,8 @@ COPY api/ api/
 COPY src/ src/
 COPY start.sh .
 
-# Make start script executable
-RUN chmod +x start.sh
+# Fix line endings and make executable
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
