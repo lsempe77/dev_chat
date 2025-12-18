@@ -13,12 +13,15 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| **Backend RAG Pipeline** | ✅ Complete | Qdrant + Cohere + OpenRouter working |
-| **FastAPI Server** | ✅ Running | `localhost:8000/docs` for Swagger |
-| **Frontend UI** | ✅ Built | All components complete (mock data) |
-| **Backend Wiring** | ⬜ TODO | Connect frontend to FastAPI |
+| **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
+| **Frontend (Vercel)** | ✅ Live | https://frontend-amber-seven-55.vercel.app |
+| **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (31 chunks) |
+| **End-to-End RAG** | ✅ Working | Query → Retrieval → Rerank → Generate |
+| **Document Corpus** | ⚠️ Limited | Only 1 test PDF indexed |
+| **Settings Wiring** | ⬜ TODO | UI exists, not sent to backend |
 
-**Next Step:** Wire frontend API calls to FastAPI backend (see SETUP_TRACKER.md)
+**Live Demo:** https://frontend-amber-seven-55.vercel.app
 
 ---
 
@@ -73,7 +76,16 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 
 ## 🚀 Quick Start
 
-### 1. Start Backend (FastAPI)
+### Production URLs
+
+- **Frontend:** https://frontend-amber-seven-55.vercel.app
+- **Backend API:** https://3iechat.up.railway.app
+- **API Docs:** https://3iechat.up.railway.app/docs
+- **GitHub:** https://github.com/lsempe77/dev_chat
+
+### Local Development
+
+#### 1. Start Backend (FastAPI)
 
 ```bash
 # Terminal 1 - Backend API
@@ -85,7 +97,7 @@ uvicorn api.server:app --reload --port 8000
 Backend runs at: `http://localhost:8000`
 API docs at: `http://localhost:8000/docs`
 
-### 2. Start Frontend (Next.js)
+#### 2. Start Frontend (Next.js)
 
 ```bash
 # Terminal 2 - Frontend UI
@@ -96,7 +108,7 @@ npm run dev
 
 Frontend runs at: `http://localhost:3000`
 
-### 3. Environment Variables
+#### 3. Environment Variables
 
 Create `.env` file with:
 ```bash

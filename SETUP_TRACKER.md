@@ -2,139 +2,83 @@
 
 **Created:** December 17, 2025  
 **Last Updated:** December 19, 2025  
-**Status:** ✅ Core RAG Pipeline Complete | ⚠️ Needs Real Document Corpus
+**Status:** ✅ Production Deployed | ⚠️ Needs Real Document Corpus
 
 ---
 
 ## 📊 Quick Status Dashboard
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **RAG Pipeline** | ✅ Complete | Retrieval → Rerank → Generate working |
-| **Frontend UI** | ✅ Complete | Next.js Research Workbench |
-| **PDF Processing** | ✅ Complete | Modal + MinerU + R2 + Qdrant |
-| **Document Corpus** | ⚠️ **1 test PDF only** | Need SharePoint integration |
-| **SharePoint Sync** | ❌ Not Started | Critical blocker |
-| **Authentication** | ❌ Not Started | Future: Clerk/Auth0 |
-| **Evaluation** | ❌ Not Run | RAGAS metrics ready |
+| Component | Status | URL/Notes |
+|-----------|--------|-----------|
+| **Frontend (Vercel)** | ✅ Live | https://frontend-amber-seven-55.vercel.app |
+| **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
+| **PDF Processing (Modal)** | ✅ Working | `devchat-mineru` app |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection |
+| **Document Corpus** | ⚠️ **1 test PDF** | Need bulk upload |
+| **Settings Wiring** | ❌ Not Done | UI exists, not sent to API |
+| **LLM Suggestions** | ❌ Not Done | Hardcoded placeholders |
 
 ---
 
-## 🚨 What's Missing (Critical)
-
-### 1. 🚀 DEPLOYMENT ✅ COMPLETE
-**Frontend:** https://frontend-amber-seven-55.vercel.app (Vercel)  
-**Backend:** https://3iechat.up.railway.app (Railway)  
-**GitHub:** https://github.com/lsempe77/dev_chat
-
-### 2. Real Document Corpus
-**Current State:** Only 1 test paper (ALCE, 31 chunks) indexed  
-**Required:** 100+ 3ie papers  
-**Solution:** Admin UI upload (not SharePoint API)
-
-### 3. Admin UI → R2 Upload Wiring
-**Current State:** Admin UI exists but upload not connected  
-**Required:** Wire drag & drop → R2 → Modal trigger  
-**Flow:**
-```
-Admin UI (drop PDFs) → FastAPI /admin/upload → R2 bucket → Modal process
-```
-
-### 4. End-to-End Validation
-- [ ] Run RAGAS evaluation on real queries
-- [ ] Test with 3ie subject matter experts
-- [ ] Benchmark retrieval precision/recall
-
-### 5. Wire Frontend Settings to Backend
-**Current State:** Settings UI exists but not sent to API  
-**Required:** Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking`, `minConfidence` to `/api/query`  
-**Files to update:**
-- `frontend/src/lib/api.ts` - add settings to request body
-- `api/routes.py` - accept settings in QueryRequest
-- `src/agents/devchat_agent.py` - use settings in retrieval/generation
-
-### 6. LLM-Based Suggestions ("Try Next")
-**Current State:** Hardcoded or empty suggestions  
-**Required:** Generate contextual follow-up questions based on query + answer
-
----
-
-## 🔮 Future Roadmap
-
-### Multi-Tenant / White-Label Architecture
-**Goal:** Teams can deploy their own instance ("mirror") of the chatbot
-
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Config-driven branding** | Logo, colors, name via env vars | ❌ Not started |
-| **Collection isolation** | Each team has own Qdrant collection | ❌ Not started |
-| **Custom prompts** | Team-specific system prompts | ❌ Not started |
-| **Deploy template** | 1-click deploy to Railway/Vercel | ❌ Not started |
-| **API key management** | Teams provide own API keys | ❌ Not started |
-| **Usage tracking** | Per-team query/token metrics | ❌ Not started |
-
-**Deployment Model:**
-```
-┌─────────────────────────────────────────────────────────┐
-│  Team A Instance                                         │
-│  ├── Vercel Frontend (team-a.vercel.app)                │
-│  ├── Railway Backend (team-a-api.railway.app)           │
-│  ├── Qdrant Collection: team_a_docs                      │
-│  └── R2 Bucket: team-a-pdfs                              │
-└─────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────┐
-│  Team B Instance (same code, different config)          │
-│  ├── Vercel Frontend (team-b.vercel.app)                │
-│  ├── Railway Backend (team-b-api.railway.app)           │
-│  ├── Qdrant Collection: team_b_docs                      │
-│  └── R2 Bucket: team-b-pdfs                              │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## ✅ What's Working
+## 🚀 What's Deployed & Working
 
 ### Production Stack
 
-| Component | Technology | Status |
-|-----------|------------|--------|
-| **Vector DB** | Qdrant Cloud (EU) | ✅ Collection `devchat_v2`, 31 chunks |
-| **Embeddings** | Cohere embed-v4.0 | ✅ 1536 dimensions |
-| **LLM** | OpenRouter (GPT-4o-mini) | ✅ Fast model |
-| **Reasoning** | OpenRouter (GPT-4o) | ✅ Complex queries |
-| **Reranking** | Cohere rerank-v3.5 | ✅ Top 50 → 15 |
-| **PDF Parser** | MinerU 2.6.8 | ✅ Modal T4 GPU |
-| **Storage** | Cloudflare R2 | ✅ Bucket `devchat-pdfs` |
-| **Compute** | Modal (serverless GPU) | ✅ Auto-scaling |
-| **Frontend** | Next.js 16 | ✅ Research Workbench |
-| **Backend** | FastAPI | ✅ Port 8000 |
-| **Observability** | Langfuse Cloud | ✅ Full tracing |
+| Service | Provider | Details |
+|---------|----------|---------|
+| **Frontend** | Vercel | Next.js 15, auto-deploy from GitHub |
+| **Backend** | Railway | FastAPI, slim Docker image |
+| **PDF Parser** | Modal | MinerU 2.6.8 on T4 GPU |
+| **Storage** | Cloudflare R2 | Bucket: `devchat-pdfs` |
+| **Vector DB** | Qdrant Cloud | Collection: `devchat_v2` (EU) |
+| **Embeddings** | Cohere | embed-v4.0 (1536 dims) |
+| **LLM (Fast)** | OpenRouter | GPT-4o-mini |
+| **LLM (Reasoning)** | OpenRouter | GPT-4o |
+| **Reranking** | Cohere | rerank-v3.5 |
+| **Observability** | Langfuse | Full tracing |
 
-### Key Files
-
+### GitHub Repository
 ```
-src/
-├── agents/devchat_agent.py      # Main orchestrator
-├── retrieval/
-│   ├── hybrid_retriever.py      # Dense + sparse search
-│   ├── reranker.py              # Cohere rerank
-│   └── query_processor.py       # Query expansion
-├── generation/
-│   ├── synthesizer.py           # Answer generation
-│   └── citations.py             # Citation formatting
-└── ingestion/
-    └── pdf_processor.py         # MinerU wrapper
-
-infrastructure/
-└── modal_mineru.py              # Production PDF pipeline (840 lines)
-
-frontend/src/
-├── app/page.tsx                 # Main Research Workbench
-├── app/admin/page.tsx           # Admin document management
-└── components/workbench/        # UI components
+https://github.com/lsempe77/dev_chat
+Branch: main
 ```
+
+---
+
+## 🔧 Configuration Reference
+
+---
+
+## 📋 TODO List (Priority Order)
+
+### P0 - Critical (This Week)
+
+| Task | Description | Effort |
+|------|-------------|--------|
+| **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` from frontend to `/api/query` | 2 hours |
+| **LLM-Based Suggestions** | Generate contextual "Try next" queries using LLM | 2-3 hours |
+| **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | 1 day |
+| **Fix Study Card Display** | Authors showing "()", year showing "Unknown" | ✅ Done |
+
+### P1 - Important (This Month)
+
+| Task | Description | Effort |
+|------|-------------|--------|
+| **Admin UI Upload Wiring** | Connect drag-drop → R2 → Modal trigger | 3 hours |
+| **Export Citations** | BibTeX/RIS format export | 4 hours |
+| **Usage Analytics** | Track queries, latency, user engagement | 1 day |
+| **RAGAS Evaluation** | Run evaluation on real queries | 1 day |
+
+### P2 - Future (Multi-Tenant)
+
+| Task | Description |
+|------|-------------|
+| **Config-driven Branding** | Logo, colors, name via env vars |
+| **Collection Isolation** | Per-team Qdrant collections |
+| **Custom Prompts** | Team-specific system prompts |
+| **Deploy Templates** | 1-click Railway/Vercel deploy |
+| **API Key Management** | Teams provide own keys |
+| **Per-Tenant Usage** | Query/token tracking per team |
 
 ---
 
