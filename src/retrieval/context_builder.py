@@ -7,6 +7,7 @@ Assembles retrieved results into formatted context for the LLM:
 - Citation metadata formatting
 """
 
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -14,6 +15,49 @@ from src.retrieval.hybrid_retriever import RetrievalResult
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def clean_text_for_display(text: str, max_length: int = 300) -> str:
+    """
+    Clean text for display by removing HTML tags, excessive whitespace,
+    and other artifacts.
+    
+    Args:
+        text: Raw text that may contain HTML or artifacts
+        max_length: Maximum length of returned snippet
+        
+    Returns:
+        Clean text suitable for display
+    """
+    if not text:
+        return ""
+    
+    # Remove HTML tags
+    clean = re.sub(r'<[^>]+>', ' ', text)
+    
+    # Remove HTML entities
+    clean = re.sub(r'&[a-zA-Z]+;', ' ', clean)
+    clean = re.sub(r'&#\d+;', ' ', clean)
+    
+    # Remove markdown-style formatting artifacts
+    clean = re.sub(r'\|+', ' ', clean)  # Table pipes
+    clean = re.sub(r'-{3,}', ' ', clean)  # Horizontal rules
+    clean = re.sub(r'\*{2,}', ' ', clean)  # Bold markers
+    
+    # Normalize whitespace
+    clean = re.sub(r'\s+', ' ', clean)
+    clean = clean.strip()
+    
+    # Truncate to max length at word boundary
+    if len(clean) > max_length:
+        # Find last space before max_length
+        truncate_at = clean.rfind(' ', 0, max_length)
+        if truncate_at > max_length * 0.5:  # At least half the length
+            clean = clean[:truncate_at] + "..."
+        else:
+            clean = clean[:max_length] + "..."
+    
+    return clean
 
 
 @dataclass
@@ -171,8 +215,8 @@ class ContextBuilder:
             # Add to sections
             sections.append(f"{header}\n\n{combined_text}")
             
-            # Get best snippet from chunks (first 300 chars of first chunk)
-            best_snippet = chunks[0].text[:300] if chunks else ""
+            # Get best snippet from chunks - cleaned for display
+            best_snippet = clean_text_for_display(chunks[0].text, 300) if chunks else ""
             
             # Add citation
             citations.append({
@@ -232,7 +276,7 @@ class ContextBuilder:
                     "country": meta.get("country"),
                     "url": meta.get("url"),
                     "doi": meta.get("doi"),
-                    "snippet": result.text[:300],
+                    "snippet": clean_text_for_display(result.text, 300),
                     "score": result.score,
                 })
         
