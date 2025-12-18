@@ -91,7 +91,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6 pl-0">
+        <div className="mt-6 space-y-6 px-6">
           {/* Relevance Threshold */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">

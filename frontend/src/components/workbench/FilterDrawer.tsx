@@ -2,16 +2,14 @@
 
 import { useState } from "react";
 import { Filter } from "@/types";
-import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
 interface FilterDrawerProps {
   isOpen?: boolean;
@@ -79,12 +77,6 @@ export function FilterDrawer({
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1">
-          <Plus className="h-3 w-3" />
-          Add Filter
-        </Button>
-      </SheetTrigger>
       <SheetContent side="right" className="w-[350px] sm:w-[400px]">
         <SheetHeader>
           <SheetTitle>Add Filters</SheetTitle>
