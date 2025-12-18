@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Filter } from "@/types";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
