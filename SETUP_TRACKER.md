@@ -240,13 +240,16 @@ for r in results.points:
 
 ### Near-Term (This Week)
 
-| Priority | Task | Effort |
+| Priority | Task | Status |
 |----------|------|--------|
-| 🔴 P0 | **Deploy Backend (Railway/Render)** | 1-2 hours |
-| 🔴 P0 | **Deploy Frontend (Vercel)** | 30 min |
-| 🔴 P0 | **Wire Admin UI → R2 upload** | 2-3 hours |
-| 🔴 P0 | Bulk document ingestion via UI | 1 day |
-| 🟡 P1 | Run RAGAS evaluation | 1 day |
+| 🟢 | Deploy Backend (Railway) | ✅ Done |
+| 🟢 | Deploy Frontend (Vercel) | ✅ Done |
+| 🟢 | Frontend ↔ Backend wiring | ✅ Done |
+| 🔴 P0 | Wire Settings to backend | ⬜ TODO |
+| 🔴 P0 | LLM-based suggestions | ⬜ TODO |
+| 🟡 P1 | Admin UI → R2 upload | ⬜ TODO |
+| 🟡 P1 | Bulk document ingestion | ⬜ TODO |
+| 🟡 P1 | Run RAGAS evaluation | ⬜ TODO |
 
 ### Medium-Term (Month 2)
 

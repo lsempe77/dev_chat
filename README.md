@@ -36,7 +36,7 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 │  • Classification (simple/complex/comparison)                            │
 │  • Query Expansion (synonyms, acronyms, domain terms)                    │
 │  • Metadata Extraction (year, sector, country filters)                   │
-│  • Model: Claude 3.5 Haiku (fast)                                        │
+│  • Model: GPT-4o-mini via OpenRouter (fast)                              │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │
             ┌─────────────────────┼─────────────────────┐
@@ -64,8 +64,8 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
                                 │
 ┌───────────────────────────────▼─────────────────────────────────────────┐
 │                    ADAPTIVE SYNTHESIS                                    │
-│  Simple queries  → Claude 3.5 Haiku (fast, cheap)                        │
-│  Complex queries → Claude Sonnet 4 (reasoning, nuance)                   │
+│  Simple queries  → GPT-4o-mini (fast, cheap)                             │
+│  Complex queries → GPT-4o (reasoning, nuance)                            │
 └───────────────────────────────┬─────────────────────────────────────────┘
                                 │
 ┌───────────────────────────────▼─────────────────────────────────────────┐
@@ -227,39 +227,40 @@ devchat_v2_sota/
 | Component | Technology | Why |
 |-----------|------------|-----|
 | **LLM Provider** | OpenRouter | Unified API for all models, single API key |
-| **LLM (Fast)** | Claude 3.5 Haiku | Query processing, simple Q&A |
-| **LLM (Reasoning)** | Claude Sonnet 4 | Complex synthesis, comparisons |
-| **Embeddings** | Cohere embed-v4 or Voyage | SOTA retrieval, multilingual |
+| **LLM (Fast)** | GPT-4o-mini | Query processing, simple Q&A |
+| **LLM (Reasoning)** | GPT-4o | Complex synthesis, comparisons |
+| **Embeddings** | Cohere embed-v4.0 | 1536 dims, SOTA retrieval |
 | **Reranking** | Cohere Rerank v3.5 | 15-20% accuracy boost |
-| **Vector DB** | Qdrant (Hybrid) | Dense + Sparse + Metadata |
-| **Framework** | LlamaIndex | Best-in-class RAG primitives |
+| **Vector DB** | Qdrant Cloud | Dense vectors + metadata filters |
+| **PDF Processing** | MinerU on Modal | GPU extraction, T4 instance |
+| **Storage** | Cloudflare R2 | S3-compatible object storage |
 | **API** | FastAPI | Async, fast, typed |
-| **UI** | Next.js + shadcn/ui | Research Workbench (public-facing) |
+| **UI** | Next.js 15 + shadcn/ui | Research Workbench |
+| **Hosting** | Railway + Vercel | Backend + Frontend |
 | **Observability** | Langfuse | Tracing & analytics |
 
 ### OpenRouter Integration
 
 We use [OpenRouter](https://openrouter.ai) as the unified LLM provider:
 - **Single API key** to access all major models (Anthropic, OpenAI, Google, etc.)
-- **Model format**: `provider/model-name` (e.g., `anthropic/claude-3-5-haiku-20241022`)
+- **Model format**: `provider/model-name` (e.g., `openai/gpt-4o-mini`)
 - **Easy model switching** without code changes
 - **Usage tracking** and cost monitoring built-in
 
 ---
 
-## 🔌 Backend API Wiring (Frontend ↔ Backend)
+## 🔌 Backend API (Frontend ↔ Backend)
 
-The frontend is built with mock data. Here's how to wire it to the FastAPI backend:
+The frontend is fully wired to the FastAPI backend. Here's the API reference:
 
-### API Endpoints to Implement
+### API Endpoints
 
-| Frontend Function | Endpoint | Backend Pipeline |
-|-------------------|----------|------------------|
-| `queryEvidence(query, filters, settings)` | `POST /api/query` | QueryProcessor → HybridRetriever → Reranker → Synthesizer |
-| `compareStudies(studyIds)` | `POST /api/compare` | Fetch studies → Build comparison context → LLM compare |
-| `getSuggestions(query, context)` | `POST /api/suggest` | LLM generates follow-up queries |
-| `exportResults(query, answer, studies, format)` | `POST /api/export` | Generate PDF/docx/markdown |
-| `getAvailableFilters()` | `GET /api/filters` | Query Qdrant for distinct metadata values |
+| Frontend Function | Endpoint | Status |
+|-------------------|----------|--------|
+| `queryEvidence(query, filters)` | `POST /api/query` | ✅ Working |
+| `compareStudies(studyIds)` | `POST /api/compare` | ✅ Working |
+| `getSuggestions(query, context)` | `POST /api/suggest` | ⚠️ Placeholder |
+| `getAvailableFilters()` | `GET /api/filters` | ✅ Working |
 
 ### SearchSettings → Backend Parameters
 
@@ -307,12 +308,6 @@ interface SearchSettings {
   rows: CompareRow[]  // [{dimension, values: {studyId: value}}]
 }
 ```
-
-### Frontend Files to Update
-
-1. **`lib/api.ts`** - Replace mock implementations with `fetch()` calls
-2. **`app/page.tsx`** - Connect settings state to query function
-3. **`types/index.ts`** - Ensure types match backend schemas
 
 ---
 
@@ -427,21 +422,20 @@ Users don't just want an answer. They want to know:
 Key settings in `src/config/settings.py`:
 
 ```python
-# Model Selection
-LLM_FAST = "claude-3-5-haiku-20241022"
-LLM_REASONING = "claude-sonnet-4-20250514"
-EMBEDDING_MODEL = "embed-v4.0"
-RERANK_MODEL = "rerank-v3.5"
+# Model Selection (via OpenRouter)
+LLM_FAST = "openai/gpt-4o-mini"
+LLM_REASONING = "openai/gpt-4o"
+EMBEDDING_MODEL = "embed-v4.0"  # Cohere
+RERANK_MODEL = "rerank-v3.5"    # Cohere
 
 # Retrieval Parameters
-HYBRID_ALPHA = 0.7  # Dense vs Sparse weight
+HYBRID_ENABLED = False  # Dense only (collection has no sparse vectors)
 RETRIEVAL_TOP_K = 50
 RERANK_TOP_N = 15
 
 # Chunking
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 50
-PARENT_CHUNK_SIZE = 2048
 ```
 
 ## 📈 Expected Performance
