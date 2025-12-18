@@ -20,10 +20,6 @@ RUN pip install --no-cache-dir -r requirements-prod.txt
 # Copy application code
 COPY api/ api/
 COPY src/ src/
-COPY start.sh .
-
-# Fix line endings and make executable
-RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -32,5 +28,5 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Expose port (Railway provides PORT env var)
 EXPOSE 8000
 
-# Run the application
-CMD ["./start.sh"]
+# Run the application - bash -c properly expands env vars
+CMD ["bash", "-c", "uvicorn api.server:app --host 0.0.0.0 --port $PORT"]
