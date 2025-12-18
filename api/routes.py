@@ -991,7 +991,8 @@ async def delete_document(document_id: str):
             prefixes_to_check = [
                 document_id,  # Exact path if provided (e.g., "input-pdfs/xxx.pdf")
                 f"input-pdfs/{base_filename}",  # Input PDF
-                f"outputs/{base_name}",  # Outputs folder (MinerU creates folders)
+                f"outputs/json/{base_name}",  # JSON output from MinerU
+                f"outputs/md/{base_name}",  # Markdown output from MinerU
             ]
             
             logger.info(f"Looking for R2 files with prefixes: {prefixes_to_check}")
