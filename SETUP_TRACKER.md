@@ -245,11 +245,14 @@ for r in results.points:
 | 🟢 | Deploy Backend (Railway) | ✅ Done |
 | 🟢 | Deploy Frontend (Vercel) | ✅ Done |
 | 🟢 | Frontend ↔ Backend wiring | ✅ Done |
-| 🔴 P0 | Wire Settings to backend | ⬜ TODO |
-| 🔴 P0 | LLM-based suggestions | ⬜ TODO |
-| 🟡 P1 | Admin UI → R2 upload | ⬜ TODO |
+| 🟢 | Wire Settings to backend | ✅ Done |
+| 🟢 | LLM-based suggestions | ✅ Done |
 | 🟡 P1 | Bulk document ingestion | ⬜ TODO |
+| 🟡 P1 | Match document ingestions (pdfs, etc) with metadata file (uploaded, generated from files, and later searching/completing in crossref) | ⬜ TODO |
+| 🟡 P1 | Admin UI → R2 upload | ⬜ TODO |
+
 | 🟡 P1 | Run RAGAS evaluation | ⬜ TODO |
+
 
 ### Medium-Term (Month 2)
 

@@ -290,16 +290,35 @@ class QdrantIndexer:
         """Get information about the collection."""
         try:
             info = self.client.get_collection(self.collection_name)
+            # Handle different Qdrant client versions
+            vectors_count = getattr(info, 'vectors_count', None) or info.points_count
             return {
                 "name": self.collection_name,
                 "points_count": info.points_count,
-                "vectors_count": info.vectors_count,
-                "status": info.status,
+                "vectors_count": vectors_count,
+                "status": str(info.status),
             }
         except Exception as e:
             logger.error(f"Failed to get collection info: {e}")
             return {"error": str(e)}
     
+    def sample_points(self, limit: int = 5) -> List[Dict]:
+        """Sample a few points from the collection to inspect payloads."""
+        try:
+            results, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+            return [
+                {"id": p.id, "payload": p.payload}
+                for p in results
+            ]
+        except Exception as e:
+            logger.error(f"Failed to sample points: {e}")
+            return []
+
     def delete_collection(self) -> None:
         """Delete the collection."""
         try:

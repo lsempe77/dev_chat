@@ -514,6 +514,24 @@ async def ensure_indexes():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.get("/sample-points")
+async def sample_points(limit: int = 5):
+    """
+    Sample a few points from Qdrant to inspect payloads.
+    Useful for debugging what fields are available for filtering/deletion.
+    """
+    try:
+        indexer = QdrantIndexer()
+        points = indexer.sample_points(limit=limit)
+        return {
+            "count": len(points),
+            "points": points,
+        }
+    except Exception as e:
+        logger.error(f"Failed to sample points: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.post("/ingest", response_model=IngestResponse)
 async def ingest_documents(request: IngestRequest):
     """
