@@ -356,10 +356,20 @@ class QdrantIndexer:
                 
                 for point in results:
                     payload = point.payload or {}
-                    # Match on document_id OR source field
+                    # Extract just the filename for comparison
+                    doc_id_parts = document_id.split("/")
+                    base_name = doc_id_parts[-1] if doc_id_parts else document_id
+                    base_name_no_ext = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+                    
+                    # Match on various fields that might contain the document identifier
                     if (payload.get("document_id") == document_id or 
                         payload.get("source") == document_id or
-                        payload.get("filename") == document_id):
+                        payload.get("filename") == document_id or
+                        payload.get("pdf_name") == document_id or
+                        payload.get("pdf_name") == base_name or
+                        payload.get("pdf_name") == base_name_no_ext or
+                        payload.get("source") == base_name or
+                        payload.get("source") == base_name_no_ext):
                         matching_point_ids.append(point.id)
                 
                 if next_offset is None or len(results) == 0:
@@ -397,6 +407,10 @@ class QdrantIndexer:
             Number of points deleted
         """
         try:
+            # Extract base name for flexible matching
+            base_name = filename.split("/")[-1] if "/" in filename else filename
+            base_name_no_ext = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+            
             # Scroll through all points to find matches
             matching_point_ids = []
             next_offset = None
@@ -413,8 +427,13 @@ class QdrantIndexer:
                 for point in results:
                     payload = point.payload or {}
                     source = payload.get("source", "")
-                    # Match if filename is in the source path
-                    if filename in source or source == filename:
+                    pdf_name = payload.get("pdf_name", "")
+                    
+                    # Match if filename is in the source/pdf_name path
+                    if (filename in source or source == filename or
+                        filename in pdf_name or pdf_name == filename or
+                        base_name in source or base_name == pdf_name or
+                        base_name_no_ext == pdf_name):
                         matching_point_ids.append(point.id)
                 
                 if next_offset is None or len(results) == 0:
