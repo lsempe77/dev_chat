@@ -285,3 +285,123 @@ export async function checkHealth(): Promise<{
 
   return response.json();
 }
+
+// =============================================================================
+// Metadata Review Types & Functions
+// =============================================================================
+
+export interface DocumentMetadataDetail {
+  id: string;
+  title: string;
+  filename: string;
+  authors: string[];
+  year?: number;
+  doi?: string;
+  journal?: string;
+  publisher?: string;
+  cited_by_count?: number;
+  is_open_access: boolean;
+  countries: string[];
+  sectors: string[];
+  study_type?: string;
+  intervention_type?: string;
+  sdgs: string[];
+  keywords: string[];
+  metadata_source: string;
+  metadata_confidence: number;
+  needs_review: boolean;
+  chunk_count: number;
+}
+
+export interface MetadataReviewResponse {
+  documents: DocumentMetadataDetail[];
+  total_count: number;
+  needs_review_count: number;
+  low_confidence_count: number;
+}
+
+export interface MetadataUpdateRequest {
+  title?: string;
+  authors?: string[];
+  year?: number;
+  doi?: string;
+  journal?: string;
+  countries?: string[];
+  sectors?: string[];
+  study_type?: string;
+  intervention_type?: string;
+  needs_review?: boolean;
+}
+
+export interface MetadataUpdateResponse {
+  success: boolean;
+  document_id: string;
+  updated_chunks: number;
+  message: string;
+}
+
+/**
+ * Get documents needing metadata review
+ */
+export async function getMetadataForReview(params?: {
+  filter?: "needs_review" | "low_confidence";
+  limit?: number;
+  offset?: number;
+}): Promise<MetadataReviewResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.filter) searchParams.set("filter_type", params.filter);
+  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.offset) searchParams.set("offset", params.offset.toString());
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/metadata/review?${searchParams.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch metadata: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Get detailed metadata for a specific document
+ */
+export async function getDocumentMetadata(
+  documentId: string
+): Promise<DocumentMetadataDetail> {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/metadata/${encodeURIComponent(documentId)}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch document metadata: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Update document metadata
+ */
+export async function updateDocumentMetadata(
+  documentId: string,
+  update: MetadataUpdateRequest
+): Promise<MetadataUpdateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/metadata/${encodeURIComponent(documentId)}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(update),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to update metadata: ${response.statusText}`);
+  }
+
+  return response.json();
+}

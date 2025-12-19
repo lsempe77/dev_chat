@@ -327,6 +327,60 @@ class DocumentMetadata(BaseModel):
     processed_at: Optional[datetime] = None
 
 
+class DocumentMetadataDetail(BaseModel):
+    """Extended metadata for document review."""
+    id: str
+    title: str
+    filename: str
+    authors: List[str] = []
+    year: Optional[int] = None
+    doi: Optional[str] = None
+    journal: Optional[str] = None
+    publisher: Optional[str] = None
+    cited_by_count: Optional[int] = None
+    is_open_access: bool = False
+    countries: List[str] = []
+    sectors: List[str] = []
+    study_type: Optional[str] = None
+    intervention_type: Optional[str] = None
+    sdgs: List[str] = []
+    keywords: List[str] = []
+    metadata_source: str = "extraction"
+    metadata_confidence: float = 0.0
+    needs_review: bool = True
+    chunk_count: int = 0
+
+
+class MetadataReviewResponse(BaseModel):
+    """Response listing documents needing metadata review."""
+    documents: List[DocumentMetadataDetail]
+    total_count: int
+    needs_review_count: int
+    low_confidence_count: int
+
+
+class MetadataUpdateRequest(BaseModel):
+    """Request to update document metadata."""
+    title: Optional[str] = None
+    authors: Optional[List[str]] = None
+    year: Optional[int] = None
+    doi: Optional[str] = None
+    journal: Optional[str] = None
+    countries: Optional[List[str]] = None
+    sectors: Optional[List[str]] = None
+    study_type: Optional[str] = None
+    intervention_type: Optional[str] = None
+    needs_review: Optional[bool] = None
+
+
+class MetadataUpdateResponse(BaseModel):
+    """Response after updating metadata."""
+    success: bool
+    document_id: str
+    updated_chunks: int
+    message: str
+
+
 class DocumentsResponse(BaseModel):
     """Response listing indexed documents."""
     documents: List[DocumentMetadata]

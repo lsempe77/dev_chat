@@ -10,13 +10,15 @@ import {
   Settings, 
   ArrowLeft,
   Database,
-  Loader2
+  Loader2,
+  Tag
 } from "lucide-react";
 import Link from "next/link";
 import { UploadTab } from "./UploadTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { ProcessingTab } from "./ProcessingTab";
 import { SettingsTab } from "./SettingsTab";
+import { MetadataTab } from "./MetadataTab";
 import { checkHealth, getCollectionInfo } from "@/lib/admin-api";
 
 export function AdminLayout() {
@@ -95,7 +97,7 @@ export function AdminLayout() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-xl grid-cols-4">
+          <TabsList className="grid w-full max-w-2xl grid-cols-5">
             <TabsTrigger value="upload" className="gap-2">
               <Upload className="h-4 w-4" />
               Upload
@@ -107,6 +109,10 @@ export function AdminLayout() {
             <TabsTrigger value="documents" className="gap-2">
               <FileText className="h-4 w-4" />
               Documents
+            </TabsTrigger>
+            <TabsTrigger value="metadata" className="gap-2">
+              <Tag className="h-4 w-4" />
+              Metadata
             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-2">
               <Settings className="h-4 w-4" />
@@ -124,6 +130,10 @@ export function AdminLayout() {
 
           <TabsContent value="documents" className="space-y-4">
             <DocumentsTab />
+          </TabsContent>
+
+          <TabsContent value="metadata" className="space-y-4">
+            <MetadataTab />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">

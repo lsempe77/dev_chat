@@ -44,12 +44,16 @@ from api.schemas import (
     ProcessingJob,
     ProcessingJobsResponse,
     DocumentMetadata,
+    DocumentMetadataDetail,
     DocumentsResponse,
     AdminStatusResponse,
     ServiceConnection,
     StorageStatus,
     TriggerProcessingRequest,
     TriggerProcessingResponse,
+    MetadataReviewResponse,
+    MetadataUpdateRequest,
+    MetadataUpdateResponse,
 )
 from src.agents.devchat_agent import DevChatAgent
 from src.config.settings import settings
@@ -1135,5 +1139,296 @@ async def reprocess_document(document_id: str):
         "job_id": f"job-reprocess-{doc_id}",
         "message": "Document queued for reprocessing"
     }
+
+
+# =============================================================================
+# Metadata Review Endpoints
+# =============================================================================
+
+@admin_router.get("/metadata/review", response_model=MetadataReviewResponse)
+async def get_metadata_for_review(
+    filter_type: Optional[str] = Query(None, description="Filter: 'needs_review' or 'low_confidence'"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """
+    Get documents with metadata that needs review.
+    
+    Returns documents with needs_review=True or low confidence scores.
+    """
+    try:
+        indexer = QdrantIndexer()
+        
+        # Scroll through all points to get unique documents with metadata
+        all_points = []
+        next_offset = None
+        
+        while True:
+            results, next_offset = indexer.client.scroll(
+                collection_name=indexer.collection_name,
+                limit=100,
+                offset=next_offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            all_points.extend(results)
+            if next_offset is None or len(results) == 0:
+                break
+        
+        # Aggregate by doc_id
+        doc_map = {}
+        for point in all_points:
+            payload = point.payload or {}
+            
+            doc_id = payload.get("doc_id") or payload.get("pdf_name") or payload.get("source", "unknown")
+            if "/" in doc_id:
+                doc_id = doc_id.split("/")[-1]
+            if doc_id.endswith(".pdf"):
+                doc_id = doc_id[:-4]
+            
+            if doc_id not in doc_map:
+                doc_map[doc_id] = {
+                    "id": doc_id,
+                    "title": payload.get("title", doc_id),
+                    "filename": f"{doc_id}.pdf",
+                    "authors": [],
+                    "year": payload.get("year"),
+                    "doi": payload.get("doi"),
+                    "journal": payload.get("journal"),
+                    "publisher": payload.get("publisher"),
+                    "cited_by_count": payload.get("cited_by_count"),
+                    "is_open_access": payload.get("is_open_access", False),
+                    "countries": payload.get("countries", []),
+                    "sectors": payload.get("sectors", []),
+                    "study_type": payload.get("study_type"),
+                    "intervention_type": payload.get("intervention_type"),
+                    "sdgs": payload.get("sdgs", []),
+                    "keywords": payload.get("keywords", []),
+                    "metadata_source": payload.get("metadata_source", "extraction"),
+                    "metadata_confidence": payload.get("metadata_confidence", 0.0),
+                    "needs_review": payload.get("needs_review", True),
+                    "chunk_count": 0,
+                }
+            
+            doc_map[doc_id]["chunk_count"] += 1
+            
+            # Get authors if available
+            if payload.get("authors") and not doc_map[doc_id]["authors"]:
+                authors = payload.get("authors")
+                if isinstance(authors, list):
+                    doc_map[doc_id]["authors"] = authors
+                elif isinstance(authors, str):
+                    doc_map[doc_id]["authors"] = [a.strip() for a in authors.split(",")]
+        
+        # Filter documents
+        documents = []
+        needs_review_count = 0
+        low_confidence_count = 0
+        
+        for doc_data in doc_map.values():
+            # Count stats
+            if doc_data["needs_review"]:
+                needs_review_count += 1
+            if doc_data["metadata_confidence"] < 0.5:
+                low_confidence_count += 1
+            
+            # Apply filter
+            if filter_type == "needs_review" and not doc_data["needs_review"]:
+                continue
+            elif filter_type == "low_confidence" and doc_data["metadata_confidence"] >= 0.5:
+                continue
+            
+            documents.append(DocumentMetadataDetail(**doc_data))
+        
+        # Sort by confidence (lowest first)
+        documents.sort(key=lambda d: d.metadata_confidence)
+        
+        # Apply pagination
+        total_count = len(documents)
+        documents = documents[offset:offset + limit]
+        
+        return MetadataReviewResponse(
+            documents=documents,
+            total_count=total_count,
+            needs_review_count=needs_review_count,
+            low_confidence_count=low_confidence_count,
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get metadata for review: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get("/metadata/{document_id:path}", response_model=DocumentMetadataDetail)
+async def get_document_metadata(document_id: str):
+    """Get detailed metadata for a specific document."""
+    try:
+        indexer = QdrantIndexer()
+        
+        # Clean up doc_id
+        doc_id = document_id
+        if "/" in doc_id:
+            doc_id = doc_id.split("/")[-1]
+        if doc_id.endswith(".pdf"):
+            doc_id = doc_id[:-4]
+        
+        # Find points for this document
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        
+        results = indexer.client.scroll(
+            collection_name=indexer.collection_name,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
+                ]
+            ),
+            limit=1,
+            with_payload=True,
+            with_vectors=False,
+        )[0]
+        
+        if not results:
+            raise HTTPException(status_code=404, detail=f"Document not found: {doc_id}")
+        
+        payload = results[0].payload or {}
+        
+        # Count total chunks
+        count_result = indexer.client.count(
+            collection_name=indexer.collection_name,
+            count_filter=Filter(
+                must=[
+                    FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
+                ]
+            ),
+        )
+        
+        authors = payload.get("authors", [])
+        if isinstance(authors, str):
+            authors = [a.strip() for a in authors.split(",")]
+        
+        return DocumentMetadataDetail(
+            id=doc_id,
+            title=payload.get("title", doc_id),
+            filename=f"{doc_id}.pdf",
+            authors=authors,
+            year=payload.get("year"),
+            doi=payload.get("doi"),
+            journal=payload.get("journal"),
+            publisher=payload.get("publisher"),
+            cited_by_count=payload.get("cited_by_count"),
+            is_open_access=payload.get("is_open_access", False),
+            countries=payload.get("countries", []),
+            sectors=payload.get("sectors", []),
+            study_type=payload.get("study_type"),
+            intervention_type=payload.get("intervention_type"),
+            sdgs=payload.get("sdgs", []),
+            keywords=payload.get("keywords", []),
+            metadata_source=payload.get("metadata_source", "extraction"),
+            metadata_confidence=payload.get("metadata_confidence", 0.0),
+            needs_review=payload.get("needs_review", True),
+            chunk_count=count_result.count,
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get document metadata: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.put("/metadata/{document_id:path}", response_model=MetadataUpdateResponse)
+async def update_document_metadata(document_id: str, update: MetadataUpdateRequest):
+    """
+    Update metadata for a document.
+    
+    Updates all chunks belonging to this document in Qdrant.
+    """
+    try:
+        indexer = QdrantIndexer()
+        
+        # Clean up doc_id
+        doc_id = document_id
+        if "/" in doc_id:
+            doc_id = doc_id.split("/")[-1]
+        if doc_id.endswith(".pdf"):
+            doc_id = doc_id[:-4]
+        
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        
+        # Get all points for this document
+        all_points = []
+        next_offset = None
+        
+        while True:
+            results, next_offset = indexer.client.scroll(
+                collection_name=indexer.collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
+                    ]
+                ),
+                limit=100,
+                offset=next_offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            all_points.extend(results)
+            if next_offset is None or len(results) == 0:
+                break
+        
+        if not all_points:
+            raise HTTPException(status_code=404, detail=f"Document not found: {doc_id}")
+        
+        # Prepare payload update
+        payload_update = {}
+        if update.title is not None:
+            payload_update["title"] = update.title
+        if update.authors is not None:
+            payload_update["authors"] = update.authors
+        if update.year is not None:
+            payload_update["year"] = update.year
+        if update.doi is not None:
+            payload_update["doi"] = update.doi
+        if update.journal is not None:
+            payload_update["journal"] = update.journal
+        if update.countries is not None:
+            payload_update["countries"] = update.countries
+        if update.sectors is not None:
+            payload_update["sectors"] = update.sectors
+        if update.study_type is not None:
+            payload_update["study_type"] = update.study_type
+        if update.intervention_type is not None:
+            payload_update["intervention_type"] = update.intervention_type
+        if update.needs_review is not None:
+            payload_update["needs_review"] = update.needs_review
+        
+        # Mark as user-verified
+        payload_update["metadata_source"] = "user"
+        payload_update["metadata_confidence"] = 1.0  # User-verified is highest confidence
+        
+        # Update all points
+        point_ids = [str(p.id) for p in all_points]
+        
+        indexer.client.set_payload(
+            collection_name=indexer.collection_name,
+            payload=payload_update,
+            points=point_ids,
+        )
+        
+        logger.info(f"Updated metadata for {doc_id}: {len(point_ids)} chunks")
+        
+        return MetadataUpdateResponse(
+            success=True,
+            document_id=doc_id,
+            updated_chunks=len(point_ids),
+            message=f"Updated metadata for {len(point_ids)} chunks",
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update document metadata: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
