@@ -54,11 +54,17 @@ class ExtractedFilters:
         ])
     
     def to_qdrant_filter(self):
-        """Convert to Qdrant filter format."""
+        """Convert to Qdrant filter format.
+        
+        Note: Only applies year filters by default since not all documents
+        have country/sector metadata (e.g., Modal-indexed PDFs).
+        To enable other filters, documents must have consistent metadata.
+        """
         from qdrant_client.models import Filter, FieldCondition, Range, MatchAny, MatchValue
         
         conditions = []
         
+        # Year filter - most documents have this
         if self.year_min or self.year_max:
             year_range = Range(
                 gte=self.year_min,
@@ -66,29 +72,33 @@ class ExtractedFilters:
             )
             conditions.append(FieldCondition(key="year", range=year_range))
         
-        if self.sectors:
-            conditions.append(FieldCondition(
-                key="sector",
-                match=MatchAny(any=self.sectors),
-            ))
-        
-        if self.countries:
-            conditions.append(FieldCondition(
-                key="country",
-                match=MatchAny(any=self.countries),
-            ))
-        
-        if self.study_types:
-            conditions.append(FieldCondition(
-                key="study_type",
-                match=MatchAny(any=self.study_types),
-            ))
-        
-        if self.confidence_level:
-            conditions.append(FieldCondition(
-                key="confidence_rating",
-                match=MatchValue(value=self.confidence_level),
-            ))
+        # NOTE: Disabled sector/country/study_type filters because Modal-indexed
+        # documents don't have these fields in their payload. Uncomment when
+        # all documents have consistent metadata.
+        #
+        # if self.sectors:
+        #     conditions.append(FieldCondition(
+        #         key="sector",
+        #         match=MatchAny(any=self.sectors),
+        #     ))
+        #
+        # if self.countries:
+        #     conditions.append(FieldCondition(
+        #         key="country",
+        #         match=MatchAny(any=self.countries),
+        #     ))
+        #
+        # if self.study_types:
+        #     conditions.append(FieldCondition(
+        #         key="study_type",
+        #         match=MatchAny(any=self.study_types),
+        #     ))
+        #
+        # if self.confidence_level:
+        #     conditions.append(FieldCondition(
+        #         key="confidence_rating",
+        #         match=MatchValue(value=self.confidence_level),
+        #     ))
         
         if conditions:
             return Filter(must=conditions)

@@ -34,7 +34,13 @@ class RetrievalResult:
     
     @property
     def study_id(self) -> Optional[str]:
-        return self.metadata.get("study_id")
+        """Get study ID, falling back to doc_id or pdf_name for Modal-indexed docs."""
+        return (
+            self.metadata.get("study_id") or 
+            self.metadata.get("doc_id") or 
+            self.metadata.get("pdf_name") or
+            self.metadata.get("document_id")
+        )
     
     @property
     def title(self) -> Optional[str]:
