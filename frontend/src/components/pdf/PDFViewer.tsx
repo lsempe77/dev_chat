@@ -5,18 +5,16 @@ import { Button } from "@/components/ui/button";
 import { 
   Loader2, 
   AlertCircle, 
-  X,
-  Maximize2,
-  Minimize2,
   ExternalLink
 } from "lucide-react";
 
 interface PDFViewerProps {
   url: string;
   initialPage?: number;
-  highlightText?: string;
   onClose?: () => void;
   className?: string;
+  /** Hide the toolbar for embedded use */
+  hideToolbar?: boolean;
 }
 
 /**
@@ -30,10 +28,10 @@ export function PDFViewer({
   initialPage = 1, 
   onClose,
   className = "",
+  hideToolbar = false,
 }: PDFViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Append page parameter to URL for initial page
   const pdfUrl = initialPage > 1 
@@ -45,12 +43,8 @@ export function PDFViewer({
   };
 
   const handleError = () => {
-    setError("Failed to load PDF. The file may be unavailable or your browser may not support PDF viewing.");
+    setError("Failed to load PDF");
     setIsLoading(false);
-  };
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
   };
 
   const openInNewTab = () => {
@@ -58,47 +52,9 @@ export function PDFViewer({
   };
 
   return (
-    <div className={`relative flex flex-col bg-gray-100 rounded-lg overflow-hidden ${isFullscreen ? 'fixed inset-4 z-50 shadow-2xl' : className}`}>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-2 bg-white border-b">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">PDF Viewer</span>
-          {initialPage > 1 && (
-            <span className="text-xs text-gray-500">(Page {initialPage})</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={openInNewTab}
-            title="Open in new tab"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-          {onClose && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              title="Close"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* PDF Content */}
-      <div className="flex-1 relative min-h-[500px]">
+    <div className={`relative flex flex-col h-full w-full ${className}`}>
+      {/* PDF Content - full size */}
+      <div className="flex-1 relative">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
             <div className="flex flex-col items-center gap-2">
@@ -115,7 +71,7 @@ export function PDFViewer({
               <span className="text-sm">{error}</span>
               <Button variant="outline" size="sm" onClick={openInNewTab}>
                 <ExternalLink className="h-4 w-4 mr-2" />
-                Try opening in new tab
+                Open in new tab
               </Button>
             </div>
           </div>
@@ -123,8 +79,7 @@ export function PDFViewer({
 
         <iframe
           src={pdfUrl}
-          className="w-full h-full border-0"
-          style={{ minHeight: '500px' }}
+          className="w-full h-full border-0 absolute inset-0"
           onLoad={handleLoad}
           onError={handleError}
           title="PDF Document"

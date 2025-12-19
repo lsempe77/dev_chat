@@ -423,51 +423,47 @@ export function MetadataTab() {
 
         {/* Right Panel: PDF Viewer (Side Panel) */}
         {viewingPdfDoc && (
-          <Card className="w-1/2 flex flex-col">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <CardTitle className="text-sm truncate">{viewingPdfDoc.title}</CardTitle>
-                  <CardDescription className="text-xs truncate">
-                    {viewingPdfDoc.filename} • {viewingPdfDoc.chunk_count} chunks
-                  </CardDescription>
-                </div>
-                <div className="flex gap-1 ml-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => openEditModal(viewingPdfDoc)}
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={closePdfViewer}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+          <div className="w-1/2 flex flex-col border rounded-lg overflow-hidden bg-white">
+            {/* Minimal header with just close button */}
+            <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => openEditModal(viewingPdfDoc)}
+                  title="Edit metadata"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent className="flex-1 p-0">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={closePdfViewer}
+                title="Close PDF"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {/* PDF takes full remaining height */}
+            <div className="flex-1 min-h-0" style={{ height: 'calc(100vh - 280px)' }}>
               {isLoadingPdf ? (
-                <div className="flex items-center justify-center h-[600px]">
+                <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               ) : pdfUrl ? (
                 <PDFViewer 
                   url={pdfUrl} 
-                  className="h-[600px]"
+                  className="h-full"
                 />
               ) : (
-                <div className="flex items-center justify-center h-[600px] text-muted-foreground">
+                <div className="flex items-center justify-center h-full text-muted-foreground">
                   <AlertCircle className="h-6 w-6 mr-2" />
                   Failed to load PDF
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
 
