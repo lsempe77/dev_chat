@@ -57,6 +57,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
   };
 
   const handleApply = () => {
+    console.log("[Settings] Applying settings:", localSettings);
     onSettingsChange(localSettings);
     setIsOpen(false);
   };
