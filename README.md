@@ -15,13 +15,33 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 |-----------|--------|-------------|
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
 | **Frontend (Vercel)** | ✅ Live | https://frontend-amber-seven-55.vercel.app |
-| **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing |
-| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (31 chunks) |
+| **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing + Qdrant indexing |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection |
 | **End-to-End RAG** | ✅ Working | Query → Retrieval → Rerank → Generate |
-| **Document Corpus** | ⚠️ Limited | Only 1 test PDF indexed |
+| **Document Corpus** | ⚠️ Limited | 2 test PDFs indexed (50 chunks) |
+| **Metadata Filtering** | ⬜ Disabled | Needs metadata extraction during ingestion |
 | **Settings Wiring** | ⬜ TODO | UI exists, not sent to backend |
 
 **Live Demo:** https://frontend-amber-seven-55.vercel.app
+
+---
+
+## 📋 TODO / Roadmap
+
+### High Priority
+- [ ] **Metadata Extraction during PDF Ingestion** - Extract country, sector, year, study_type from PDFs using LLM during MinerU processing. Currently disabled because Modal-indexed docs don't have this metadata. See `infrastructure/modal_mineru.py` and `src/retrieval/query_processor.py`.
+- [ ] **Settings Wiring** - Connect frontend settings panel to backend parameters (temperature, top_k, model selection)
+- [ ] **Bulk PDF Upload** - Process 3ie's full corpus (~5000 PDFs)
+
+### Medium Priority  
+- [ ] **Admin Authentication** - Protect `/admin` routes with API key or OAuth
+- [ ] **Processing Status WebSocket** - Real-time updates for PDF processing progress
+- [ ] **Citation Quality Improvements** - Extract authors, DOI, abstract during ingestion
+
+### Future Enhancements
+- [ ] **Contextual Retrieval** - Add document context to chunks (Anthropic technique)
+- [ ] **RAPTOR Trees** - Hierarchical summarization for multi-hop reasoning
+- [ ] **RAGAS Evaluation** - Automated quality metrics in CI/CD
 
 ---
 
