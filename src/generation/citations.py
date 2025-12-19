@@ -239,3 +239,95 @@ def extract_study_mentions(answer: str, citations: List[Dict]) -> List[str]:
             mentioned.append(study_id)
     
     return list(set(mentioned))
+
+
+def get_cited_numbers(answer: str) -> set:
+    """
+    Extract citation numbers [1], [2], etc. from the answer.
+    
+    Args:
+        answer: The generated answer text
+        
+    Returns:
+        Set of citation numbers found (1-indexed)
+    """
+    import re
+    # Match [1], [2], etc. - including grouped citations like [1, 2]
+    pattern = r'\[(\d+(?:,\s*\d+)*)\]'
+    matches = re.findall(pattern, answer)
+    
+    numbers = set()
+    for match in matches:
+        # Handle grouped citations like "1, 2"
+        for num in match.split(','):
+            try:
+                numbers.add(int(num.strip()))
+            except ValueError:
+                pass
+    
+    return numbers
+
+
+def ensure_citation_coverage(
+    answer: str,
+    citations: List[Dict],
+    max_citations: int = 10,
+) -> str:
+    """
+    Ensure all retrieved sources are cited in the answer.
+    
+    This is a post-processing validator that:
+    1. Checks which citations [1], [2], etc. appear in the answer
+    2. For uncited sources, appends a brief mention
+    
+    Args:
+        answer: The generated answer with some citations
+        citations: All retrieved citation dictionaries
+        max_citations: Maximum number of citations to consider
+        
+    Returns:
+        Answer with all sources cited
+    """
+    if not citations:
+        return answer
+    
+    # Limit to max_citations
+    citations = citations[:max_citations]
+    
+    # Find which citation numbers are already in the answer
+    cited_numbers = get_cited_numbers(answer)
+    
+    # Find uncited sources (citation numbers are 1-indexed)
+    all_numbers = set(range(1, len(citations) + 1))
+    uncited_numbers = all_numbers - cited_numbers
+    
+    if not uncited_numbers:
+        # All sources cited!
+        return answer
+    
+    # Build additional citations section
+    additional_mentions = []
+    for num in sorted(uncited_numbers):
+        idx = num - 1
+        if idx < len(citations):
+            citation = citations[idx]
+            title = citation.get("title", "Study")
+            snippet = citation.get("snippet", "")
+            
+            # Create a brief mention of the uncited source
+            if snippet:
+                # Use first sentence of snippet
+                first_sentence = snippet.split('.')[0].strip()
+                if len(first_sentence) > 100:
+                    first_sentence = first_sentence[:100] + "..."
+                additional_mentions.append(f"[{num}] also notes: {first_sentence}.")
+            else:
+                additional_mentions.append(f"See also [{num}] for additional evidence on this topic.")
+    
+    if additional_mentions:
+        # Append as "Additional Sources" section
+        additional_section = "\n\n**Additional relevant sources:**\n" + " ".join(additional_mentions)
+        answer = answer.rstrip() + additional_section
+    
+    return answer
+
