@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -34,7 +35,7 @@ export interface SearchSettings {
 }
 
 const defaultSettings: SearchSettings = {
-  relevanceThreshold: 0.5,  // Default threshold - user can adjust in settings
+  relevanceThreshold: 0.5,
   maxStudies: 10,
   answerStyle: "executive",
   useReranking: true,
@@ -66,7 +67,6 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
     setLocalSettings(defaultSettings);
   };
 
-  // Typed handlers to avoid implicit any
   const handleSliderChange = (key: "relevanceThreshold" | "maxStudies" | "yearCutoff", divisor = 1) => 
     (values: number[]) => handleChange(key, values[0] / divisor);
   
@@ -77,33 +77,22 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
     (checked: boolean) => handleChange(key, checked);
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1">
           <Settings className="h-4 w-4" />
           Settings
         </Button>
-      </SheetTrigger>
-      <SheetContent side="right" className="w-[350px] sm:w-[400px] px-6 flex flex-col h-full">
-        <SheetHeader>
-          <SheetTitle>Search Settings</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Search Settings</DialogTitle>
+          <DialogDescription>
             Configure how evidence is retrieved and answers are generated.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Action buttons at top for visibility */}
-        <div className="mt-4 py-3 border-b flex gap-2 bg-background">
-          <Button variant="outline" onClick={handleReset} className="gap-1" size="sm">
-            <RotateCcw className="h-3 w-3" />
-            Reset
-          </Button>
-          <Button onClick={handleApply} className="flex-1" size="sm">
-            Apply Settings
-          </Button>
-        </div>
-
-        <div className="mt-4 space-y-6 flex-1 overflow-y-auto pb-4">
+        <div className="space-y-6 py-4">
           {/* Relevance Threshold */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -141,9 +130,6 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
               step={1}
               className="w-full"
             />
-            <p className="text-xs text-muted-foreground">
-              Maximum number of studies to include in results.
-            </p>
           </div>
 
           {/* Answer Style */}
@@ -157,53 +143,12 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="executive">
-                  <div className="flex flex-col">
-                    <span>Executive Summary</span>
-                    <span className="text-xs text-muted-foreground">Concise, key findings first</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="research">
-                  <div className="flex flex-col">
-                    <span>Detailed Research</span>
-                    <span className="text-xs text-muted-foreground">Comprehensive with methodology</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="policy">
-                  <div className="flex flex-col">
-                    <span>Policy Brief</span>
-                    <span className="text-xs text-muted-foreground">Actionable recommendations</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="citations">
-                  <div className="flex flex-col">
-                    <span>Citations Only</span>
-                    <span className="text-xs text-muted-foreground">Minimal synthesis, focus on sources</span>
-                  </div>
-                </SelectItem>
+                <SelectItem value="executive">Executive Summary</SelectItem>
+                <SelectItem value="research">Detailed Research</SelectItem>
+                <SelectItem value="policy">Policy Brief</SelectItem>
+                <SelectItem value="citations">Citations Only</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          {/* Minimum Confidence */}
-          <div className="space-y-2">
-            <Label>Minimum Study Confidence</Label>
-            <Select
-              value={localSettings.minConfidence}
-              onValueChange={handleSelectChange<"all" | "medium" | "high">("minConfidence")}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All studies</SelectItem>
-                <SelectItem value="medium">Medium or higher</SelectItem>
-                <SelectItem value="high">High confidence only</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Filter studies by methodology quality rating.
-            </p>
           </div>
 
           {/* Reranking Toggle */}
@@ -219,40 +164,19 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
               onCheckedChange={handleSwitchChange("useReranking")}
             />
           </div>
-
-          {/* Year Cutoff */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Include Studies From</Label>
-              <span className="text-sm text-muted-foreground font-mono">
-                {localSettings.includeOlderStudies ? `${localSettings.yearCutoff}+` : "Recent only"}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={localSettings.includeOlderStudies}
-                onCheckedChange={handleSwitchChange("includeOlderStudies")}
-              />
-              {localSettings.includeOlderStudies && (
-                <Slider
-                  value={[localSettings.yearCutoff]}
-                  onValueChange={handleSliderChange("yearCutoff")}
-                  min={1990}
-                  max={2024}
-                  step={1}
-                  className="flex-1"
-                />
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {localSettings.includeOlderStudies 
-                ? `Include studies from ${localSettings.yearCutoff} onwards.`
-                : "Only include studies from the last 5 years."}
-            </p>
-          </div>
         </div>
-      </SheetContent>
-    </Sheet>
+
+        <DialogFooter className="flex gap-2">
+          <Button variant="outline" onClick={handleReset} className="gap-1">
+            <RotateCcw className="h-3 w-3" />
+            Reset
+          </Button>
+          <Button onClick={handleApply}>
+            Apply Settings
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
