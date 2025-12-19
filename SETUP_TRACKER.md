@@ -61,6 +61,7 @@ Branch: main
 | **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` | ✅ Done |
 | **LLM-Based Suggestions** | Generate contextual "Try next" queries using LLM | ✅ Done |
 | **Admin Metadata UI** | Review, edit, verify document metadata | ✅ Done |
+| **Admin UI Upload Wiring** | Drag-drop → R2 upload → Modal trigger | ✅ Done |
 | **Fix Study Card Display** | Authors showing "()", year showing "Unknown" | ✅ Done |
 | **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | ⬜ TODO |
 
@@ -68,8 +69,9 @@ Branch: main
 
 | Task | Description | Status |
 |------|-------------|--------|
+| **PDF Viewer in Metadata Tab** | Open PDF side-by-side while editing metadata | ⬜ TODO |
+| **Clickable Citations → PDF** | Click citation → opens PDF at exact chunk location, highlighted | ⬜ TODO |
 | **Bibliography Import** | RIS/BibTeX/CSV parser with fuzzy matching | ⬜ TODO |
-| **Admin UI Upload Wiring** | Connect drag-drop → R2 → Modal trigger | ⬜ TODO |
 | **Export Citations** | BibTeX/RIS format export | ⬜ TODO |
 | **Usage Analytics** | Track queries, latency, user engagement | ⬜ TODO |
 
