@@ -61,6 +61,13 @@ data/
 !evaluation/test_cases.json
 !package.json
 !vercel.json
+!tsconfig.json
+!tsconfig*.json
+!components.json
+!next.config.js
+!next.config.ts
+!postcss.config.mjs
+!tailwind.config.ts
 
 # Models (large files)
 *.bin
