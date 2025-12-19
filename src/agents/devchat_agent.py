@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 @dataclass
 class SearchSettings:
     """Settings passed from frontend to control search behavior."""
-    relevance_threshold: float = 0.5
+    relevance_threshold: float = 0.3  # Lowered from 0.5 to be more inclusive
     max_studies: int = 10
     answer_style: str = "executive"
     use_reranking: bool = True
@@ -42,7 +42,7 @@ class SearchSettings:
         if not data:
             return cls()
         return cls(
-            relevance_threshold=data.get("relevanceThreshold", 0.5),
+            relevance_threshold=data.get("relevanceThreshold", 0.3),
             max_studies=data.get("maxStudies", 10),
             answer_style=data.get("answerStyle", "executive"),
             use_reranking=data.get("useReranking", True),

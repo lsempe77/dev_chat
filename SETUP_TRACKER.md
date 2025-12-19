@@ -55,6 +55,7 @@ Branch: main
 
 | Task | Description | Effort |
 |------|-------------|--------|
+| **Metadata Extraction** | Extract country, sector, year, study_type from PDFs using LLM during MinerU ingestion. Currently disabled in `query_processor.py` because Modal-indexed docs lack this metadata. | 1 day |
 | **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` from frontend to `/api/query` | 2 hours |
 | **LLM-Based Suggestions** | Generate contextual "Try next" queries using LLM | 2-3 hours |
 | **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | 1 day |
