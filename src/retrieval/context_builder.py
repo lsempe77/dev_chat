@@ -218,6 +218,25 @@ class ContextBuilder:
             # Get best snippet from chunks - cleaned for display
             best_snippet = clean_text_for_display(chunks[0].text, 300) if chunks else ""
             
+            # Get page info from first chunk (all chunks from same study may span pages)
+            page_start = meta.get("page_start")
+            page_end = meta.get("page_end")
+            pages = meta.get("pages", [])
+            
+            # If multiple chunks, get the range
+            if len(chunks) > 1:
+                all_pages = set()
+                for c in chunks:
+                    chunk_pages = c.metadata.get("pages", [])
+                    if chunk_pages:
+                        all_pages.update(chunk_pages)
+                    elif c.metadata.get("page_start"):
+                        all_pages.add(c.metadata.get("page_start"))
+                if all_pages:
+                    pages = sorted(all_pages)
+                    page_start = min(all_pages)
+                    page_end = max(all_pages)
+            
             # Add citation
             citations.append({
                 "study_id": study_id,
@@ -230,6 +249,9 @@ class ContextBuilder:
                 "doi": meta.get("doi"),
                 "snippet": best_snippet,
                 "score": chunks[0].score if chunks else 0.0,
+                "page_start": page_start,
+                "page_end": page_end,
+                "pages": pages,
             })
         
         # Join with separators
@@ -278,6 +300,9 @@ class ContextBuilder:
                     "doi": meta.get("doi"),
                     "snippet": clean_text_for_display(result.text, 300),
                     "score": result.score,
+                    "page_start": meta.get("page_start"),
+                    "page_end": meta.get("page_end"),
+                    "pages": meta.get("pages", []),
                 })
         
         context_text = "\n\n".join(chunks)

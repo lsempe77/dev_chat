@@ -19,6 +19,8 @@ export interface Citation {
   studyId: string;
   text: string;
   study: Study;
+  page?: number;  // Page number for PDF navigation
+  highlightText?: string;  // Text to highlight in PDF viewer
 }
 
 export interface Filter {

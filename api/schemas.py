@@ -66,6 +66,8 @@ class CitationResponse(BaseModel):
     studyId: str
     text: str
     study: StudyResponse
+    page: Optional[int] = None  # Page number for PDF navigation
+    highlightText: Optional[str] = None  # Text to highlight in PDF viewer
 
 
 class EvidenceHealth(BaseModel):
@@ -198,6 +200,9 @@ class Citation(BaseModel):
     sector: Optional[str] = None
     country: Optional[str] = None
     url: Optional[str] = None
+    page_start: Optional[int] = Field(None, description="Starting page in PDF")
+    page_end: Optional[int] = Field(None, description="Ending page in PDF")
+    pages: Optional[List[int]] = Field(None, description="All pages covered by this citation")
 
 
 class TimingInfo(BaseModel):

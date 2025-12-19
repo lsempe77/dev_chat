@@ -11,6 +11,7 @@ import {
 interface PDFViewerProps {
   url: string;
   initialPage?: number;
+  searchText?: string;  // Text to search and highlight in PDF
   onClose?: () => void;
   className?: string;
   /** Hide the toolbar for embedded use */
@@ -25,7 +26,8 @@ interface PDFViewerProps {
  */
 export function PDFViewer({ 
   url, 
-  initialPage = 1, 
+  initialPage = 1,
+  searchText,
   onClose,
   className = "",
   hideToolbar = false,
@@ -33,10 +35,27 @@ export function PDFViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Append page parameter to URL for initial page
-  const pdfUrl = initialPage > 1 
-    ? `${url}#page=${initialPage}` 
-    : url;
+  // Build URL with page and search parameters
+  // Chrome/Edge PDF viewer supports: #page=X&search=text
+  // Firefox uses: #page=X (search requires different approach)
+  const buildPdfUrl = () => {
+    const params: string[] = [];
+    
+    if (initialPage > 1) {
+      params.push(`page=${initialPage}`);
+    }
+    
+    // Add search text for highlighting (works in Chrome/Edge)
+    if (searchText) {
+      // Encode the search text and take first ~50 chars for better matching
+      const trimmedSearch = searchText.slice(0, 50).trim();
+      params.push(`search=${encodeURIComponent(trimmedSearch)}`);
+    }
+    
+    return params.length > 0 ? `${url}#${params.join('&')}` : url;
+  };
+  
+  const pdfUrl = buildPdfUrl();
 
   const handleLoad = () => {
     setIsLoading(false);

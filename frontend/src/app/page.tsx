@@ -14,10 +14,12 @@ import {
 } from "@/components/workbench";
 import type { SearchSettings } from "@/components/workbench";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Database } from "lucide-react";
+import { ArrowLeft, Database, X, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { Study, Citation, Filter, EvidenceHealth, AnswerStyle } from "@/types";
 import { queryEvidence } from "@/lib/api";
+import { PDFViewer } from "@/components/pdf";
+import { getPDFUrl } from "@/lib/admin-api";
 
 // Default evidence health for initial state
 const defaultEvidenceHealth: EvidenceHealth = {
@@ -48,6 +50,13 @@ export default function Home() {
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const [searchSettings, setSearchSettings] = useState<SearchSettings>(defaultSettings);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  
+  // PDF Viewer state
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfPage, setPdfPage] = useState(1);
+  const [pdfTitle, setPdfTitle] = useState("");
+  const [pdfSearchText, setPdfSearchText] = useState<string | undefined>();
 
   const handleSearch = useCallback(async (searchQuery: string) => {
     console.log("[Page] handleSearch called with searchSettings:", searchSettings);
@@ -74,17 +83,41 @@ export default function Home() {
     }
   }, [filters, searchSettings]);
 
-  const handleCitationClick = useCallback((citationId: number) => {
+  const handleCitationClick = useCallback(async (citationId: number) => {
     setHighlightedCitation(citationId);
-    // Scroll to the study card
+    
+    // Find the citation
     const citation = citations.find(c => c.id === citationId);
-    const studyElement = document.getElementById(`study-${citation?.studyId}`);
+    if (!citation) return;
+    
+    // Scroll to the study card
+    const studyElement = document.getElementById(`study-${citation.studyId}`);
     if (studyElement) {
       studyElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
+    
+    // Open PDF viewer with the citation's page and highlight text
+    try {
+      const response = await getPDFUrl(citation.studyId);
+      setPdfUrl(response.url);
+      setPdfPage(citation.page || 1);
+      setPdfTitle(citation.study?.title || citation.studyId);
+      // Use highlightText from citation, or fall back to first part of citation text
+      setPdfSearchText(citation.highlightText || citation.text?.slice(0, 50));
+      setPdfViewerOpen(true);
+    } catch (err) {
+      console.error("Failed to load PDF:", err);
+      // Fall back to just highlighting
+    }
+    
     // Clear highlight after 3 seconds
     setTimeout(() => setHighlightedCitation(undefined), 3000);
   }, [citations]);
+  
+  const closePdfViewer = useCallback(() => {
+    setPdfViewerOpen(false);
+    setPdfUrl(null);
+  }, []);
 
   const handleSelectStudy = useCallback((study: Study) => {
     setSelectedStudies((prev) => {
@@ -291,6 +324,41 @@ export default function Home() {
           }
         }}
       />
+
+      {/* PDF Viewer Side Panel */}
+      {pdfViewerOpen && pdfUrl && (
+        <div className="fixed inset-y-0 right-0 w-1/2 bg-background border-l shadow-xl z-50 flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b bg-card">
+            <h3 className="font-medium text-sm truncate flex-1 mr-2">{pdfTitle}</h3>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => window.open(pdfUrl, '_blank')}
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={closePdfViewer}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          {/* PDF Content */}
+          <div className="flex-1">
+            <PDFViewer
+              url={pdfUrl}
+              initialPage={pdfPage}
+              searchText={pdfSearchText}
+              hideToolbar
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

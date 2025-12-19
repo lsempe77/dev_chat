@@ -196,11 +196,18 @@ async def query_evidence(request: QueryRequest):
             )
             studies.append(study)
             
+            # Get page info and highlight text for PDF navigation
+            page_num = c.get("page_start") or c.get("page")
+            # Get first few words for highlight search (avoid too long strings)
+            highlight_words = " ".join(raw_snippet.split()[:10]) if raw_snippet else None
+            
             citation = CitationResponse(
                 id=i + 1,
                 studyId=study.id,
                 text=clean_text_for_display(raw_snippet, max_length=200),
                 study=study,
+                page=page_num,
+                highlightText=highlight_words,
             )
             citations.append(citation)
         
