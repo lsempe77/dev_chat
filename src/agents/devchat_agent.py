@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import AsyncIterator, Dict, List, Optional, Any
 
 from src.config.settings import settings
-from src.generation.citations import add_citations_to_answer, ensure_citation_coverage
+from src.generation.citations import add_citations_to_answer
 from src.generation.router import ModelRouter
 from src.generation.synthesizer import StreamingSynthesizer, Synthesizer, SynthesisResult
 from src.retrieval.context_builder import ContextBuilder, FormattedContext
@@ -285,10 +285,8 @@ class DevChatAgent:
         # Only add citations if we have useful content AND citations exist
         if include_citations and context.citations and has_useful_content:
             answer = add_citations_to_answer(answer, context.citations)
-            
-            # Ensure all retrieved sources are cited (coverage validator)
-            # This adds brief mentions for any uncited sources
-            answer = ensure_citation_coverage(answer, context.citations)
+            # Note: ensure_citation_coverage was removed because it caused duplicates
+            # when the LLM uses "The first study" instead of [1] format
         
         # If no useful content, clear the citations to avoid showing empty references
         final_citations = context.citations if has_useful_content else []
