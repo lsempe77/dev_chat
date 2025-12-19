@@ -1,9 +1,5 @@
 {
-  "name": "dev-chat",
+  "name": "dev-chat-root",
   "private": true,
-  "workspaces": ["frontend"],
-  "scripts": {
-    "build": "npm run build --workspace=frontend",
-    "dev": "npm run dev --workspace=frontend"
-  }
+  "description": "Root package - actual app is in frontend/"
 }
