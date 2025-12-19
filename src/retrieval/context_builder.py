@@ -17,6 +17,78 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def is_meaningful_text(text: str, min_words: int = 10) -> bool:
+    """
+    Check if text is meaningful content vs headers/metadata.
+    
+    Args:
+        text: Text to check
+        min_words: Minimum word count to be considered meaningful
+        
+    Returns:
+        True if text appears to be meaningful content
+    """
+    if not text:
+        return False
+    
+    # Clean and count words
+    words = text.split()
+    if len(words) < min_words:
+        return False
+    
+    # Check for patterns that indicate headers/metadata
+    text_lower = text.lower()
+    header_patterns = [
+        "working paper",
+        "discussion paper",
+        "abstract",
+        "keywords:",
+        "jel codes:",
+        "table of contents",
+        "acknowledgments",
+        "references",
+        "appendix",
+        "this version:",
+        "department of",
+        "university",
+    ]
+    
+    # If text starts with or is mostly these patterns, skip it
+    first_50_chars = text_lower[:50]
+    for pattern in header_patterns:
+        if pattern in first_50_chars:
+            return False
+    
+    return True
+
+
+def get_best_snippet(chunks: list, max_length: int = 300) -> str:
+    """
+    Get the best meaningful snippet from a list of chunks.
+    
+    Prefers chunks with actual content over headers/metadata.
+    
+    Args:
+        chunks: List of RetrievalResult objects
+        max_length: Maximum length of snippet
+        
+    Returns:
+        Best snippet text
+    """
+    if not chunks:
+        return ""
+    
+    # Try to find a meaningful chunk
+    for chunk in chunks:
+        text = chunk.text if isinstance(chunk.text, str) else str(chunk.text)
+        if is_meaningful_text(text):
+            return clean_text_for_display(text, max_length)
+    
+    # Fall back to first chunk if none are meaningful
+    first_text = chunks[0].text if isinstance(chunks[0].text, str) else str(chunks[0].text)
+    return clean_text_for_display(first_text, max_length)
+
+
 def clean_text_for_display(text: str, max_length: int = 300) -> str:
     """
     Clean text for display by removing HTML tags, excessive whitespace,
@@ -219,8 +291,8 @@ class ContextBuilder:
             # Add to sections
             sections.append(f"{header}\n\n{combined_text}")
             
-            # Get best snippet from chunks - cleaned for display
-            best_snippet = clean_text_for_display(chunks[0].text, 300) if chunks else ""
+            # Get best MEANINGFUL snippet from chunks (skip headers/metadata)
+            best_snippet = get_best_snippet(chunks, max_length=300)
             
             # Get page info from first chunk (all chunks from same study may span pages)
             page_start = meta.get("page_start")

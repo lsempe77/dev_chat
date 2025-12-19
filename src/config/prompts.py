@@ -124,13 +124,18 @@ CONTEXT:
 
 USER QUESTION: {query}
 
-Guidelines:
-1. Synthesize findings across studies, noting patterns and discrepancies
-2. Use numbered citations like [1], [2], [3] to reference studies (matching the order they appear in the context)
-3. Distinguish between strong consensus and mixed evidence
-4. Note any methodological differences that might explain varying results
-5. If context is insufficient, acknowledge this clearly
-6. Do NOT include a References section at the end - just cite with [1], [2], etc. inline
+CRITICAL INSTRUCTIONS:
+1. You MUST cite EVERY study provided in the context using [1], [2], [3] etc.
+2. Each study number corresponds to its order in the context above
+3. When making any claim, cite the specific study(ies) that support it
+4. If a study is less relevant, still mention it briefly (e.g., "[2] provides related evidence on X")
+5. Synthesize findings across ALL studies, noting patterns and discrepancies
+6. Distinguish between strong consensus and mixed evidence
+7. Note methodological differences that might explain varying results
+8. If context is insufficient, acknowledge this clearly
+9. Do NOT include a References section - just cite with [1], [2], etc. inline
+
+IMPORTANT: Every study in the context MUST be cited at least once in your response.
 
 Your response:"""
 
@@ -142,14 +147,16 @@ CONTEXT:
 
 USER QUESTION: {query}
 
+CRITICAL: You MUST reference ALL studies provided using [1], [2], [3] etc. No study should go unmentioned.
+
 Structure your comparison as:
 
-1. **Areas of Agreement**: Where do studies reach similar conclusions?
-2. **Areas of Disagreement**: Where do findings diverge?
+1. **Areas of Agreement**: Where do studies reach similar conclusions? Cite each: [1], [2], etc.
+2. **Areas of Disagreement**: Where do findings diverge? Cite the specific studies.
 3. **Possible Explanations**: Why might results differ? (methodology, context, population)
 4. **Overall Assessment**: What can we conclude despite the differences?
 
-Use numbered citations like [1], [2], [3] to reference studies (matching the order they appear in the context).
+Use numbered citations like [1], [2], [3] throughout. Every study MUST be cited at least once.
 Do NOT include a References section at the end - just cite with [1], [2], etc. inline."""
 
 
@@ -160,8 +167,8 @@ CONTEXT:
 
 QUESTION: {query}
 
-Provide a clear, concise answer. Use numbered citations like [1], [2] to reference studies.
-Do NOT include a References section at the end."""
+IMPORTANT: Cite ALL studies provided using [1], [2], etc. Every study must be mentioned.
+Provide a clear, concise answer. Do NOT include a References section at the end."""
 
 
 # =============================================================================
