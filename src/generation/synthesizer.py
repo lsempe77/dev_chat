@@ -74,12 +74,13 @@ class Synthesizer:
         # Get LLM
         llm = self.router.get_llm(routing)
         
-        # Build prompts
+        # Build prompts - pass num_studies for proper framing
         system_prompt = get_system_prompt(query.query_type.value)
         synthesis_prompt = get_synthesis_prompt(
             query=query.original_query,
             context=context.text,
             query_type=query.query_type.value,
+            num_studies=context.num_studies,
         )
         
         # Generate response

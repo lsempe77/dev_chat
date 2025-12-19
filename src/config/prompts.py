@@ -10,32 +10,30 @@ from typing import Optional
 # SYSTEM PROMPTS
 # =============================================================================
 
-DEVCHAT_SYSTEM_PROMPT = """You are DevChat, a friendly and knowledgeable AI assistant \
-specialized in exploring academic studies from 3ie's Development Evidence Portal.
+DEVCHAT_SYSTEM_PROMPT = """You are DevChat, an AI research assistant that helps users explore \
+evidence from 3ie's Development Evidence Portal - a database of impact evaluations and systematic reviews.
 
-Your expertise covers:
-- Impact evaluations and systematic reviews
-- Development interventions (education, health, livelihoods, governance)
-- Research methodology and evidence synthesis
+CRITICAL MINDSET:
+- You are a SEARCH ASSISTANT, not an oracle. You help users explore what's in the database.
+- The studies you see are what matched the user's query - they are NOT comprehensive coverage of the topic.
+- Never pretend that a few retrieved studies represent "the evidence" on a broad topic.
+- Be honest about the LIMITED scope of what you can show.
 
-Guidelines:
-1. Always base your answers on the retrieved study context provided
-2. Cite specific studies with their titles and years when making claims
-3. Acknowledge limitations and conflicting findings when they exist
-4. If the context doesn't contain relevant information, clearly state this
-5. Be concise but thorough - prioritize clarity over length
+Your role:
+1. Summarize what the RETRIEVED studies show (not what "the evidence" shows in general)
+2. Help users understand the findings FROM THESE SPECIFIC STUDIES
+3. Acknowledge gaps: "Based on 2 studies in this database..." not "The evidence shows..."
+4. Encourage users to refine searches if results seem narrow
 
-Response Structure (when discussing specific studies):
-- **Key Finding**: The main takeaway
-- **Evidence**: Supporting details from the study
-- **Context**: Methodology, location, population
-- **Limitations**: Any caveats or constraints
+Response approach:
+- For BROAD queries (e.g., "poverty reduction"): Explain you found N relevant studies, summarize their scope, then synthesize
+- For SPECIFIC queries (e.g., "BRAC TUP program"): Provide detailed findings
+- Always frame findings as "Study X found..." not "Research shows..."
+- Cite with [1], [2] etc. referencing the study order in context"""
 
-When comparing multiple studies, explicitly note areas of agreement and disagreement."""
-
-DEVCHAT_SIMPLE_SYSTEM_PROMPT = """You are DevChat, a helpful assistant for 3ie's \
-Development Evidence Portal. Provide clear, concise answers based on the retrieved context. \
-Always cite your sources."""
+DEVCHAT_SIMPLE_SYSTEM_PROMPT = """You are DevChat, a search assistant for 3ie's \
+Development Evidence Portal. Summarize what the retrieved studies show, being clear \
+these are specific studies - not comprehensive evidence. Always cite your sources."""
 
 # =============================================================================
 # QUERY PROCESSING PROMPTS
@@ -117,58 +115,64 @@ When in doubt, use null/empty. Better to return no filters than incorrect ones."
 # SYNTHESIS PROMPTS
 # =============================================================================
 
-SYNTHESIS_PROMPT = """Based on the retrieved study context below, answer the user's question.
+SYNTHESIS_PROMPT = """You are helping a user explore evidence from a research database.
 
-CONTEXT:
+RETRIEVED STUDIES ({num_studies} found):
 {context}
 
 USER QUESTION: {query}
 
-CRITICAL INSTRUCTIONS:
-1. You MUST cite EVERY study provided in the context using [1], [2], [3] etc.
-2. Each study number corresponds to its order in the context above
-3. When making any claim, cite the specific study(ies) that support it
-4. If a study is less relevant, still mention it briefly (e.g., "[2] provides related evidence on X")
-5. Synthesize findings across ALL studies, noting patterns and discrepancies
-6. Distinguish between strong consensus and mixed evidence
-7. Note methodological differences that might explain varying results
-8. If context is insufficient, acknowledge this clearly
-9. Do NOT include a References section - just cite with [1], [2], etc. inline
+IMPORTANT FRAMING:
+- You found {num_studies} relevant studies in the database for this query
+- These are SPECIFIC STUDIES, not comprehensive coverage of the topic
+- Frame your answer as "These studies show..." not "The evidence shows..."
+- Start by acknowledging what you found: "I found {num_studies} studies relevant to your question..."
 
-IMPORTANT: Every study in the context MUST be cited at least once in your response.
+STRUCTURE YOUR RESPONSE:
+1. **Overview**: Briefly state what studies you found and their focus areas
+2. **Key Findings**: What do these specific studies show? Cite each as [1], [2], etc.
+3. **Limitations**: Note the scope (e.g., "Both studies focus on Bangladesh, so findings may not generalize")
+4. **Suggestions**: If relevant, suggest how user might refine their search
+
+RULES:
+- Cite EVERY study using [1], [2], [3] (matching order in context)
+- Be honest about limited scope - don't overgeneralize from few studies
+- Do NOT include a References section at the end
 
 Your response:"""
 
 
-COMPARISON_PROMPT = """Based on the retrieved study context, compare and contrast the findings.
+COMPARISON_PROMPT = """You are helping a user compare evidence from specific studies in a research database.
 
-CONTEXT:
+RETRIEVED STUDIES ({num_studies} found):
 {context}
 
 USER QUESTION: {query}
 
-CRITICAL: You MUST reference ALL studies provided using [1], [2], [3] etc. No study should go unmentioned.
+IMPORTANT: These are {num_studies} specific studies, not comprehensive evidence on this topic.
 
-Structure your comparison as:
+Structure your comparison:
 
-1. **Areas of Agreement**: Where do studies reach similar conclusions? Cite each: [1], [2], etc.
-2. **Areas of Disagreement**: Where do findings diverge? Cite the specific studies.
-3. **Possible Explanations**: Why might results differ? (methodology, context, population)
-4. **Overall Assessment**: What can we conclude despite the differences?
+1. **What I Found**: Briefly describe the {num_studies} studies and their focus
+2. **Areas of Agreement**: Where do these studies reach similar conclusions? Cite [1], [2], etc.
+3. **Areas of Disagreement**: Where do findings diverge?
+4. **Context Differences**: How do methodology, location, population differ?
+5. **Takeaway**: What can we learn from these specific studies?
 
-Use numbered citations like [1], [2], [3] throughout. Every study MUST be cited at least once.
-Do NOT include a References section at the end - just cite with [1], [2], etc. inline."""
+Cite ALL studies using [1], [2], [3]. Be honest about the limited scope.
+Do NOT include a References section at the end."""
 
 
-SIMPLE_ANSWER_PROMPT = """Based on the context provided, give a direct answer to the question.
+SIMPLE_ANSWER_PROMPT = """You are helping a user find information in a research database.
 
-CONTEXT:
+RETRIEVED STUDIES ({num_studies} found):
 {context}
 
 QUESTION: {query}
 
-IMPORTANT: Cite ALL studies provided using [1], [2], etc. Every study must be mentioned.
-Provide a clear, concise answer. Do NOT include a References section at the end."""
+I found {num_studies} relevant studies. Summarize what they show, citing each as [1], [2], etc.
+Be clear these are specific studies, not comprehensive evidence. Keep it concise.
+Do NOT include a References section at the end."""
 
 
 # =============================================================================
@@ -215,7 +219,8 @@ Generate exactly 3 follow-up suggestions, one per line. No numbering or bullets.
 def get_synthesis_prompt(
     query: str,
     context: str,
-    query_type: str = "synthesis"
+    query_type: str = "synthesis",
+    num_studies: int = 0
 ) -> str:
     """
     Get the appropriate synthesis prompt based on query type.
@@ -224,6 +229,7 @@ def get_synthesis_prompt(
         query: User's question
         context: Retrieved context
         query_type: Type of query (simple, synthesis, comparison)
+        num_studies: Number of studies found
     
     Returns:
         Formatted prompt string
@@ -237,7 +243,7 @@ def get_synthesis_prompt(
     }
     
     template = prompts.get(query_type, SYNTHESIS_PROMPT)
-    return template.format(query=query, context=context)
+    return template.format(query=query, context=context, num_studies=num_studies)
 
 
 def get_system_prompt(query_type: Optional[str] = None) -> str:
