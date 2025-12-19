@@ -186,6 +186,146 @@ class MetadataResolver:
         
         return result
     
+    async def resolve_from_content(
+        self,
+        content: str,
+        title: Optional[str] = None,
+        authors: Optional[List[str]] = None,
+        year: Optional[int] = None,
+        pdf_filename: Optional[str] = None,
+    ) -> ResolvedMetadata:
+        """
+        Resolve metadata from extracted content (for Modal pipeline).
+        
+        Args:
+            content: Extracted text from PDF (markdown)
+            title: Title extracted by MinerU (if available)
+            authors: Authors extracted by MinerU (if available)
+            year: Year extracted by MinerU (if available)
+            pdf_filename: Original PDF filename
+            
+        Returns:
+            ResolvedMetadata with all available fields
+        """
+        result = ResolvedMetadata(
+            pdf_filename=pdf_filename,
+            title=title or "Unknown Title",
+            authors=authors or [],
+            year=year,
+        )
+        
+        # Step 1: Extract DOI from content
+        logger.info(f"Resolving metadata from content: {pdf_filename or 'unknown'}")
+        
+        # First check content for DOI
+        doi = self.doi_extractor.extract_from_text(content[:10000])  # First ~10k chars
+        
+        if doi:
+            result.doi = doi
+            logger.info(f"Found DOI: {doi}")
+            
+            # Step 2a: CrossRef lookup
+            crossref_result = await self.crossref.get_by_doi(doi)
+            if crossref_result:
+                self._merge_crossref(result, crossref_result)
+            
+            # Step 2b: OpenAlex for enrichment
+            openalex_result = await self.openalex.get_by_doi(doi)
+            if openalex_result:
+                self._merge_openalex(result, openalex_result)
+        
+        else:
+            logger.warning(f"No DOI found in content, trying title search")
+            result.needs_review = True
+            result.review_reasons.append("No DOI found in document")
+            
+            # Step 3: Search by title/author
+            if title and len(title) > 10:
+                search_result = await self.search_by_title(
+                    title=title,
+                    author=authors[0] if authors else None,
+                    year=year,
+                )
+                if search_result:
+                    # Merge found metadata
+                    result.doi = search_result.doi or result.doi
+                    result.title = search_result.title or result.title
+                    result.authors = search_result.authors or result.authors
+                    result.year = search_result.year or result.year
+                    result.journal = search_result.journal
+                    result.publisher = search_result.publisher
+                    result.abstract = search_result.abstract
+                    result.cited_by_count = search_result.cited_by_count
+                    result.is_open_access = search_result.is_open_access
+                    result.countries = search_result.countries
+                    result.sdgs = search_result.sdgs
+                    result.keywords = search_result.keywords
+                    result.sources_used = search_result.sources_used
+                    result.primary_source = search_result.primary_source
+                    result.review_reasons.append("Found via title search - verify match")
+        
+        # Step 4: Fill domain-specific gaps with LLM
+        if self._has_gaps(result):
+            try:
+                from .llm_extractor import LLMMetadataExtractor
+                llm_extractor = LLMMetadataExtractor()
+                
+                # Get abstract from content if not found
+                if not result.abstract:
+                    result.abstract = self._extract_abstract_from_content(content)
+                
+                # LLM extraction
+                llm_result = await llm_extractor.extract_domain_fields(
+                    title=result.title,
+                    abstract=result.abstract or content[:3000],
+                    text=content[:2000] if result.keywords else None,
+                )
+                
+                if llm_result:
+                    if not result.countries and llm_result.countries:
+                        result.countries = llm_result.countries
+                    if not result.sectors and llm_result.sectors:
+                        result.sectors = llm_result.sectors
+                    if not result.study_type and llm_result.study_type:
+                        result.study_type = llm_result.study_type
+                    if not result.intervention_type and llm_result.intervention_type:
+                        result.intervention_type = llm_result.intervention_type
+                    if llm_result.regions:
+                        result.regions = list(set(result.regions + llm_result.regions))
+                    
+                    if MetadataSource.LLM not in result.sources_used:
+                        result.sources_used.append(MetadataSource.LLM)
+                    
+                    logger.info(f"LLM enrichment: countries={llm_result.countries}, study_type={llm_result.study_type}")
+            except Exception as e:
+                logger.warning(f"LLM enrichment failed: {e}")
+        
+        # Calculate confidence
+        result.confidence = self._calculate_confidence(result)
+        
+        # Check if needs review
+        if result.confidence < 0.5:
+            result.needs_review = True
+            if "Low confidence" not in result.review_reasons:
+                result.review_reasons.append("Low confidence score")
+        
+        logger.info(f"Resolved: {result.title[:50]}... (confidence: {result.confidence:.2f})")
+        
+        return result
+    
+    def _extract_abstract_from_content(self, content: str) -> Optional[str]:
+        """Extract abstract from markdown content."""
+        content_lower = content.lower()
+        if "abstract" in content_lower[:2000]:
+            start = content_lower.find("abstract")
+            end = min(start + 3000, len(content))
+            for marker in ["\n#", "\n1.", "\nintroduction", "\n1 introduction"]:
+                pos = content_lower.find(marker, start + 50)
+                if pos > start:
+                    end = min(end, pos)
+            return content[start:end].strip()
+        return None
+    
     async def resolve_from_doi(self, doi: str) -> ResolvedMetadata:
         """
         Resolve metadata for a known DOI.
@@ -387,3 +527,43 @@ async def resolve_pdf_metadata(pdf_path: Path) -> ResolvedMetadata:
     """Resolve metadata for a PDF file."""
     resolver = MetadataResolver()
     return await resolver.resolve_from_pdf(pdf_path)
+
+
+def resolve_from_content_sync(
+    content: str,
+    title: Optional[str] = None,
+    authors: Optional[List[str]] = None,
+    year: Optional[int] = None,
+    pdf_filename: Optional[str] = None,
+    crossref_email: Optional[str] = None,
+    openalex_email: Optional[str] = None,
+) -> ResolvedMetadata:
+    """
+    Synchronous wrapper for resolve_from_content (for Modal pipeline).
+    
+    Args:
+        content: Extracted text from PDF
+        title: Title from MinerU
+        authors: Authors from MinerU
+        year: Year from MinerU
+        pdf_filename: Original PDF filename
+        crossref_email: Email for CrossRef API (polite pool)
+        openalex_email: Email for OpenAlex API (polite pool)
+        
+    Returns:
+        ResolvedMetadata
+    """
+    resolver = MetadataResolver(
+        crossref_email=crossref_email,
+        openalex_email=openalex_email,
+    )
+    
+    return asyncio.run(
+        resolver.resolve_from_content(
+            content=content,
+            title=title,
+            authors=authors,
+            year=year,
+            pdf_filename=pdf_filename,
+        )
+    )

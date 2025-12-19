@@ -64,6 +64,8 @@ base_image = (
         "cohere>=5.0.0",
         "qdrant-client>=1.7.0",
         "httpx",
+        "pydantic>=2.0.0",
+        "pydantic-settings>=2.0.0",
     )
 )
 
@@ -74,6 +76,7 @@ model_cache = modal.Volume.from_name("mineru-model-cache", create_if_missing=Tru
 r2_secret = modal.Secret.from_name("r2-credentials")
 qdrant_secret = modal.Secret.from_name("qdrant-credentials")
 cohere_secret = modal.Secret.from_name("cohere-credentials")
+openrouter_secret = modal.Secret.from_name("openrouter-credentials")
 
 
 # ============================================================================
@@ -307,7 +310,7 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True) -> dic
     image=base_image,
     gpu="T4",  # or "A10G" for faster processing
     timeout=1800,  # 30 min max per PDF
-    secrets=[r2_secret, qdrant_secret, cohere_secret],
+    secrets=[r2_secret, qdrant_secret, cohere_secret, openrouter_secret],
     volumes={"/cache": model_cache},
     retries=2,
 )
@@ -437,17 +440,60 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             
             print(f"  Uploaded: {md_key}, {json_key}")
         
-        # Generate embeddings and upsert to Qdrant
-        # Pass doc_id to be stored in every chunk's payload
+        # ============================================================
+        # Metadata Resolution: CrossRef + OpenAlex + LLM
+        # ============================================================
+        print(f"  Resolving metadata...")
+        enriched_metadata = resolve_metadata(
+            content=result["content"],
+            title=result.get("title"),
+            authors=result.get("authors", []),
+            year=result.get("year"),
+            pdf_filename=Path(pdf_key).name,
+        )
+        
+        # Merge with required fields
+        enriched_metadata["doc_id"] = doc_id
+        enriched_metadata["source"] = pdf_key
+        
+        print(f"  Metadata: source={enriched_metadata['metadata_source']}, confidence={enriched_metadata['metadata_confidence']:.2f}")
+        
+        # Update JSON output with enriched metadata (if we did extraction)
+        if not skip_extraction:
+            output_data["metadata"] = {
+                "doi": enriched_metadata.get("doi"),
+                "journal": enriched_metadata.get("journal"),
+                "publisher": enriched_metadata.get("publisher"),
+                "cited_by_count": enriched_metadata.get("cited_by_count"),
+                "is_open_access": enriched_metadata.get("is_open_access"),
+                "countries": enriched_metadata.get("countries", []),
+                "sectors": enriched_metadata.get("sectors", []),
+                "study_type": enriched_metadata.get("study_type"),
+                "intervention_type": enriched_metadata.get("intervention_type"),
+                "sdgs": enriched_metadata.get("sdgs", []),
+                "keywords": enriched_metadata.get("keywords", []),
+                "metadata_source": enriched_metadata.get("metadata_source"),
+                "metadata_confidence": enriched_metadata.get("metadata_confidence"),
+                "needs_review": enriched_metadata.get("needs_review"),
+            }
+            # Update main fields from enriched metadata
+            output_data["title"] = enriched_metadata.get("title") or output_data.get("title")
+            output_data["authors"] = enriched_metadata.get("authors") or output_data.get("authors")
+            output_data["year"] = enriched_metadata.get("year") or output_data.get("year")
+            
+            # Re-upload JSON with metadata
+            s3.put_object(
+                Bucket=bucket,
+                Key=json_key,
+                Body=json.dumps(output_data, indent=2, ensure_ascii=False).encode("utf-8"),
+                ContentType="application/json",
+            )
+            print(f"  Updated JSON with enriched metadata")
+        
+        # Generate embeddings and upsert to Qdrant with enriched metadata
         chunk_count = embed_and_index(
             content=result["content"],
-            metadata={
-                "doc_id": doc_id,  # Universal document ID
-                "source": pdf_key,
-                "title": result.get("title", doc_id),
-                "authors": result.get("authors", []),
-                "year": result.get("year"),
-            },
+            metadata=enriched_metadata,
             doc_id=doc_id,
         )
         
@@ -729,14 +775,35 @@ def embed_and_index(content: str, metadata: dict, doc_id: str) -> int:
                     id=point_id,
                     vector={vector_name: embedding},  # Named vector
                     payload={
+                        # Core fields
                         "text": chunk,
                         "doc_id": doc_id,  # Universal document ID
-                        "pdf_name": doc_id,  # Backward compatibility
+                        "pdf_name": metadata.get("pdf_name", doc_id),  # Backward compatibility
                         "source": metadata.get("source", ""),
+                        "chunk_index": i + j,
+                        
+                        # Bibliographic metadata
                         "title": metadata.get("title", ""),
                         "authors": metadata.get("authors", []),
                         "year": metadata.get("year"),
-                        "chunk_index": i + j,
+                        "doi": metadata.get("doi"),
+                        "journal": metadata.get("journal"),
+                        "publisher": metadata.get("publisher"),
+                        "cited_by_count": metadata.get("cited_by_count"),
+                        "is_open_access": metadata.get("is_open_access", False),
+                        
+                        # Domain-specific metadata
+                        "countries": metadata.get("countries", []),
+                        "sectors": metadata.get("sectors", []),
+                        "study_type": metadata.get("study_type"),
+                        "intervention_type": metadata.get("intervention_type"),
+                        "sdgs": metadata.get("sdgs", []),
+                        "keywords": metadata.get("keywords", []),
+                        
+                        # Metadata quality tracking
+                        "metadata_source": metadata.get("metadata_source", "extraction"),
+                        "metadata_confidence": metadata.get("metadata_confidence", 0.0),
+                        "needs_review": metadata.get("needs_review", True),
                     },
                 )
             )
@@ -758,6 +825,315 @@ def chunk_content(text: str, chunk_size: int = 512, overlap: int = 50) -> list[s
             chunks.append(chunk)
     
     return chunks
+
+
+# ============================================================================
+# Metadata Resolution
+# ============================================================================
+
+def resolve_metadata(
+    content: str,
+    title: Optional[str] = None,
+    authors: list = None,
+    year: Optional[int] = None,
+    pdf_filename: Optional[str] = None,
+) -> dict:
+    """
+    Resolve rich metadata using CrossRef, OpenAlex, and LLM.
+    
+    Flow:
+    1. Extract DOI from content
+    2. If DOI found: CrossRef lookup → OpenAlex enrichment
+    3. If no DOI: Search by title/author
+    4. LLM fills domain-specific gaps (countries, sectors, study_type)
+    
+    Args:
+        content: Extracted text from PDF (markdown)
+        title: Title from MinerU extraction
+        authors: Authors from MinerU extraction
+        year: Year from MinerU extraction
+        pdf_filename: Original PDF filename
+        
+    Returns:
+        dict with enriched metadata
+    """
+    import asyncio
+    import os
+    import httpx
+    import re
+    
+    # Default metadata
+    metadata = {
+        "title": title or "Unknown Title",
+        "authors": authors or [],
+        "year": year,
+        "doi": None,
+        "journal": None,
+        "publisher": None,
+        "abstract": None,
+        "cited_by_count": None,
+        "is_open_access": False,
+        "countries": [],
+        "sectors": [],
+        "study_type": None,
+        "intervention_type": None,
+        "sdgs": [],
+        "keywords": [],
+        "metadata_source": "extraction",
+        "metadata_confidence": 0.3,
+        "needs_review": True,
+        "pdf_name": pdf_filename,
+    }
+    
+    # Step 1: Extract DOI from content
+    doi = extract_doi_from_text(content[:10000])
+    if doi:
+        metadata["doi"] = doi
+        print(f"  Found DOI: {doi}")
+    
+    # Step 2: CrossRef + OpenAlex lookup
+    async def lookup_apis():
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            crossref_data = None
+            openalex_data = None
+            
+            if doi:
+                # CrossRef lookup
+                try:
+                    crossref_url = f"https://api.crossref.org/works/{doi}"
+                    resp = await client.get(
+                        crossref_url,
+                        headers={"User-Agent": "DevChat/2.0 (mailto:dev@example.com)"}
+                    )
+                    if resp.status_code == 200:
+                        crossref_data = resp.json().get("message", {})
+                        print(f"  CrossRef: found")
+                except Exception as e:
+                    print(f"  CrossRef error: {e}")
+                
+                # OpenAlex lookup by DOI
+                try:
+                    openalex_url = f"https://api.openalex.org/works/https://doi.org/{doi}"
+                    resp = await client.get(
+                        openalex_url,
+                        headers={"User-Agent": "mailto:dev@example.com"}
+                    )
+                    if resp.status_code == 200:
+                        openalex_data = resp.json()
+                        print(f"  OpenAlex: found")
+                except Exception as e:
+                    print(f"  OpenAlex error: {e}")
+            
+            elif title and len(title) > 10:
+                # Search by title
+                try:
+                    search_title = title[:200].replace('"', '')
+                    openalex_url = f"https://api.openalex.org/works?search={search_title}&per_page=1"
+                    resp = await client.get(
+                        openalex_url,
+                        headers={"User-Agent": "mailto:dev@example.com"}
+                    )
+                    if resp.status_code == 200:
+                        results = resp.json().get("results", [])
+                        if results:
+                            openalex_data = results[0]
+                            print(f"  OpenAlex: found via title search")
+                except Exception as e:
+                    print(f"  OpenAlex search error: {e}")
+            
+            return crossref_data, openalex_data
+    
+    try:
+        crossref_data, openalex_data = asyncio.run(lookup_apis())
+        
+        # Merge CrossRef data
+        if crossref_data:
+            metadata["title"] = crossref_data.get("title", [metadata["title"]])[0] if crossref_data.get("title") else metadata["title"]
+            
+            # Extract authors
+            cr_authors = crossref_data.get("author", [])
+            if cr_authors:
+                metadata["authors"] = [
+                    f"{a.get('given', '')} {a.get('family', '')}".strip()
+                    for a in cr_authors
+                ]
+            
+            # Extract year from published date
+            published = crossref_data.get("published-print") or crossref_data.get("published-online") or {}
+            date_parts = published.get("date-parts", [[]])[0]
+            if date_parts:
+                metadata["year"] = date_parts[0]
+            
+            metadata["journal"] = crossref_data.get("container-title", [None])[0] if crossref_data.get("container-title") else None
+            metadata["publisher"] = crossref_data.get("publisher")
+            metadata["cited_by_count"] = crossref_data.get("is-referenced-by-count")
+            metadata["doi"] = crossref_data.get("DOI") or metadata["doi"]
+            metadata["metadata_source"] = "crossref"
+            metadata["metadata_confidence"] = 0.8
+            metadata["needs_review"] = False
+        
+        # Merge OpenAlex data (enrichment)
+        if openalex_data:
+            if not crossref_data:
+                # Use OpenAlex as primary source
+                metadata["title"] = openalex_data.get("title") or metadata["title"]
+                
+                # Authors
+                authorships = openalex_data.get("authorships", [])
+                if authorships and not metadata["authors"]:
+                    metadata["authors"] = [
+                        a.get("author", {}).get("display_name", "")
+                        for a in authorships
+                    ]
+                
+                metadata["year"] = openalex_data.get("publication_year") or metadata["year"]
+                
+                # Journal from primary location
+                primary_loc = openalex_data.get("primary_location", {}) or {}
+                source = primary_loc.get("source", {}) or {}
+                metadata["journal"] = source.get("display_name") or metadata["journal"]
+                
+                metadata["doi"] = openalex_data.get("doi", "").replace("https://doi.org/", "") if openalex_data.get("doi") else metadata["doi"]
+                metadata["cited_by_count"] = openalex_data.get("cited_by_count") or metadata["cited_by_count"]
+                metadata["metadata_source"] = "openalex"
+                metadata["metadata_confidence"] = 0.7
+                metadata["needs_review"] = False
+            
+            # Always use OpenAlex for enrichment
+            oa = openalex_data.get("open_access", {}) or {}
+            metadata["is_open_access"] = oa.get("is_oa", False)
+            
+            # SDGs
+            sdgs = openalex_data.get("sustainable_development_goals", [])
+            metadata["sdgs"] = [s.get("display_name") for s in sdgs if s.get("display_name")]
+            
+            # Concepts as keywords
+            concepts = openalex_data.get("concepts", [])
+            metadata["keywords"] = [
+                c.get("display_name") for c in concepts[:10]
+                if c.get("display_name") and c.get("score", 0) > 0.3
+            ]
+            
+            # Countries from institutions
+            authorships = openalex_data.get("authorships", [])
+            countries = set()
+            for a in authorships:
+                for inst in a.get("institutions", []):
+                    if inst.get("country_code"):
+                        countries.add(inst["country_code"])
+            metadata["countries"] = list(countries)
+    
+    except Exception as e:
+        print(f"  Metadata lookup error: {e}")
+    
+    # Step 3: LLM gap-filling for domain fields
+    if not metadata["sectors"] or not metadata["study_type"]:
+        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+        if openrouter_key:
+            try:
+                llm_result = asyncio.run(
+                    llm_extract_domain_fields(
+                        title=metadata["title"],
+                        abstract=metadata.get("abstract") or content[:3000],
+                        api_key=openrouter_key,
+                    )
+                )
+                if llm_result:
+                    if not metadata["countries"] and llm_result.get("countries"):
+                        metadata["countries"] = llm_result["countries"]
+                    if llm_result.get("sectors"):
+                        metadata["sectors"] = llm_result["sectors"]
+                    if llm_result.get("study_type"):
+                        metadata["study_type"] = llm_result["study_type"]
+                    if llm_result.get("intervention_type"):
+                        metadata["intervention_type"] = llm_result["intervention_type"]
+                    print(f"  LLM enrichment: sectors={metadata['sectors']}, study_type={metadata['study_type']}")
+            except Exception as e:
+                print(f"  LLM enrichment error: {e}")
+    
+    return metadata
+
+
+def extract_doi_from_text(text: str) -> Optional[str]:
+    """Extract DOI from text using regex patterns."""
+    import re
+    
+    patterns = [
+        # Standard DOI format
+        r'10\.\d{4,}/[^\s\]>)\'"]+',
+        # DOI with URL prefix
+        r'(?:doi\.org/|doi:)\s*(10\.\d{4,}/[^\s\]>)\'"]+)',
+        # DOI in brackets or parentheses
+        r'DOI[:\s]+\[?(10\.\d{4,}/[^\s\]>)\'"]+)',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            doi = match.group(1) if match.lastindex else match.group(0)
+            # Clean up trailing punctuation
+            doi = re.sub(r'[.,;:\'")\]]+$', '', doi)
+            return doi
+    
+    return None
+
+
+async def llm_extract_domain_fields(
+    title: str,
+    abstract: str,
+    api_key: str,
+) -> Optional[dict]:
+    """Use LLM to extract domain-specific fields."""
+    import httpx
+    import json
+    
+    prompt = f"""Analyze this academic paper about development/impact evaluation and extract domain-specific metadata.
+
+TITLE: {title}
+
+ABSTRACT:
+{abstract[:2000]}
+
+Extract the following as JSON:
+- countries: List of countries studied or mentioned (use official names)
+- sectors: List of sectors (e.g., "education", "health", "agriculture", "finance")
+- study_type: One of ["RCT", "quasi-experimental", "systematic-review", "meta-analysis", "observational", "qualitative", "mixed-methods", "other"]
+- intervention_type: Type of intervention studied
+
+Return ONLY valid JSON, no explanation."""
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a metadata extraction assistant. Always respond with valid JSON only."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 500,
+            },
+        )
+        
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        
+        # Parse JSON
+        content = content.strip()
+        if content.startswith("```"):
+            lines = content.split("\n")
+            content = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+        
+        return json.loads(content)
 
 
 # ============================================================================

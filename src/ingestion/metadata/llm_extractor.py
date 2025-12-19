@@ -8,14 +8,29 @@ Use LLM to extract metadata when:
 Uses structured output for reliable extraction.
 """
 
+import os
 import json
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
-from src.config.settings import settings
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def get_openrouter_api_key() -> Optional[str]:
+    """Get OpenRouter API key from env or settings."""
+    # First try environment variable (for Modal)
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if key:
+        return key
+    
+    # Fall back to settings module
+    try:
+        from src.config.settings import settings
+        return settings.openrouter_api_key
+    except Exception:
+        return None
 
 
 class ExtractedBibliographic(BaseModel):
@@ -82,8 +97,15 @@ Extract the following as JSON:
 
 Return ONLY valid JSON, no explanation."""
 
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize extractor.
+        
+        Args:
+            api_key: OpenRouter API key. If not provided, will look in env/settings.
+        """
         self._client = None
+        self._api_key = api_key or get_openrouter_api_key()
     
     @property
     def client(self):
@@ -175,11 +197,15 @@ Return ONLY valid JSON, no explanation."""
     
     async def _call_llm(self, prompt: str) -> Optional[str]:
         """Call LLM via OpenRouter."""
+        if not self._api_key:
+            logger.warning("No OpenRouter API key available, skipping LLM extraction")
+            return None
+        
         try:
             response = await self.client.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
+                    "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
