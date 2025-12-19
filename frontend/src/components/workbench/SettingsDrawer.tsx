@@ -84,7 +84,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           Settings
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-[350px] sm:w-[400px] px-6">
+      <SheetContent side="right" className="w-[350px] sm:w-[400px] px-6 flex flex-col">
         <SheetHeader>
           <SheetTitle>Search Settings</SheetTitle>
           <SheetDescription>
@@ -92,7 +92,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6 px-6">
+        <div className="mt-6 space-y-6 px-6 flex-1 overflow-y-auto">
           {/* Relevance Threshold */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -241,7 +241,8 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           </div>
         </div>
 
-        <div className="mt-8 pt-4 border-t flex gap-2">
+        {/* Sticky footer with Apply button */}
+        <div className="mt-4 pt-4 border-t flex gap-2 bg-background">
           <Button variant="outline" onClick={handleReset} className="gap-1">
             <RotateCcw className="h-3 w-3" />
             Reset
