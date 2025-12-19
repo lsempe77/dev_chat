@@ -84,7 +84,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           Settings
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-[350px] sm:w-[400px] px-6 flex flex-col">
+      <SheetContent side="right" className="w-[350px] sm:w-[400px] px-6 flex flex-col h-full">
         <SheetHeader>
           <SheetTitle>Search Settings</SheetTitle>
           <SheetDescription>
@@ -92,7 +92,18 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6 px-6 flex-1 overflow-y-auto">
+        {/* Action buttons at top for visibility */}
+        <div className="mt-4 py-3 border-b flex gap-2 bg-background">
+          <Button variant="outline" onClick={handleReset} className="gap-1" size="sm">
+            <RotateCcw className="h-3 w-3" />
+            Reset
+          </Button>
+          <Button onClick={handleApply} className="flex-1" size="sm">
+            Apply Settings
+          </Button>
+        </div>
+
+        <div className="mt-4 space-y-6 flex-1 overflow-y-auto pb-4">
           {/* Relevance Threshold */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -239,17 +250,6 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
                 : "Only include studies from the last 5 years."}
             </p>
           </div>
-        </div>
-
-        {/* Sticky footer with Apply button */}
-        <div className="mt-4 pt-4 border-t flex gap-2 bg-background">
-          <Button variant="outline" onClick={handleReset} className="gap-1">
-            <RotateCcw className="h-3 w-3" />
-            Reset
-          </Button>
-          <Button onClick={handleApply} className="flex-1">
-            Apply Settings
-          </Button>
         </div>
       </SheetContent>
     </Sheet>
