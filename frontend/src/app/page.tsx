@@ -96,6 +96,16 @@ export default function Home() {
       studyElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     
+    // Check if we already have this PDF open - just update page/search if so
+    if (pdfViewerOpen && pdfTitle === (citation.study?.title || citation.studyId)) {
+      // Same PDF, just update the page and search text
+      setPdfPage(citation.page || 1);
+      setPdfSearchText(citation.highlightText || citation.text?.slice(0, 50));
+      // Clear highlight after 3 seconds
+      setTimeout(() => setHighlightedCitation(undefined), 3000);
+      return;
+    }
+    
     // Open PDF viewer with the citation's page and highlight text
     try {
       const response = await getPDFUrl(citation.studyId);
@@ -112,7 +122,7 @@ export default function Home() {
     
     // Clear highlight after 3 seconds
     setTimeout(() => setHighlightedCitation(undefined), 3000);
-  }, [citations]);
+  }, [citations, pdfViewerOpen, pdfTitle]);
   
   const closePdfViewer = useCallback(() => {
     setPdfViewerOpen(false);

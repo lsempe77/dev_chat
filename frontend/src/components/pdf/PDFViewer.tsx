@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   Loader2, 
@@ -57,6 +57,12 @@ export function PDFViewer({
   
   const pdfUrl = buildPdfUrl();
 
+  // Reset loading state when URL changes
+  useEffect(() => {
+    setIsLoading(true);
+    setError(null);
+  }, [pdfUrl]);
+
   const handleLoad = () => {
     setIsLoading(false);
   };
@@ -97,6 +103,7 @@ export function PDFViewer({
         )}
 
         <iframe
+          key={pdfUrl}
           src={pdfUrl}
           className="w-full h-full border-0 absolute inset-0"
           onLoad={handleLoad}
