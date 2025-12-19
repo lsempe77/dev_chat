@@ -661,10 +661,16 @@ async def upload_document(
             detail=f"File type {file_ext} not allowed. Allowed: {allowed_extensions}"
         )
     
-    # Generate unique key to avoid collisions
+    # Generate universal document ID (used across R2, Qdrant, Modal, etc.)
     unique_id = str(uuid4())[:8]
-    safe_filename = file.filename.replace(" ", "_")
-    r2_key = f"input-pdfs/{unique_id}_{safe_filename}"
+    safe_filename = file.filename.replace(" ", "_").replace("/", "_")
+    base_name = os.path.splitext(safe_filename)[0]
+    
+    # doc_id format: {8-char-uuid}_{sanitized_basename}
+    # This ID is used consistently across all systems
+    doc_id = f"{unique_id}_{base_name}"
+    
+    r2_key = f"input-pdfs/{doc_id}{file_ext}"
     
     try:
         # Read file content
@@ -681,12 +687,13 @@ async def upload_document(
             Body=content,
             ContentType=file.content_type or "application/pdf",
             Metadata={
+                "doc_id": doc_id,  # Universal document ID
                 "original_filename": file.filename,
                 "upload_timestamp": datetime.utcnow().isoformat(),
             }
         )
         
-        logger.info(f"Uploaded {file.filename} to R2 as {r2_key} ({size_bytes} bytes)")
+        logger.info(f"Uploaded {file.filename} to R2 as {r2_key} (doc_id={doc_id}, {size_bytes} bytes)")
         
         return UploadResponse(
             success=True,
@@ -694,6 +701,7 @@ async def upload_document(
             r2_key=r2_key,
             size_bytes=size_bytes,
             queued_for_processing=True,
+            doc_id=doc_id,  # Return the doc_id for reference
         )
         
     except ClientError as e:
@@ -875,17 +883,28 @@ async def get_documents(
             if next_offset is None or len(results) == 0:
                 break
         
-        # Aggregate by source/document_id
+        # Aggregate by doc_id (universal document identifier)
         doc_map = {}
         for point in all_points:
             payload = point.payload or {}
-            source = payload.get("source", payload.get("document_id", "unknown"))
             
-            if source not in doc_map:
-                doc_map[source] = {
-                    "id": source,
-                    "title": payload.get("title", source),
-                    "filename": source,
+            # Get doc_id - primary identifier (new format)
+            # Fallback to pdf_name or source for backward compatibility
+            doc_id = payload.get("doc_id") or payload.get("pdf_name") or payload.get("source", "unknown")
+            
+            # Extract doc_id from source path if needed (e.g., "input-pdfs/abc123_file.pdf" -> "abc123_file")
+            if "/" in doc_id:
+                doc_id = doc_id.split("/")[-1]
+            if doc_id.endswith(".pdf"):
+                doc_id = doc_id[:-4]
+            
+            if doc_id not in doc_map:
+                doc_map[doc_id] = {
+                    "doc_id": doc_id,  # Universal document ID
+                    "id": doc_id,  # For API compatibility
+                    "title": payload.get("title", doc_id),
+                    "filename": f"{doc_id}.pdf",
+                    "source": payload.get("source", ""),
                     "authors": [],
                     "year": payload.get("year"),
                     "status": "indexed",
@@ -895,22 +914,22 @@ async def get_documents(
                     "processed_at": datetime.now(),
                 }
             
-            doc_map[source]["chunk_count"] += 1
+            doc_map[doc_id]["chunk_count"] += 1
             
             # Try to get page info
             if payload.get("page"):
-                doc_map[source]["page_count"] = max(
-                    doc_map[source]["page_count"], 
+                doc_map[doc_id]["page_count"] = max(
+                    doc_map[doc_id]["page_count"], 
                     int(payload.get("page", 0))
                 )
             
             # Get authors if available
-            if payload.get("authors") and not doc_map[source]["authors"]:
+            if payload.get("authors") and not doc_map[doc_id]["authors"]:
                 authors = payload.get("authors")
                 if isinstance(authors, list):
-                    doc_map[source]["authors"] = authors
+                    doc_map[doc_id]["authors"] = authors
                 elif isinstance(authors, str):
-                    doc_map[source]["authors"] = [authors]
+                    doc_map[doc_id]["authors"] = [authors]
         
         # Convert to list and apply filters
         documents = []
@@ -919,11 +938,12 @@ async def get_documents(
             if search:
                 search_lower = search.lower()
                 if (search_lower not in doc_data["title"].lower() and 
-                    search_lower not in doc_data["filename"].lower()):
+                    search_lower not in doc_data["filename"].lower() and
+                    search_lower not in doc_data["doc_id"].lower()):
                     continue
             
             documents.append(DocumentMetadata(
-                id=doc_data["id"],
+                id=doc_data["doc_id"],  # Use doc_id as the primary identifier
                 title=doc_data["title"],
                 filename=doc_data["filename"],
                 authors=doc_data["authors"],
@@ -965,52 +985,47 @@ async def delete_document(document_id: str):
     """
     Delete a document and its vectors from the knowledge base.
     
+    Args:
+        document_id: The universal doc_id (e.g., "a1b2c3d4_filename") or full path
+    
     Deletes:
-    - Vectors from Qdrant (by document_id or filename)
-    - Original PDF from R2 (if found)
-    - Processed outputs from R2 (if found)
+    - Vectors from Qdrant (by doc_id)
+    - Original PDF from R2 (input-pdfs/{doc_id}.pdf)
+    - Processed outputs from R2 (outputs/json/{doc_id}.json, outputs/md/{doc_id}.md)
     """
     deleted_vectors = 0
     deleted_r2_files = []
     errors = []
     
+    # Extract doc_id from various input formats
+    # Could be: "input-pdfs/a1b2c3d4_file.pdf" or "a1b2c3d4_file" or "a1b2c3d4_file.pdf"
+    doc_id_parts = document_id.split("/")
+    base_name = doc_id_parts[-1] if doc_id_parts else document_id
+    doc_id = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+    
+    logger.info(f"Deleting document with doc_id: {doc_id} (from input: {document_id})")
+    
     try:
         # 1. Delete from Qdrant
         try:
             indexer = QdrantIndexer()
-            # Try to delete by document_id first
-            deleted_vectors = indexer.delete_by_document_id(document_id)
-            
-            # If no vectors found by document_id, try by filename
-            if deleted_vectors == 0:
-                deleted_vectors = indexer.delete_by_filename(document_id)
-                
-            logger.info(f"Deleted {deleted_vectors} vectors for document: {document_id}")
+            deleted_vectors = indexer.delete_by_document_id(doc_id)
+            logger.info(f"Deleted {deleted_vectors} vectors for doc_id: {doc_id}")
         except Exception as e:
             errors.append(f"Qdrant delete failed: {str(e)}")
             logger.error(f"Failed to delete from Qdrant: {e}")
         
-        # 2. Delete from R2
+        # 2. Delete from R2 using consistent doc_id
         try:
             r2_client = get_r2_client()
             bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
             
-            # Extract the base filename from the document_id
-            # document_id could be "input-pdfs/xxx.pdf" or just "xxx.pdf"
-            if "/" in document_id:
-                # Already has a path - use it directly as a prefix
-                base_filename = document_id.split("/")[-1]  # Get just the filename
-                base_name = os.path.splitext(base_filename)[0]  # Remove extension
-            else:
-                base_filename = document_id
-                base_name = os.path.splitext(document_id)[0]
-            
-            # Check these prefixes for files to delete
+            # Use doc_id consistently for all R2 paths
             prefixes_to_check = [
-                document_id,  # Exact path if provided (e.g., "input-pdfs/xxx.pdf")
-                f"input-pdfs/{base_filename}",  # Input PDF
-                f"outputs/json/{base_name}",  # JSON output from MinerU
-                f"outputs/md/{base_name}",  # Markdown output from MinerU
+                f"input-pdfs/{doc_id}.pdf",  # Original PDF
+                f"input-pdfs/{doc_id}",  # In case extension varies
+                f"outputs/json/{doc_id}.json",  # JSON output
+                f"outputs/md/{doc_id}.md",  # Markdown output
             ]
             
             logger.info(f"Looking for R2 files with prefixes: {prefixes_to_check}")
@@ -1043,7 +1058,8 @@ async def delete_document(document_id: str):
         
         return {
             "success": success,
-            "deleted": document_id,
+            "doc_id": doc_id,
+            "deleted": doc_id,
             "vectors_deleted": deleted_vectors,
             "r2_files_deleted": deleted_r2_files,
             "errors": errors if errors else None,
@@ -1054,18 +1070,24 @@ async def delete_document(document_id: str):
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 
-@admin_router.post("/documents/{document_id}/reprocess")
+@admin_router.post("/documents/{document_id:path}/reprocess")
 async def reprocess_document(document_id: str):
     """
     Reprocess a document (re-run MinerU and re-index).
-    
-    TODO: Queue job in Modal
     """
-    logger.info(f"Reprocessing document: {document_id}")
+    # Extract doc_id from input
+    doc_id_parts = document_id.split("/")
+    base_name = doc_id_parts[-1] if doc_id_parts else document_id
+    doc_id = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+    
+    logger.info(f"Reprocessing document with doc_id: {doc_id}")
+    
+    # TODO: Queue job in Modal with force_reindex=True
     return {
         "success": True, 
-        "document_id": document_id,
-        "job_id": f"job-reprocess-{document_id}",
+        "doc_id": doc_id,
+        "job_id": f"job-reprocess-{doc_id}",
         "message": "Document queued for reprocessing"
     }
+
 

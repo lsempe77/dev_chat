@@ -287,6 +287,7 @@ class UploadResponse(BaseModel):
     r2_key: str
     size_bytes: int
     queued_for_processing: bool = False
+    doc_id: Optional[str] = None  # Universal document ID across all systems
 
 
 class ProcessingJob(BaseModel):
@@ -298,6 +299,7 @@ class ProcessingJob(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    doc_id: Optional[str] = None  # Universal document ID
     pages: Optional[int] = None
     chunks: Optional[int] = None
 

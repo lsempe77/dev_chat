@@ -334,14 +334,21 @@ class QdrantIndexer:
         Uses scroll to find matching points since payload fields may not be indexed.
         
         Args:
-            document_id: The document ID or source filename to delete
+            document_id: The universal doc_id (e.g., "a1b2c3d4_filename") or legacy identifier
             
         Returns:
             Number of points deleted
         """
         try:
+            # Extract the doc_id from various input formats
+            # Input could be: "input-pdfs/a1b2c3d4_file.pdf" or "a1b2c3d4_file" or "a1b2c3d4_file.pdf"
+            doc_id_parts = document_id.split("/")
+            base_name = doc_id_parts[-1] if doc_id_parts else document_id
+            doc_id = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+            
+            logger.info(f"Deleting document with doc_id: {doc_id} (from input: {document_id})")
+            
             # Scroll through all points to find matches
-            # This is safer than filter-based delete when indexes may not exist
             matching_point_ids = []
             next_offset = None
             
@@ -356,27 +363,20 @@ class QdrantIndexer:
                 
                 for point in results:
                     payload = point.payload or {}
-                    # Extract just the filename for comparison
-                    doc_id_parts = document_id.split("/")
-                    base_name = doc_id_parts[-1] if doc_id_parts else document_id
-                    base_name_no_ext = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
                     
-                    # Match on various fields that might contain the document identifier
-                    if (payload.get("document_id") == document_id or 
+                    # Match on doc_id (primary) or legacy fields
+                    if (payload.get("doc_id") == doc_id or
+                        payload.get("pdf_name") == doc_id or
+                        payload.get("document_id") == doc_id or
                         payload.get("source") == document_id or
-                        payload.get("filename") == document_id or
-                        payload.get("pdf_name") == document_id or
-                        payload.get("pdf_name") == base_name or
-                        payload.get("pdf_name") == base_name_no_ext or
-                        payload.get("source") == base_name or
-                        payload.get("source") == base_name_no_ext):
+                        payload.get("filename") == doc_id):
                         matching_point_ids.append(point.id)
                 
                 if next_offset is None or len(results) == 0:
                     break
             
             if not matching_point_ids:
-                logger.warning(f"No points found for document_id: {document_id}")
+                logger.warning(f"No points found for doc_id: {doc_id}")
                 return 0
             
             # Delete the matching points by ID
@@ -387,7 +387,7 @@ class QdrantIndexer:
                 ),
             )
             
-            logger.info(f"Deleted {len(matching_point_ids)} points for document_id: {document_id}")
+            logger.info(f"Deleted {len(matching_point_ids)} points for doc_id: {doc_id}")
             return len(matching_point_ids)
             
         except Exception as e:

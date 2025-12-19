@@ -340,17 +340,22 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
     
     s3 = get_r2_client()
     bucket = get_bucket_name()
-    pdf_name = Path(pdf_key).stem
+    
+    # Extract doc_id from the R2 key
+    # R2 key format: input-pdfs/{doc_id}.pdf where doc_id = {8-char-uuid}_{sanitized_name}
+    # This doc_id is the universal identifier across R2, Qdrant, and admin systems
+    doc_id = Path(pdf_key).stem  # e.g., "a1b2c3d4_impact_evaluation_kenya"
     
     try:
         # Check if already indexed in Qdrant (unless forcing)
         if not force_reindex:
-            is_indexed, existing_chunks = check_qdrant_indexed(pdf_name)
+            is_indexed, existing_chunks = check_qdrant_indexed(doc_id)
             if is_indexed and not skip_extraction:
                 print(f"  ✓ Already indexed ({existing_chunks} chunks), skipping")
                 return {
                     "success": True,
                     "pdf_key": pdf_key,
+                    "doc_id": doc_id,
                     "skipped": True,
                     "reason": "already_indexed",
                     "existing_chunks": existing_chunks,
@@ -358,11 +363,11 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
         
         # If re-indexing, delete old chunks first
         if force_reindex:
-            delete_qdrant_chunks(pdf_name)
+            delete_qdrant_chunks(doc_id)
         
         # Mode 1: Skip extraction, use existing R2 output
         if skip_extraction:
-            json_key = f"outputs/json/{pdf_name}.json"
+            json_key = f"outputs/json/{doc_id}.json"
             try:
                 response = s3.get_object(Bucket=bucket, Key=json_key)
                 output_data = json.loads(response["Body"].read().decode("utf-8"))
@@ -399,7 +404,8 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             print(f"  Extracted: {len(result['content'])} chars, {len(result['tables'])} tables")
             
             # Upload outputs to R2 (only for new extractions)
-            md_key = f"outputs/md/{pdf_name}.md"
+            # Use doc_id consistently for output paths
+            md_key = f"outputs/md/{doc_id}.md"
             s3.put_object(
                 Bucket=bucket,
                 Key=md_key,
@@ -407,9 +413,10 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
                 ContentType="text/markdown",
             )
             
-            # Structured JSON
-            json_key = f"outputs/json/{pdf_name}.json"
+            # Structured JSON with doc_id included
+            json_key = f"outputs/json/{doc_id}.json"
             output_data = {
+                "doc_id": doc_id,  # Universal document ID
                 "source_key": pdf_key,
                 "processed_at": datetime.now().isoformat(),
                 "title": result.get("title"),
@@ -431,18 +438,20 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             print(f"  Uploaded: {md_key}, {json_key}")
         
         # Generate embeddings and upsert to Qdrant
+        # Pass doc_id to be stored in every chunk's payload
         chunk_count = embed_and_index(
             content=result["content"],
             metadata={
+                "doc_id": doc_id,  # Universal document ID
                 "source": pdf_key,
-                "title": result.get("title", pdf_name),
+                "title": result.get("title", doc_id),
                 "authors": result.get("authors", []),
                 "year": result.get("year"),
             },
-            pdf_name=pdf_name,
+            doc_id=doc_id,
         )
         
-        print(f"  Indexed: {chunk_count} chunks to Qdrant")
+        print(f"  Indexed: {chunk_count} chunks to Qdrant (doc_id={doc_id})")
         
         # Clean up (only if we downloaded a PDF)
         if not skip_extraction and 'pdf_path' in dir():
@@ -452,6 +461,7 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
         
         return {
             "success": True,
+            "doc_id": doc_id,
             "pdf_key": pdf_key,
             "md_key": md_key,
             "json_key": json_key,
@@ -604,11 +614,16 @@ def extract_abstract(content: str) -> Optional[str]:
 # Embedding & Indexing
 # ============================================================================
 
-def embed_and_index(content: str, metadata: dict, pdf_name: str) -> int:
+def embed_and_index(content: str, metadata: dict, doc_id: str) -> int:
     """
     Chunk content, generate embeddings, and upsert to Qdrant.
     
     Uses named vector 'dense' to match existing collection configuration.
+    
+    Args:
+        content: The document content to embed
+        metadata: Document metadata (title, authors, year, source, doc_id)
+        doc_id: Universal document identifier (used across all systems)
     
     Returns:
         Number of chunks indexed
@@ -669,19 +684,21 @@ def embed_and_index(content: str, metadata: dict, pdf_name: str) -> int:
         )
         print(f"  Created collection '{collection_name}' with named vector '{vector_name}'")
     
-    # Ensure payload index exists for efficient filtering by pdf_name
+    # Ensure payload index exists for efficient filtering by doc_id
     try:
         from qdrant_client.models import PayloadSchemaType
-        qdrant.create_payload_index(
-            collection_name=collection_name,
-            field_name="pdf_name",
-            field_schema=PayloadSchemaType.KEYWORD,
-        )
-        print(f"  Created payload index on 'pdf_name'")
+        for field in ["doc_id", "pdf_name"]:  # Index both for backward compatibility
+            try:
+                qdrant.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field,
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+                print(f"  Created payload index on '{field}'")
+            except Exception:
+                pass  # Index might already exist
     except Exception as e:
-        # Index might already exist, that's fine
-        if "already exists" not in str(e).lower():
-            print(f"  Note: Could not create pdf_name index: {e}")
+        print(f"  Note: Could not create indexes: {e}")
     
     # Simple chunking (semantic chunking could be added)
     chunks = chunk_content(content, chunk_size=512, overlap=50)
@@ -713,12 +730,13 @@ def embed_and_index(content: str, metadata: dict, pdf_name: str) -> int:
                     vector={vector_name: embedding},  # Named vector
                     payload={
                         "text": chunk,
+                        "doc_id": doc_id,  # Universal document ID
+                        "pdf_name": doc_id,  # Backward compatibility
                         "source": metadata.get("source", ""),
                         "title": metadata.get("title", ""),
                         "authors": metadata.get("authors", []),
                         "year": metadata.get("year"),
                         "chunk_index": i + j,
-                        "pdf_name": pdf_name,
                     },
                 )
             )
