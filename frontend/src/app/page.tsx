@@ -50,6 +50,7 @@ export default function Home() {
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
   const handleSearch = useCallback(async (searchQuery: string) => {
+    console.log("[Page] handleSearch called with searchSettings:", searchSettings);
     setQuery(searchQuery);
     setIsLoading(true);
     setHasSearched(true);
