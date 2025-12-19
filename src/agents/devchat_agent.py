@@ -202,6 +202,12 @@ class DevChatAgent:
             if filtered_results:
                 reranked_results = filtered_results
                 logger.info(f"Applied relevance threshold {user_settings.relevance_threshold}, kept {len(reranked_results)}")
+            else:
+                # Threshold filtered out ALL results - keep original but warn
+                logger.warning(
+                    f"Relevance threshold {user_settings.relevance_threshold} filtered out all {len(reranked_results)} results. "
+                    f"Keeping top results anyway. Max score was {max(r.score for r in reranked_results):.3f}"
+                )
         
         rerank_time = (time.time() - rerank_start) * 1000
         reranked_count = len(reranked_results)
