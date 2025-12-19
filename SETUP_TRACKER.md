@@ -53,33 +53,88 @@ Branch: main
 
 ### P0 - Critical (This Week)
 
-| Task | Description | Effort |
+| Task | Description | Status |
 |------|-------------|--------|
-| **Metadata Extraction** | Extract country, sector, year, study_type from PDFs using LLM during MinerU ingestion. Currently disabled in `query_processor.py` because Modal-indexed docs lack this metadata. | 1 day |
-| **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` from frontend to `/api/query` | 2 hours |
-| **LLM-Based Suggestions** | Generate contextual "Try next" queries using LLM | 2-3 hours |
-| **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | 1 day |
+| **Smart Metadata Pipeline** | CrossRef/OpenAlex lookup + LLM gap fill (see architecture below) | 🚧 In Progress |
+| **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` from frontend to `/api/query` | ✅ Done |
+| **LLM-Based Suggestions** | Generate contextual "Try next" queries using LLM | ✅ Done |
+| **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | ⬜ TODO |
 | **Fix Study Card Display** | Authors showing "()", year showing "Unknown" | ✅ Done |
 
 ### P1 - Important (This Month)
 
-| Task | Description | Effort |
+| Task | Description | Status |
 |------|-------------|--------|
-| **Admin UI Upload Wiring** | Connect drag-drop → R2 → Modal trigger | 3 hours |
-| **Export Citations** | BibTeX/RIS format export | 4 hours |
-| **Usage Analytics** | Track queries, latency, user engagement | 1 day |
-| **RAGAS Evaluation** | Run evaluation on real queries | 1 day |
+| **Bibliography Import** | RIS/BibTeX/CSV parser with fuzzy matching | ⬜ TODO |
+| **Admin UI Upload Wiring** | Connect drag-drop → R2 → Modal trigger | ⬜ TODO |
+| **Export Citations** | BibTeX/RIS format export | ⬜ TODO |
+| **Usage Analytics** | Track queries, latency, user engagement | ⬜ TODO |
 
-### P2 - Future (Multi-Tenant)
+### P2 - Future
 
 | Task | Description |
 |------|-------------|
+| **Zotero Integration** | OAuth sync with Zotero libraries |
 | **Config-driven Branding** | Logo, colors, name via env vars |
 | **Collection Isolation** | Per-team Qdrant collections |
-| **Custom Prompts** | Team-specific system prompts |
-| **Deploy Templates** | 1-click Railway/Vercel deploy |
-| **API Key Management** | Teams provide own keys |
-| **Per-Tenant Usage** | Query/token tracking per team |
+
+---
+
+## 📚 Metadata Resolution Pipeline (NEW)
+
+Smart metadata extraction from multiple authoritative sources:
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                    METADATA RESOLUTION PIPELINE                    │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  PDF Upload                                                        │
+│      ▼                                                             │
+│  STEP 1: Extract DOI from PDF (regex + PDF metadata)               │
+│      │                                                             │
+│      ├─── DOI Found ──▶ CrossRef/OpenAlex Lookup                  │
+│      │                                                             │
+│      └─── No DOI ────▶ LLM Extract title/authors                  │
+│                              ▼                                     │
+│                        OpenAlex Fuzzy Search                       │
+│                              │                                     │
+│      ◀───────────────────────┘                                     │
+│      ▼                                                             │
+│  STEP 2: Merge & Validate (title, authors, year, DOI, abstract)   │
+│      ▼                                                             │
+│  STEP 3: LLM Gap Fill (country, sector, study_type, intervention) │
+│      ▼                                                             │
+│  STEP 4: User Review (if confidence < threshold)                   │
+│                                                                     │
+│  ALTERNATIVE INPUTS:                                               │
+│  • RIS/BibTeX Import → Skip to Step 2                              │
+│  • CSV with DOIs → Batch lookup                                    │
+│  • Zotero Sync (Future)                                            │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Sources
+
+| Source | Coverage | Quality | Cost | Rate |
+|--------|----------|---------|------|------|
+| CrossRef | 140M+ DOIs | Excellent | Free | 50/sec |
+| OpenAlex | 250M+ works | Excellent | Free | 100K/day |
+| LLM | Any PDF | Variable | $$$ | N/A |
+
+### Implementation Files
+
+```
+src/ingestion/metadata/
+├── __init__.py
+├── doi_extractor.py      # Extract DOI from PDF
+├── crossref_client.py    # CrossRef API
+├── openalex_client.py    # OpenAlex API
+├── llm_extractor.py      # LLM gap fill
+├── bibliography.py       # RIS/BibTeX/CSV parser
+├── fuzzy_matcher.py      # Title/author matching
+└── resolver.py           # Orchestrator
+```
 
 ---
 

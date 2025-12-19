@@ -29,19 +29,108 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 ## 📋 TODO / Roadmap
 
 ### High Priority
-- [ ] **Metadata Extraction during PDF Ingestion** - Extract country, sector, year, study_type from PDFs using LLM during MinerU processing. Currently disabled because Modal-indexed docs don't have this metadata. See `infrastructure/modal_mineru.py` and `src/retrieval/query_processor.py`.
-- [ ] **Settings Wiring** - Connect frontend settings panel to backend parameters (temperature, top_k, model selection)
+- [ ] **Smart Metadata Resolution Pipeline** - Multi-source metadata extraction (see below)
+- [x] **Settings Wiring** - Connect frontend settings panel to backend parameters ✅
 - [ ] **Bulk PDF Upload** - Process 3ie's full corpus (~5000 PDFs)
 
 ### Medium Priority  
 - [ ] **Admin Authentication** - Protect `/admin` routes with API key or OAuth
 - [ ] **Processing Status WebSocket** - Real-time updates for PDF processing progress
-- [ ] **Citation Quality Improvements** - Extract authors, DOI, abstract during ingestion
+- [ ] **Bulk Import** - RIS/BibTeX/CSV bibliography import with fuzzy matching
 
 ### Future Enhancements
+- [ ] **Zotero Integration** - OAuth sync with Zotero libraries
 - [ ] **Contextual Retrieval** - Add document context to chunks (Anthropic technique)
 - [ ] **RAPTOR Trees** - Hierarchical summarization for multi-hop reasoning
 - [ ] **RAGAS Evaluation** - Automated quality metrics in CI/CD
+
+---
+
+## 📚 Metadata Resolution Pipeline
+
+Smart metadata extraction from multiple sources with fallback chain:
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                    METADATA RESOLUTION PIPELINE                    │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────┐                                                   │
+│  │  PDF Upload │                                                   │
+│  └──────┬──────┘                                                   │
+│         ▼                                                          │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │  STEP 1: Extract DOI from PDF                               │  │
+│  │  - Regex scan first pages                                   │  │
+│  │  - Check PDF metadata                                       │  │
+│  └──────────────────────────┬──────────────────────────────────┘  │
+│                              │                                     │
+│         ┌────────────────────┴────────────────────┐               │
+│         ▼                                          ▼               │
+│  ┌─────────────┐                           ┌─────────────┐        │
+│  │  DOI Found  │                           │  No DOI     │        │
+│  └──────┬──────┘                           └──────┬──────┘        │
+│         ▼                                          ▼               │
+│  ┌─────────────────────┐              ┌─────────────────────────┐ │
+│  │  CrossRef/OpenAlex  │              │  LLM: Extract title,    │ │
+│  │  Lookup by DOI      │              │  authors from first page│ │
+│  └──────────┬──────────┘              └────────────┬────────────┘ │
+│             │                                       ▼              │
+│             │                          ┌─────────────────────────┐ │
+│             │                          │  OpenAlex Search        │ │
+│             │                          │  (fuzzy title + author) │ │
+│             │                          └────────────┬────────────┘ │
+│             │                                       │              │
+│             │         ┌─────────────────────────────┘              │
+│             ▼         ▼                                            │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │  STEP 2: Merge & Validate Metadata                          │  │
+│  │  - Title, Authors, Year, Journal, DOI, Abstract             │  │
+│  │  - Keywords, Cited-by count, Open Access status             │  │
+│  └──────────────────────────┬──────────────────────────────────┘  │
+│                              ▼                                     │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │  STEP 3: LLM Gap Fill (domain-specific fields)              │  │
+│  │  - Country/Region (from abstract/title)                     │  │
+│  │  - Sector/Topic                                             │  │
+│  │  - Study Type (RCT, quasi-experimental, etc.)               │  │
+│  │  - Intervention Type                                        │  │
+│  └──────────────────────────┬──────────────────────────────────┘  │
+│                              ▼                                     │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │  STEP 4: User Review (if confidence < threshold)            │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ALTERNATIVE INPUTS:                                               │
+│  • RIS/BibTeX Import → Skip to Step 2                              │
+│  • CSV with DOIs → Batch CrossRef/OpenAlex lookup                  │
+│  • Zotero Sync (Future) → Direct metadata import                   │
+│                                                                     │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Sources
+
+| Source | Coverage | Data Quality | Cost | Rate Limit |
+|--------|----------|--------------|------|------------|
+| **CrossRef** | 140M+ DOIs | Excellent (publisher) | Free | 50/sec |
+| **OpenAlex** | 250M+ works | Excellent | Free | 100K/day |
+| **Semantic Scholar** | 200M+ | Good + citations | Free | 100/sec |
+| **LLM Extraction** | Any PDF | Variable | $$$ | N/A |
+
+### Implementation
+
+```
+src/ingestion/metadata/
+├── __init__.py
+├── doi_extractor.py      # Extract DOI from PDF text/metadata
+├── crossref_client.py    # CrossRef API client
+├── openalex_client.py    # OpenAlex API client  
+├── llm_extractor.py      # LLM-based extraction for gaps
+├── bibliography.py       # RIS/BibTeX/CSV parser
+├── fuzzy_matcher.py      # Title/author fuzzy matching
+└── resolver.py           # Orchestrates all sources
+```
 
 ---
 
