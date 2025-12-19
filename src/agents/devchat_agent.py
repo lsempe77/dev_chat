@@ -17,6 +17,7 @@ from src.config.settings import settings
 from src.generation.citations import add_citations_to_answer, ensure_citation_coverage
 from src.generation.router import ModelRouter
 from src.generation.synthesizer import StreamingSynthesizer, Synthesizer, SynthesisResult
+from src.generation.structured_synthesizer import StructuredSynthesizer
 from src.retrieval.context_builder import ContextBuilder, FormattedContext
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.query_processor import QueryClassification, QueryProcessor
@@ -35,6 +36,7 @@ class SearchSettings:
     use_reranking: bool = True
     min_confidence: str = "all"
     year_cutoff: int = 2010
+    use_structured_citations: bool = True  # Use two-pass structured synthesizer for better citations
     
     @classmethod
     def from_dict(cls, data: Optional[Dict[str, Any]]) -> "SearchSettings":
@@ -48,6 +50,7 @@ class SearchSettings:
             use_reranking=data.get("useReranking", True),
             min_confidence=data.get("minConfidence", "all"),
             year_cutoff=data.get("yearCutoff", 2010),
+            use_structured_citations=data.get("useStructuredCitations", True),
         )
 
 
@@ -256,16 +259,30 @@ class DevChatAgent:
             f"{context.num_studies} studies, {len(context.text)} chars"
         )
         
-        # Step 5: Synthesis
+        # Step 5: Synthesis - choose between structured or standard
         synthesis_start = time.time()
-        synthesis_result = await self.synthesizer.synthesize(
-            query=processed_query,
-            context=context,
-        )
-        synthesis_time = (time.time() - synthesis_start) * 1000
         
-        # Add citations if requested AND answer has useful content
-        answer = synthesis_result.answer
+        if user_settings.use_structured_citations:
+            # Two-pass structured synthesis for better citation accuracy
+            logger.info("Using structured synthesizer (two-pass citation mapping)")
+            structured_synth = StructuredSynthesizer()
+            answer, claim_ledger = await structured_synth.synthesize(
+                query=processed_query,
+                context=context,
+            )
+            # Log claim extraction stats
+            logger.info(f"Extracted {len(claim_ledger.claims)} claims from {context.num_studies} sources")
+            model_used = "structured/gpt-4o-mini"
+        else:
+            # Standard single-pass synthesis
+            synthesis_result = await self.synthesizer.synthesize(
+                query=processed_query,
+                context=context,
+            )
+            answer = synthesis_result.answer
+            model_used = synthesis_result.model_used
+        
+        synthesis_time = (time.time() - synthesis_start) * 1000
         
         # Check if answer indicates no relevant information found
         no_info_indicators = [
@@ -300,7 +317,7 @@ class DevChatAgent:
         response = DevChatResponse(
             answer=answer,
             query_type=processed_query.query_type.value,
-            model_used=synthesis_result.model_used,
+            model_used=model_used,
             num_sources=len(final_citations),
             citations=final_citations,
             query_time_ms=query_time,
