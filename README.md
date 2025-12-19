@@ -14,29 +14,32 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 | Component | Status | Description |
 |-----------|--------|-------------|
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
-| **Frontend (Vercel)** | ✅ Live | https://frontend-amber-seven-55.vercel.app |
-| **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing + Qdrant indexing |
-| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection |
+| **Frontend (Vercel)** | ✅ Live | https://dev-chat-frontend.vercel.app/ |
+| **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing + metadata enrichment |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (146 chunks) |
 | **End-to-End RAG** | ✅ Working | Query → Retrieval → Rerank → Generate |
-| **Document Corpus** | ⚠️ Limited | 2 test PDFs indexed (50 chunks) |
-| **Metadata Filtering** | ⬜ Disabled | Needs metadata extraction during ingestion |
-| **Settings Wiring** | ⬜ TODO | UI exists, not sent to backend |
+| **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM enrichment |
+| **Admin Metadata UI** | ✅ Working | Review & edit metadata, mark as verified |
+| **Settings Wiring** | ✅ Done | Frontend settings sent to backend |
+| **Document Corpus** | ⚠️ Limited | 3 test PDFs indexed (need bulk upload) |
 
-**Live Demo:** https://frontend-amber-seven-55.vercel.app
+**Live Demo:** https://dev-chat-frontend.vercel.app/
 
 ---
 
 ## 📋 TODO / Roadmap
 
 ### High Priority
-- [ ] **Smart Metadata Resolution Pipeline** - Multi-source metadata extraction (see below)
+- [x] **Smart Metadata Resolution Pipeline** - CrossRef → OpenAlex → LLM enrichment ✅
 - [x] **Settings Wiring** - Connect frontend settings panel to backend parameters ✅
+- [x] **Admin Metadata Review UI** - Edit & verify document metadata ✅
 - [ ] **Bulk PDF Upload** - Process 3ie's full corpus (~5000 PDFs)
 
 ### Medium Priority  
 - [ ] **Admin Authentication** - Protect `/admin` routes with API key or OAuth
 - [ ] **Processing Status WebSocket** - Real-time updates for PDF processing progress
 - [ ] **Bulk Import** - RIS/BibTeX/CSV bibliography import with fuzzy matching
+- [ ] **Metadata Filters in Search** - Filter by country, sector, study type
 
 ### Future Enhancements
 - [ ] **Zotero Integration** - OAuth sync with Zotero libraries
@@ -187,7 +190,7 @@ src/ingestion/metadata/
 
 ### Production URLs
 
-- **Frontend:** https://frontend-amber-seven-55.vercel.app
+- **Frontend:** https://dev-chat-frontend.vercel.app/
 - **Backend API:** https://3iechat.up.railway.app
 - **API Docs:** https://3iechat.up.railway.app/docs
 - **GitHub:** https://github.com/lsempe77/dev_chat

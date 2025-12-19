@@ -2,7 +2,7 @@
 
 **Created:** December 17, 2025  
 **Last Updated:** December 19, 2025  
-**Status:** ✅ Production Deployed | ⚠️ Needs Real Document Corpus
+**Status:** ✅ Production Deployed | ✅ Metadata Pipeline Working | ⚠️ Needs Bulk Upload
 
 ---
 
@@ -10,13 +10,15 @@
 
 | Component | Status | URL/Notes |
 |-----------|--------|-----------|
-| **Frontend (Vercel)** | ✅ Live | https://frontend-amber-seven-55.vercel.app |
+| **Frontend (Vercel)** | ✅ Live | https://dev-chat-frontend.vercel.app/ |
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
-| **PDF Processing (Modal)** | ✅ Working | `devchat-mineru` app |
-| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection |
-| **Document Corpus** | ⚠️ **1 test PDF** | Need bulk upload |
-| **Settings Wiring** | ❌ Not Done | UI exists, not sent to API |
-| **LLM Suggestions** | ❌ Not Done | Hardcoded placeholders |
+| **PDF Processing (Modal)** | ✅ Working | `devchat-mineru` app with T4 GPU |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (146 chunks) |
+| **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM enrichment |
+| **Admin Metadata UI** | ✅ Working | Review, edit, verify metadata |
+| **Settings Wiring** | ✅ Done | Frontend settings sent to backend |
+| **LLM Suggestions** | ✅ Done | Context-aware follow-up queries |
+| **Document Corpus** | ⚠️ **3 test PDFs** | Need bulk upload (~5000 papers) |
 
 ---
 
@@ -55,11 +57,12 @@ Branch: main
 
 | Task | Description | Status |
 |------|-------------|--------|
-| **Smart Metadata Pipeline** | CrossRef/OpenAlex lookup + LLM gap fill (see architecture below) | 🚧 In Progress |
-| **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` from frontend to `/api/query` | ✅ Done |
+| **Smart Metadata Pipeline** | CrossRef/OpenAlex lookup + LLM gap fill | ✅ Done |
+| **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` | ✅ Done |
 | **LLM-Based Suggestions** | Generate contextual "Try next" queries using LLM | ✅ Done |
-| **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | ⬜ TODO |
+| **Admin Metadata UI** | Review, edit, verify document metadata | ✅ Done |
 | **Fix Study Card Display** | Authors showing "()", year showing "Unknown" | ✅ Done |
+| **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | ⬜ TODO |
 
 ### P1 - Important (This Month)
 
@@ -163,11 +166,12 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 
 ### Modal Secrets (in Modal dashboard)
 
-| Secret Name | Keys |
-|-------------|------|
-| `r2-credentials` | R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME |
-| `qdrant-credentials` | QDRANT_URL, QDRANT_API_KEY |
-| `cohere-credentials` | COHERE_API_KEY |
+| Secret Name | Keys | Purpose |
+|-------------|------|---------|
+| `r2-credentials` | R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME | PDF storage |
+| `qdrant-credentials` | QDRANT_URL, QDRANT_API_KEY | Vector database |
+| `cohere-credentials` | COHERE_API_KEY | Embeddings |
+| `openrouter-credentials` | OPENROUTER_API_KEY | LLM metadata enrichment |
 
 ### Qdrant Configuration
 
