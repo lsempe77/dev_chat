@@ -35,24 +35,15 @@ export function PDFViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Build URL with page and search parameters
-  // Chrome/Edge PDF viewer supports: #page=X&search=text
-  // Firefox uses: #page=X (search requires different approach)
+  // Build URL with page parameter only
+  // #page=N is more widely supported than #search=text
+  // We show the snippet in an "evidence card" in the UI instead of relying on PDF viewer highlighting
   const buildPdfUrl = () => {
-    const params: string[] = [];
-    
+    // Only use page anchor - it's the most compatible approach
     if (initialPage > 1) {
-      params.push(`page=${initialPage}`);
+      return `${url}#page=${initialPage}`;
     }
-    
-    // Add search text for highlighting (works in Chrome/Edge)
-    if (searchText) {
-      // Encode the search text and take first ~50 chars for better matching
-      const trimmedSearch = searchText.slice(0, 50).trim();
-      params.push(`search=${encodeURIComponent(trimmedSearch)}`);
-    }
-    
-    return params.length > 0 ? `${url}#${params.join('&')}` : url;
+    return url;
   };
   
   const pdfUrl = buildPdfUrl();

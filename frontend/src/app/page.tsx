@@ -14,7 +14,7 @@ import {
 } from "@/components/workbench";
 import type { SearchSettings } from "@/components/workbench";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Database, X, ExternalLink } from "lucide-react";
+import { ArrowLeft, Database, X, ExternalLink, Copy, Check, FileText } from "lucide-react";
 import Link from "next/link";
 import { Study, Citation, Filter, EvidenceHealth, AnswerStyle } from "@/types";
 import { queryEvidence } from "@/lib/api";
@@ -28,6 +28,66 @@ const defaultEvidenceHealth: EvidenceHealth = {
   gaps: [],
   coverageWarning: undefined,
 };
+
+/**
+ * Evidence Snippet Card - Shows the matched text with copy-to-find functionality
+ * This provides a reliable highlight experience even when browser PDF viewers don't support #search=
+ */
+function EvidenceSnippetCard({ 
+  snippet, 
+  page, 
+  title 
+}: { 
+  snippet: string; 
+  page: number; 
+  title: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+  
+  return (
+    <div className="p-3 border-b bg-amber-50 dark:bg-amber-950/30">
+      <div className="flex items-start gap-2">
+        <FileText className="h-4 w-4 mt-0.5 text-amber-600 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
+              Page {page}
+            </span>
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              • Use Ctrl/Cmd+F to find this text
+            </span>
+          </div>
+          <p className="text-sm text-amber-900 dark:text-amber-100 italic line-clamp-2">
+            "{snippet}"
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCopy}
+          className="flex-shrink-0 h-7 px-2"
+          title="Copy snippet to clipboard"
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-green-600" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -336,7 +396,7 @@ export default function Home() {
         }}
       />
 
-      {/* PDF Viewer Side Panel */}
+      {/* PDF Viewer Side Panel with Evidence Card */}
       {pdfViewerOpen && pdfUrl && (
         <div className="fixed inset-y-0 right-0 w-1/2 bg-background border-l shadow-xl z-50 flex flex-col">
           {/* Header */}
@@ -347,6 +407,7 @@ export default function Home() {
                 variant="ghost"
                 size="sm"
                 onClick={() => window.open(pdfUrl, '_blank')}
+                title="Open in new tab"
               >
                 <ExternalLink className="h-4 w-4" />
               </Button>
@@ -359,6 +420,16 @@ export default function Home() {
               </Button>
             </div>
           </div>
+          
+          {/* Evidence Card - Shows the matched snippet with copy button */}
+          {pdfSearchText && (
+            <EvidenceSnippetCard 
+              snippet={pdfSearchText}
+              page={pdfPage}
+              title={pdfTitle}
+            />
+          )}
+          
           {/* PDF Content */}
           <div className="flex-1">
             <PDFViewer
