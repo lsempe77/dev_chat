@@ -81,7 +81,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1">
           <Settings className="h-4 w-4" />
-          Settings
+          Search Settings
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
