@@ -1,13 +1,9 @@
 {
-  "name": "dev-chat-monorepo",
-  "version": "1.0.0",
+  "name": "dev-chat",
   "private": true,
+  "workspaces": ["frontend"],
   "scripts": {
-    "build": "cd frontend && npm install && npm run build",
-    "dev": "cd frontend && npm run dev",
-    "start": "cd frontend && npm run start"
-  },
-  "dependencies": {
-    "next": "16.0.10"
+    "build": "npm run build --workspace=frontend",
+    "dev": "npm run dev --workspace=frontend"
   }
 }
