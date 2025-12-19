@@ -262,60 +262,66 @@ export function MetadataTab() {
         </Card>
       </div>
 
-      {/* Filters & Search */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Metadata Review</CardTitle>
-              <CardDescription>
-                Review and correct document metadata for better search results
-              </CardDescription>
-            </div>
-            <Button variant="outline" size="sm" onClick={fetchDocuments}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 mb-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search documents..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+      {/* Main Content: Side-by-side layout */}
+      <div className="flex gap-4">
+        {/* Left Panel: Document List */}
+        <Card className={viewingPdfDoc ? "w-1/2" : "w-full"}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Metadata Review</CardTitle>
+                <CardDescription>
+                  Review and correct document metadata for better search results
+                </CardDescription>
               </div>
+              <Button variant="outline" size="sm" onClick={fetchDocuments}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
             </div>
-            <Tabs value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
-              <TabsList>
-                <TabsTrigger value="needs_review">Needs Review</TabsTrigger>
-                <TabsTrigger value="low_confidence">Low Confidence</TabsTrigger>
-                <TabsTrigger value="all">All</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 mb-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search documents..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              <Tabs value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
+                <TabsList>
+                  <TabsTrigger value="needs_review">Needs Review</TabsTrigger>
+                  <TabsTrigger value="low_confidence">Low Confidence</TabsTrigger>
+                  <TabsTrigger value="all">All</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
 
-          {error && (
-            <div className="flex items-center gap-2 p-3 mb-4 text-red-600 bg-red-50 rounded-lg">
-              <AlertCircle className="h-4 w-4" />
-              {error}
-            </div>
-          )}
+            {error && (
+              <div className="flex items-center gap-2 p-3 mb-4 text-red-600 bg-red-50 rounded-lg">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </div>
+            )}
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <ScrollArea className="h-[500px]">
-              <div className="space-y-3">
-                {filteredDocs.map((doc) => (
-                  <Card key={doc.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => openEditModal(doc)}>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ScrollArea className={viewingPdfDoc ? "h-[600px]" : "h-[500px]"}>
+                <div className="space-y-3">
+                  {filteredDocs.map((doc) => (
+                    <Card 
+                      key={doc.id} 
+                      className={`hover:bg-muted/50 cursor-pointer ${viewingPdfDoc?.id === doc.id ? 'ring-2 ring-primary' : ''}`}
+                      onClick={() => openEditModal(doc)}
+                    >
                     <CardContent className="p-4">
                       <div className="space-y-3">
                         <div>
@@ -414,6 +420,56 @@ export function MetadataTab() {
           )}
         </CardContent>
       </Card>
+
+        {/* Right Panel: PDF Viewer (Side Panel) */}
+        {viewingPdfDoc && (
+          <Card className="w-1/2 flex flex-col">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-sm truncate">{viewingPdfDoc.title}</CardTitle>
+                  <CardDescription className="text-xs truncate">
+                    {viewingPdfDoc.filename} • {viewingPdfDoc.chunk_count} chunks
+                  </CardDescription>
+                </div>
+                <div className="flex gap-1 ml-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => openEditModal(viewingPdfDoc)}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={closePdfViewer}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 p-0">
+              {isLoadingPdf ? (
+                <div className="flex items-center justify-center h-[600px]">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : pdfUrl ? (
+                <PDFViewer 
+                  url={pdfUrl} 
+                  className="h-[600px]"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-[600px] text-muted-foreground">
+                  <AlertCircle className="h-6 w-6 mr-2" />
+                  Failed to load PDF
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Edit Modal */}
       <Dialog open={!!editingDoc} onOpenChange={(open) => !open && setEditingDoc(null)}>
@@ -559,49 +615,6 @@ export function MetadataTab() {
                   Save Changes
                 </>
               )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* PDF Viewer Dialog */}
-      <Dialog open={!!viewingPdfDoc} onOpenChange={(open) => !open && closePdfViewer()}>
-        <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {viewingPdfDoc?.title || viewingPdfDoc?.filename}
-            </DialogTitle>
-            <DialogDescription>
-              {viewingPdfDoc?.filename} • {viewingPdfDoc?.chunk_count} chunks indexed
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 min-h-0">
-            {isLoadingPdf ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : pdfUrl ? (
-              <PDFViewer 
-                url={pdfUrl} 
-                className="h-full"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <AlertCircle className="h-6 w-6 mr-2" />
-                Failed to load PDF
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={closePdfViewer}>
-              Close
-            </Button>
-            <Button onClick={() => { closePdfViewer(); if (viewingPdfDoc) openEditModal(viewingPdfDoc); }}>
-              <Edit2 className="h-4 w-4 mr-2" />
-              Edit Metadata
             </Button>
           </DialogFooter>
         </DialogContent>
