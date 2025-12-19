@@ -228,31 +228,45 @@ class HybridRetriever:
     
     def _convert_results(self, results: List) -> List[RetrievalResult]:
         """Convert Qdrant search results to RetrievalResult objects."""
-        return [
-            RetrievalResult(
+        converted = []
+        for r in results:
+            # Ensure text is always a string (handle legacy list format)
+            raw_text = r.payload.get("text", "")
+            if isinstance(raw_text, list):
+                text = " ".join(str(t) for t in raw_text)
+            else:
+                text = str(raw_text) if raw_text else ""
+            
+            converted.append(RetrievalResult(
                 node_id=str(r.id),
-                text=r.payload.get("text", ""),
+                text=text,
                 score=r.score,
                 metadata={k: v for k, v in r.payload.items() if k != "text"},
                 parent_text=r.payload.get("parent_text_full"),
-            )
-            for r in results
-        ]
+            ))
+        return converted
     
     def _convert_query_results(self, response) -> List[RetrievalResult]:
         """Convert Qdrant query points results."""
         # Handle QueryResponse object from query_points
         points = response.points if hasattr(response, 'points') else response
-        return [
-            RetrievalResult(
+        converted = []
+        for p in points:
+            # Ensure text is always a string (handle legacy list format)
+            raw_text = p.payload.get("text", "") if p.payload else ""
+            if isinstance(raw_text, list):
+                text = " ".join(str(t) for t in raw_text)
+            else:
+                text = str(raw_text) if raw_text else ""
+            
+            converted.append(RetrievalResult(
                 node_id=str(p.id),
-                text=p.payload.get("text", "") if p.payload else "",
+                text=text,
                 score=p.score if hasattr(p, 'score') else 0.0,
                 metadata={k: v for k, v in (p.payload or {}).items() if k != "text"},
                 parent_text=p.payload.get("parent_text_full") if p.payload else None,
-            )
-            for p in points
-        ]
+            ))
+        return converted
     
     def retrieve_sync(
         self,
