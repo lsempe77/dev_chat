@@ -42,9 +42,12 @@ class CitationFormatter:
         """
         parts = []
         
-        # Authors
+        # Authors - handle list case defensively
         if citation.authors:
-            parts.append(citation.authors)
+            if isinstance(citation.authors, list):
+                parts.append(", ".join(str(a) for a in citation.authors))
+            else:
+                parts.append(str(citation.authors))
         else:
             parts.append("Unknown Author")
         
@@ -151,16 +154,29 @@ class CitationFormatter:
     @staticmethod
     def from_dict(data: Dict) -> Citation:
         """Create Citation from dictionary."""
+        # Handle authors that might be a list
+        raw_authors = data.get("authors")
+        if isinstance(raw_authors, list):
+            authors = ", ".join(str(a) for a in raw_authors)
+        else:
+            authors = str(raw_authors) if raw_authors else None
+        
+        # Handle sector/country that might be lists
+        raw_sector = data.get("sector")
+        sector = ", ".join(raw_sector) if isinstance(raw_sector, list) else raw_sector
+        raw_country = data.get("country")
+        country = ", ".join(raw_country) if isinstance(raw_country, list) else raw_country
+        
         return Citation(
             study_id=data.get("study_id", ""),
             title=data.get("title", "Unknown Title"),
-            authors=data.get("authors"),
+            authors=authors,
             year=data.get("year"),
             source=data.get("source"),
             url=data.get("url"),
             doi=data.get("doi"),
-            sector=data.get("sector"),
-            country=data.get("country"),
+            sector=sector,
+            country=country,
         )
 
 
