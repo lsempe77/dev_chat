@@ -1225,6 +1225,8 @@ def main(
         print(f"   Status: {qdrant_status['status']}")
         if "points_count" in qdrant_status:
             print(f"   Vectors: {qdrant_status['points_count']}")
+        if "message" in qdrant_status:
+            print(f"   Error: {qdrant_status['message']}")
     
     elif action == "run":
         print("\n🚀 Starting batch processing...")
@@ -1277,7 +1279,7 @@ def scheduled_processing():
     secrets=[r2_secret, qdrant_secret, cohere_secret],
     timeout=600,
 )
-@modal.web_endpoint(method="POST")
+@modal.fastapi_endpoint(method="POST")
 def trigger_processing(request: dict = None) -> dict:
     """
     HTTP endpoint to trigger PDF processing from Railway/Vercel.
