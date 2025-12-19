@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 @dataclass
 class SearchSettings:
     """Settings passed from frontend to control search behavior."""
-    relevance_threshold: float = 0.3  # Lowered from 0.5 to be more inclusive
+    relevance_threshold: float = 0.5  # Default threshold - user can adjust
     max_studies: int = 10
     answer_style: str = "executive"
     use_reranking: bool = True
@@ -42,7 +42,7 @@ class SearchSettings:
         if not data:
             return cls()
         return cls(
-            relevance_threshold=data.get("relevanceThreshold", 0.3),
+            relevance_threshold=data.get("relevanceThreshold", 0.5),
             max_studies=data.get("maxStudies", 10),
             answer_style=data.get("answerStyle", "executive"),
             use_reranking=data.get("useReranking", True),
@@ -193,24 +193,60 @@ class DevChatAgent:
             reranked_results = results[:user_settings.max_studies]
             logger.info(f"Skipped reranking (useReranking=False), took top {len(reranked_results)}")
         
-        # Apply relevance threshold filter
-        if user_settings.relevance_threshold > 0:
+        # Apply relevance threshold filter - strictly respect user's choice
+        threshold_filtered_all = False
+        threshold_max_score = 0.0
+        
+        if user_settings.relevance_threshold > 0 and reranked_results:
+            original_count = len(reranked_results)
+            threshold_max_score = max((r.score for r in reranked_results), default=0)
+            
             filtered_results = [
                 r for r in reranked_results 
                 if r.score >= user_settings.relevance_threshold
             ]
+            
             if filtered_results:
                 reranked_results = filtered_results
-                logger.info(f"Applied relevance threshold {user_settings.relevance_threshold}, kept {len(reranked_results)}")
+                logger.info(f"Applied relevance threshold {user_settings.relevance_threshold}, kept {len(reranked_results)}/{original_count}")
             else:
-                # Threshold filtered out ALL results - keep original but warn
+                # Threshold filtered out ALL results
                 logger.warning(
-                    f"Relevance threshold {user_settings.relevance_threshold} filtered out all {len(reranked_results)} results. "
-                    f"Keeping top results anyway. Max score was {max(r.score for r in reranked_results):.3f}"
+                    f"Relevance threshold {user_settings.relevance_threshold} filtered out all {original_count} results. "
+                    f"Max score was {threshold_max_score:.3f}"
                 )
+                reranked_results = []
+                threshold_filtered_all = True
         
         rerank_time = (time.time() - rerank_start) * 1000
         reranked_count = len(reranked_results)
+        
+        # Handle case where threshold filtered everything
+        if threshold_filtered_all:
+            total_time = (time.time() - total_start) * 1000
+            threshold_pct = int(user_settings.relevance_threshold * 100)
+            max_score_pct = int(threshold_max_score * 100)
+            return DevChatResponse(
+                answer=(
+                    f"No results meet the current relevance threshold ({threshold_pct}%). "
+                    f"The best matching document scored {max_score_pct}%. "
+                    f"You might try lowering the inclusion threshold in Settings "
+                    f"(which could produce less accurate results) or changing your query."
+                ),
+                query_type=processed_query.query_type.value,
+                model_used="none",
+                num_sources=0,
+                citations=[],
+                query_time_ms=query_time,
+                retrieval_time_ms=retrieval_time,
+                rerank_time_ms=rerank_time,
+                synthesis_time_ms=0,
+                total_time_ms=total_time,
+                expanded_query=processed_query.expanded_query,
+                filters_applied=None,
+                retrieval_count=retrieval_count,
+                reranked_count=0,
+            )
         
         # Step 4: Context Building
         context = self.context_builder.build(reranked_results)

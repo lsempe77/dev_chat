@@ -34,7 +34,7 @@ export interface SearchSettings {
 }
 
 const defaultSettings: SearchSettings = {
-  relevanceThreshold: 0.3,  // Lowered from 0.5 to be more inclusive with small corpus
+  relevanceThreshold: 0.5,  // Default threshold - user can adjust in settings
   maxStudies: 10,
   answerStyle: "executive",
   useReranking: true,

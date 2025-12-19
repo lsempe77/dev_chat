@@ -22,7 +22,7 @@ class FilterInput(BaseModel):
 
 class SearchSettings(BaseModel):
     """Search settings from the frontend SettingsDrawer."""
-    relevanceThreshold: float = Field(default=0.3, ge=0, le=1)  # Lowered from 0.5
+    relevanceThreshold: float = Field(default=0.5, ge=0, le=1)  # User can adjust via Settings
     maxStudies: int = Field(default=10, ge=3, le=25)
     answerStyle: Literal["executive", "research", "policy", "citations"] = "executive"
     useReranking: bool = True
