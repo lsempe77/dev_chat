@@ -757,35 +757,74 @@ async def get_processing_jobs():
     """
     Get list of processing jobs with their status.
     
-    TODO: Implement actual job tracking from Modal/database
+    Shows:
+    - Pending: Files in R2 input-pdfs/ that are not yet indexed in Qdrant
+    - Completed: Files that have been indexed in Qdrant
     """
-    # Mock data - replace with actual job tracking
-    jobs = [
-        ProcessingJob(
-            id="job-001",
-            filename="systematic_review_education.pdf",
-            status="processing",
-            progress=65,
-            started_at=datetime.now(),
-            pages=45,
-        ),
-        ProcessingJob(
-            id="job-002",
-            filename="rct_cash_transfers.pdf",
-            status="queued",
-            progress=0,
-        ),
-        ProcessingJob(
-            id="job-003",
-            filename="impact_eval_health.pdf",
-            status="completed",
-            progress=100,
-            started_at=datetime.now(),
-            completed_at=datetime.now(),
-            pages=32,
-            chunks=156,
-        ),
-    ]
+    jobs = []
+    
+    try:
+        # Get files from R2
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        r2_files = {}
+        paginator = r2_client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=bucket_name, Prefix="input-pdfs/"):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key.endswith(".pdf"):
+                    doc_id = key.split("/")[-1].rsplit(".", 1)[0]
+                    r2_files[doc_id] = {
+                        "key": key,
+                        "size": obj.get("Size", 0),
+                        "uploaded_at": obj.get("LastModified"),
+                    }
+        
+        # Get indexed doc_ids from Qdrant
+        indexed_doc_ids = set()
+        try:
+            indexer = QdrantIndexer()
+            # Scroll through to get unique doc_ids
+            next_offset = None
+            while True:
+                results, next_offset = indexer.client.scroll(
+                    collection_name=indexer.collection_name,
+                    limit=100,
+                    offset=next_offset,
+                    with_payload=["doc_id", "pdf_name"],
+                    with_vectors=False,
+                )
+                for point in results:
+                    payload = point.payload or {}
+                    doc_id = payload.get("doc_id") or payload.get("pdf_name")
+                    if doc_id:
+                        indexed_doc_ids.add(doc_id)
+                if next_offset is None or len(results) == 0:
+                    break
+        except Exception as e:
+            logger.warning(f"Could not get indexed doc_ids: {e}")
+        
+        # Create job entries
+        for doc_id, file_info in r2_files.items():
+            is_indexed = doc_id in indexed_doc_ids
+            jobs.append(ProcessingJob(
+                id=f"job-{doc_id[:8]}",
+                filename=file_info["key"].split("/")[-1],
+                status="completed" if is_indexed else "queued",
+                progress=100 if is_indexed else 0,
+                started_at=file_info.get("uploaded_at"),
+                completed_at=file_info.get("uploaded_at") if is_indexed else None,
+                doc_id=doc_id,
+            ))
+        
+        # Sort: queued first, then by filename
+        jobs.sort(key=lambda j: (j.status != "queued", j.filename))
+        
+    except Exception as e:
+        logger.error(f"Failed to get processing jobs: {e}")
+        # Return empty list on error
+        pass
     
     return ProcessingJobsResponse(
         jobs=jobs,
