@@ -208,8 +208,8 @@ class ContextBuilder:
             if subheader_parts:
                 header += f"\n*{', '.join(subheader_parts)}*"
             
-            # Combine chunk texts
-            chunk_texts = [c.text for c in chunks]
+            # Combine chunk texts - ensure each is a string
+            chunk_texts = [c.text if isinstance(c.text, str) else str(c.text) for c in chunks]
             combined_text = "\n\n".join(chunk_texts)
             
             # Add to sections
@@ -274,14 +274,17 @@ class ContextBuilder:
             title = meta.get("title", "")
             year = meta.get("year", "")
             
+            # Ensure text is a string
+            result_text = result.text if isinstance(result.text, str) else str(result.text)
+            
             if title:
                 header = f"[{title}"
                 if year:
                     header += f", {year}"
                 header += "]"
-                chunk_text = f"{header}\n{result.text}"
+                chunk_text = f"{header}\n{result_text}"
             else:
-                chunk_text = result.text
+                chunk_text = result_text
             
             chunks.append(chunk_text)
             

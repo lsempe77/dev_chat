@@ -237,12 +237,19 @@ class HybridRetriever:
             else:
                 text = str(raw_text) if raw_text else ""
             
+            # Handle parent_text similarly
+            raw_parent = r.payload.get("parent_text_full")
+            if isinstance(raw_parent, list):
+                parent_text = " ".join(str(t) for t in raw_parent)
+            else:
+                parent_text = str(raw_parent) if raw_parent else None
+            
             converted.append(RetrievalResult(
                 node_id=str(r.id),
                 text=text,
                 score=r.score,
                 metadata={k: v for k, v in r.payload.items() if k != "text"},
-                parent_text=r.payload.get("parent_text_full"),
+                parent_text=parent_text,
             ))
         return converted
     
@@ -259,12 +266,19 @@ class HybridRetriever:
             else:
                 text = str(raw_text) if raw_text else ""
             
+            # Handle parent_text similarly
+            raw_parent = p.payload.get("parent_text_full") if p.payload else None
+            if isinstance(raw_parent, list):
+                parent_text = " ".join(str(t) for t in raw_parent)
+            else:
+                parent_text = str(raw_parent) if raw_parent else None
+            
             converted.append(RetrievalResult(
                 node_id=str(p.id),
                 text=text,
                 score=p.score if hasattr(p, 'score') else 0.0,
                 metadata={k: v for k, v in (p.payload or {}).items() if k != "text"},
-                parent_text=p.payload.get("parent_text_full") if p.payload else None,
+                parent_text=parent_text,
             ))
         return converted
     
