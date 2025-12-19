@@ -57,6 +57,7 @@ export default function Home() {
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfTitle, setPdfTitle] = useState("");
   const [pdfSearchText, setPdfSearchText] = useState<string | undefined>();
+  const [pdfStudyId, setPdfStudyId] = useState<string | null>(null);  // Track which study's PDF is open
 
   const handleSearch = useCallback(async (searchQuery: string) => {
     console.log("[Page] handleSearch called with searchSettings:", searchSettings);
@@ -96,11 +97,9 @@ export default function Home() {
       studyElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     
-    // Check if we already have this PDF open - just update page/search if so
-    if (pdfViewerOpen && pdfTitle === (citation.study?.title || citation.studyId)) {
-      // Same PDF, just update the page and search text
-      setPdfPage(citation.page || 1);
-      setPdfSearchText(citation.highlightText || citation.text?.slice(0, 50));
+    // Check if we already have this study's PDF open - don't re-fetch
+    if (pdfViewerOpen && pdfStudyId === citation.studyId) {
+      // Same PDF already open - no action needed
       // Clear highlight after 3 seconds
       setTimeout(() => setHighlightedCitation(undefined), 3000);
       return;
@@ -112,6 +111,7 @@ export default function Home() {
       setPdfUrl(response.url);
       setPdfPage(citation.page || 1);
       setPdfTitle(citation.study?.title || citation.studyId);
+      setPdfStudyId(citation.studyId);  // Track which study
       // Use highlightText from citation, or fall back to first part of citation text
       setPdfSearchText(citation.highlightText || citation.text?.slice(0, 50));
       setPdfViewerOpen(true);
@@ -122,11 +122,12 @@ export default function Home() {
     
     // Clear highlight after 3 seconds
     setTimeout(() => setHighlightedCitation(undefined), 3000);
-  }, [citations, pdfViewerOpen, pdfTitle]);
+  }, [citations, pdfViewerOpen, pdfStudyId]);
   
   const closePdfViewer = useCallback(() => {
     setPdfViewerOpen(false);
     setPdfUrl(null);
+    setPdfStudyId(null);
   }, []);
 
   const handleSelectStudy = useCallback((study: Study) => {
