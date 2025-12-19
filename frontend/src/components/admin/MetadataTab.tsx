@@ -286,12 +286,12 @@ export function MetadataTab() {
             <ScrollArea className="h-[500px]">
               <div className="space-y-3">
                 {filteredDocs.map((doc) => (
-                  <Card key={doc.id} className="hover:bg-muted/50">
+                  <Card key={doc.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => openEditModal(doc)}>
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
+                      <div className="space-y-3">
+                        <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-medium truncate">{doc.title}</h4>
+                            <h4 className="font-medium">{doc.title}</h4>
                             {doc.needs_review && (
                               <Badge variant="outline" className="text-yellow-600 border-yellow-500">
                                 Needs Review
@@ -341,23 +341,23 @@ export function MetadataTab() {
                           </div>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 pt-2 border-t">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => openEditModal(doc)}
+                            onClick={(e) => { e.stopPropagation(); openEditModal(doc); }}
                           >
                             <Edit2 className="h-4 w-4 mr-1" />
-                            Edit
+                            Edit Metadata
                           </Button>
                           {doc.needs_review && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => markAsReviewed(doc.id)}
+                              onClick={(e) => { e.stopPropagation(); markAsReviewed(doc.id); }}
                             >
                               <Check className="h-4 w-4 mr-1" />
-                              OK
+                              Mark Reviewed
                             </Button>
                           )}
                         </div>
