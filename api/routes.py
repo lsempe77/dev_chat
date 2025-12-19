@@ -161,12 +161,23 @@ async def query_evidence(request: QueryRequest):
         for i, c in enumerate(response.citations):
             # Clean the snippet text for display
             raw_snippet = c.get("snippet", c.get("text", ""))
+            # Handle case where snippet is a list
+            if isinstance(raw_snippet, list):
+                raw_snippet = " ".join(str(s) for s in raw_snippet)
+            raw_snippet = str(raw_snippet) if raw_snippet else ""
             clean_snippet = clean_text_for_display(raw_snippet, max_length=300)
             
             # Handle authors - could be list, string, or missing
             raw_authors = c.get("authors")
             if isinstance(raw_authors, list):
-                authors_str = ", ".join(str(a) for a in raw_authors) if raw_authors else ""
+                # Flatten nested lists if necessary
+                flat_authors = []
+                for a in raw_authors:
+                    if isinstance(a, list):
+                        flat_authors.extend(str(x) for x in a)
+                    else:
+                        flat_authors.append(str(a))
+                authors_str = ", ".join(flat_authors) if flat_authors else ""
             elif raw_authors:
                 authors_str = str(raw_authors)
             else:
