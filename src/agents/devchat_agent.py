@@ -402,10 +402,18 @@ class DevChatAgent:
         # Extract topics from citations
         topics = set()
         for c in citations[:5]:  # Use top 5
-            if c.get("sector"):
-                topics.add(c["sector"])
-            if c.get("country"):
-                topics.add(c["country"])
+            sector = c.get("sector")
+            if sector:
+                if isinstance(sector, list):
+                    topics.update(str(s) for s in sector)
+                else:
+                    topics.add(str(sector))
+            country = c.get("country")
+            if country:
+                if isinstance(country, list):
+                    topics.update(str(co) for co in country)
+                else:
+                    topics.add(str(country))
         topics_str = ", ".join(topics) if topics else "general development"
         
         # Truncate answer for prompt

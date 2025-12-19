@@ -190,8 +190,12 @@ class ContextBuilder:
             meta = chunks[0].metadata
             title = meta.get("title", f"Study {study_id}")
             year = meta.get("year", "")
-            sector = meta.get("sector", "")
-            country = meta.get("country", "")
+            
+            # Handle sector/country that might be lists
+            raw_sector = meta.get("sector", "")
+            sector = ", ".join(raw_sector) if isinstance(raw_sector, list) else str(raw_sector) if raw_sector else ""
+            raw_country = meta.get("country", "")
+            country = ", ".join(raw_country) if isinstance(raw_country, list) else str(raw_country) if raw_country else ""
             
             # Build header with citation number [1], [2], etc.
             header_parts = [f"[{citation_num}] **{title}**"]
@@ -292,13 +296,20 @@ class ContextBuilder:
             study_id = result.study_id
             if study_id and study_id not in seen_studies:
                 seen_studies.add(study_id)
+                
+                # Handle sector/country that might be lists
+                raw_sector = meta.get("sector")
+                sector = ", ".join(raw_sector) if isinstance(raw_sector, list) else str(raw_sector) if raw_sector else ""
+                raw_country = meta.get("country")
+                country = ", ".join(raw_country) if isinstance(raw_country, list) else str(raw_country) if raw_country else ""
+                
                 citations.append({
                     "study_id": study_id,
                     "title": title,
                     "authors": meta.get("authors"),
                     "year": year,
-                    "sector": meta.get("sector"),
-                    "country": meta.get("country"),
+                    "sector": sector,
+                    "country": country,
                     "url": meta.get("url"),
                     "doi": meta.get("doi"),
                     "snippet": clean_text_for_display(result.text, 300),
