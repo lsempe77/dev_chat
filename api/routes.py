@@ -271,7 +271,9 @@ async def query_evidence(request: QueryRequest):
         )
         
     except Exception as e:
-        logger.error(f"Query error: {e}")
+        import traceback
+        full_traceback = traceback.format_exc()
+        logger.error(f"Query error: {e}\nFull traceback:\n{full_traceback}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
