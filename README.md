@@ -186,6 +186,93 @@ src/ingestion/metadata/
 
 ---
 
+## 📄 PDF Viewer & Clickable Citations Architecture
+
+Page-aware chunking enables clicking citations to jump directly to source pages in the PDF.
+
+### System Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              DATA FLOW                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1. PDF UPLOAD & PROCESSING (Modal)
+   ┌──────────┐    ┌─────────┐    ┌──────────────┐    ┌─────────┐
+   │  R2      │───▶│ MinerU  │───▶│ content_list │───▶│ Qdrant  │
+   │  (PDF)   │    │ Extract │    │ (page_idx)   │    │ (chunks)│
+   └──────────┘    └─────────┘    └──────────────┘    └─────────┘
+                                         │
+                                         ▼
+                                  ┌──────────────┐
+                                  │ Each chunk:  │
+                                  │ - text       │
+                                  │ - page_start │
+                                  │ - page_end   │
+                                  │ - pages[]    │
+                                  └──────────────┘
+
+2. CHAT WITH CITATIONS
+   ┌──────────┐    ┌─────────┐    ┌──────────────┐    ┌──────────────┐
+   │  User    │───▶│ Backend │───▶│   Qdrant     │───▶│  LLM with    │
+   │  Query   │    │  RAG    │    │   Search     │    │  Citations   │
+   └──────────┘    └─────────┘    └──────────────┘    └──────────────┘
+                                         │
+                                         ▼
+                                  ┌──────────────────────────────────┐
+                                  │ Response includes:               │
+                                  │ - Answer with [1], [2] refs     │
+                                  │ - Sources with page_start/end   │
+                                  └──────────────────────────────────┘
+
+3. PDF VIEWER (Admin Tab)
+   ┌──────────────┐    ┌───────────────┐    ┌─────────────────┐
+   │ "View PDF"   │───▶│ /admin/pdf-url│───▶│ R2 Presigned    │
+   │   Button     │    │  endpoint     │    │    URL          │
+   └──────────────┘    └───────────────┘    └─────────────────┘
+                                                    │
+                                                    ▼
+                                            ┌───────────────┐
+                                            │  PDFViewer    │
+                                            │  Component    │
+                                            │  (react-pdf)  │
+                                            └───────────────┘
+
+4. CLICKABLE CITATIONS (Chat Tab)
+   ┌──────────────┐    ┌───────────────┐    ┌─────────────────┐
+   │ Click [1]    │───▶│ Get doc_id +  │───▶│ Open PDF at     │
+   │ in response  │    │ page_start    │    │ specific page   │
+   └──────────────┘    └───────────────┘    └─────────────────┘
+```
+
+### Component Breakdown
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **MinerU** | `modal_mineru.py` | Extracts text with `page_idx` per block |
+| **Chunking** | `chunk_content_with_pages()` | Creates chunks preserving page numbers |
+| **Qdrant** | Cloud | Stores chunks with `page_start`, `page_end`, `pages[]` |
+| **Presigned URL API** | `api/routes.py` | Generates secure R2 URLs (1hr expiry) |
+| **PDFViewer** | `frontend/components/pdf/` | Renders PDF with page navigation |
+| **MetadataTab** | `frontend/components/admin/` | "View PDF" button opens viewer |
+
+### Qdrant Chunk Payload (with page info)
+
+```json
+{
+  "text": "The study found significant effects...",
+  "doc_id": "121378172_Gilligan_2024",
+  "page_start": 12,
+  "page_end": 13,
+  "pages": [12, 13],
+  "title": "Impact of agricultural programs...",
+  "authors": ["Gilligan, D."],
+  "year": 2024
+}
+```
+
+---
+
 ## 🚀 Quick Start
 
 ### Production URLs

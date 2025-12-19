@@ -756,6 +756,58 @@ async def list_r2_files(prefix: str = Query("input-pdfs/", description="Prefix t
         raise HTTPException(status_code=500, detail=f"Failed to list R2: {str(e)}")
 
 
+@admin_router.get("/pdf/{document_id:path}")
+async def get_pdf_url(document_id: str):
+    """
+    Get a presigned URL to view a PDF document.
+    
+    Returns a temporary URL (valid for 1 hour) that can be used to view the PDF.
+    """
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # Try input-pdfs first (original uploaded PDF)
+        r2_key = f"input-pdfs/{document_id}.pdf"
+        
+        # Check if file exists
+        try:
+            r2_client.head_object(Bucket=bucket_name, Key=r2_key)
+        except ClientError:
+            # Try without .pdf extension (in case document_id already has it)
+            if document_id.endswith('.pdf'):
+                r2_key = f"input-pdfs/{document_id}"
+                try:
+                    r2_client.head_object(Bucket=bucket_name, Key=r2_key)
+                except ClientError:
+                    raise HTTPException(status_code=404, detail=f"PDF not found: {document_id}")
+            else:
+                raise HTTPException(status_code=404, detail=f"PDF not found: {document_id}")
+        
+        # Generate presigned URL (valid for 1 hour)
+        presigned_url = r2_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': bucket_name,
+                'Key': r2_key,
+            },
+            ExpiresIn=3600,  # 1 hour
+        )
+        
+        return {
+            "document_id": document_id,
+            "url": presigned_url,
+            "expires_in": 3600,
+            "r2_key": r2_key,
+        }
+        
+    except HTTPException:
+        raise
+    except ClientError as e:
+        logger.error(f"Failed to generate presigned URL: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get PDF URL: {str(e)}")
+
+
 @admin_router.get("/jobs", response_model=ProcessingJobsResponse)
 async def get_processing_jobs():
     """

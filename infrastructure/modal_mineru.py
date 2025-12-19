@@ -491,10 +491,12 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             print(f"  Updated JSON with enriched metadata")
         
         # Generate embeddings and upsert to Qdrant with enriched metadata
+        # Pass content_list for page-aware chunking (if available from MinerU)
         chunk_count = embed_and_index(
             content=result["content"],
             metadata=enriched_metadata,
             doc_id=doc_id,
+            content_list=result.get("content_list"),  # Page-aware chunking
         )
         
         print(f"  Indexed: {chunk_count} chunks to Qdrant (doc_id={doc_id})")
@@ -615,6 +617,7 @@ def run_mineru(pdf_path: Path) -> dict:
         return {
             "success": True,
             "content": md_content if isinstance(md_content, str) else str(md_content),
+            "content_list": content_list,  # Structured content with page info
             "tables": tables,
             "formulas": formulas,
             "page_count": page_count,
@@ -660,16 +663,19 @@ def extract_abstract(content: str) -> Optional[str]:
 # Embedding & Indexing
 # ============================================================================
 
-def embed_and_index(content: str, metadata: dict, doc_id: str) -> int:
+def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: list = None) -> int:
     """
     Chunk content, generate embeddings, and upsert to Qdrant.
     
     Uses named vector 'dense' to match existing collection configuration.
+    When content_list is provided (from MinerU), uses page-aware chunking
+    to preserve page numbers for each chunk.
     
     Args:
         content: The document content to embed
         metadata: Document metadata (title, authors, year, source, doc_id)
         doc_id: Universal document identifier (used across all systems)
+        content_list: Optional MinerU content list with page_idx for page tracking
     
     Returns:
         Number of chunks indexed
@@ -746,8 +752,16 @@ def embed_and_index(content: str, metadata: dict, doc_id: str) -> int:
     except Exception as e:
         print(f"  Note: Could not create indexes: {e}")
     
-    # Simple chunking (semantic chunking could be added)
-    chunks = chunk_content(content, chunk_size=512, overlap=50)
+    # Chunk content - use page-aware chunking if content_list available
+    if content_list:
+        print(f"  Using page-aware chunking from {len(content_list)} content items...")
+        chunks_with_pages = chunk_content_with_pages(content_list, chunk_size=512, overlap=50)
+        chunks = [c["text"] for c in chunks_with_pages]
+        chunk_pages = chunks_with_pages  # Keep full info for payload
+    else:
+        print("  Using simple chunking (no page info available)")
+        chunks = chunk_content(content, chunk_size=512, overlap=50)
+        chunk_pages = None
     
     if not chunks:
         return 0
@@ -770,6 +784,18 @@ def embed_and_index(content: str, metadata: dict, doc_id: str) -> int:
         
         for j, (chunk, embedding) in enumerate(zip(batch, embeddings)):
             point_id = str(uuid.uuid4())
+            chunk_idx = i + j
+            
+            # Get page info if available
+            page_info = {}
+            if chunk_pages and chunk_idx < len(chunk_pages):
+                page_data = chunk_pages[chunk_idx]
+                page_info = {
+                    "page_start": page_data.get("page_start"),
+                    "page_end": page_data.get("page_end"),
+                    "pages": page_data.get("pages", []),
+                }
+            
             points.append(
                 PointStruct(
                     id=point_id,
@@ -780,7 +806,10 @@ def embed_and_index(content: str, metadata: dict, doc_id: str) -> int:
                         "doc_id": doc_id,  # Universal document ID
                         "pdf_name": metadata.get("pdf_name", doc_id),  # Backward compatibility
                         "source": metadata.get("source", ""),
-                        "chunk_index": i + j,
+                        "chunk_index": chunk_idx,
+                        
+                        # Page location info (for PDF navigation)
+                        **page_info,
                         
                         # Bibliographic metadata
                         "title": metadata.get("title", ""),
@@ -815,7 +844,7 @@ def embed_and_index(content: str, metadata: dict, doc_id: str) -> int:
 
 
 def chunk_content(text: str, chunk_size: int = 512, overlap: int = 50) -> list[str]:
-    """Split text into overlapping chunks."""
+    """Split text into overlapping chunks (legacy - no page info)."""
     words = text.split()
     chunks = []
     
@@ -823,6 +852,73 @@ def chunk_content(text: str, chunk_size: int = 512, overlap: int = 50) -> list[s
         chunk = " ".join(words[i:i + chunk_size])
         if chunk.strip():
             chunks.append(chunk)
+    
+    return chunks
+
+
+def chunk_content_with_pages(content_list: list, chunk_size: int = 512, overlap: int = 50) -> list[dict]:
+    """
+    Split structured content into chunks, preserving page numbers.
+    
+    Args:
+        content_list: MinerU content list with page_idx for each item
+        chunk_size: Target chunk size in words
+        overlap: Word overlap between chunks
+        
+    Returns:
+        List of dicts with 'text', 'page_start', 'page_end' keys
+    """
+    if not content_list or not isinstance(content_list, list):
+        return []
+    
+    chunks = []
+    current_chunk_words = []
+    current_chunk_pages = set()
+    
+    for item in content_list:
+        if not isinstance(item, dict):
+            continue
+            
+        # Get text content
+        text = item.get("text", "") or item.get("content", "") or ""
+        if not text.strip():
+            continue
+            
+        # Get page number (0-indexed from MinerU)
+        page_idx = item.get("page_idx", 0)
+        
+        words = text.split()
+        
+        for word in words:
+            current_chunk_words.append(word)
+            current_chunk_pages.add(page_idx)
+            
+            # Check if chunk is full
+            if len(current_chunk_words) >= chunk_size:
+                chunk_text = " ".join(current_chunk_words)
+                sorted_pages = sorted(current_chunk_pages)
+                chunks.append({
+                    "text": chunk_text,
+                    "page_start": sorted_pages[0] + 1,  # 1-indexed for display
+                    "page_end": sorted_pages[-1] + 1,
+                    "pages": [p + 1 for p in sorted_pages],  # All pages in this chunk
+                })
+                
+                # Keep overlap words for next chunk
+                current_chunk_words = current_chunk_words[-overlap:] if overlap > 0 else []
+                current_chunk_pages = {page_idx}  # Reset but keep current page
+    
+    # Don't forget the last chunk
+    if current_chunk_words:
+        chunk_text = " ".join(current_chunk_words)
+        if chunk_text.strip():
+            sorted_pages = sorted(current_chunk_pages)
+            chunks.append({
+                "text": chunk_text,
+                "page_start": sorted_pages[0] + 1,
+                "page_end": sorted_pages[-1] + 1,
+                "pages": [p + 1 for p in sorted_pages],
+            })
     
     return chunks
 

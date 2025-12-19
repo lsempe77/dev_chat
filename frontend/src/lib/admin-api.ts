@@ -405,3 +405,29 @@ export async function updateDocumentMetadata(
 
   return response.json();
 }
+
+// =============================================================================
+// PDF Viewer
+// =============================================================================
+
+export interface PDFUrlResponse {
+  document_id: string;
+  url: string;
+  expires_in: number;
+  r2_key: string;
+}
+
+/**
+ * Get a presigned URL to view a PDF document
+ */
+export async function getPDFUrl(documentId: string): Promise<PDFUrlResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/pdf/${encodeURIComponent(documentId)}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get PDF URL: ${response.statusText}`);
+  }
+
+  return response.json();
+}

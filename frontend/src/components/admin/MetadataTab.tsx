@@ -38,15 +38,18 @@ import {
   Building,
   BookOpen,
   Beaker,
-  Tag
+  Tag,
+  Eye,
 } from "lucide-react";
 import { 
   getMetadataForReview, 
   getDocumentMetadata,
   updateDocumentMetadata,
+  getPDFUrl,
   type DocumentMetadataDetail,
   type MetadataUpdateRequest,
 } from "@/lib/admin-api";
+import { PDFViewer } from "@/components/pdf";
 
 const STUDY_TYPES = [
   "RCT",
@@ -85,6 +88,32 @@ export function MetadataTab() {
   const [editingDoc, setEditingDoc] = useState<DocumentMetadataDetail | null>(null);
   const [editForm, setEditForm] = useState<MetadataUpdateRequest>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // PDF viewer state
+  const [viewingPdfDoc, setViewingPdfDoc] = useState<DocumentMetadataDetail | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+
+  // Open PDF viewer for a document
+  const openPdfViewer = async (doc: DocumentMetadataDetail) => {
+    setIsLoadingPdf(true);
+    setViewingPdfDoc(doc);
+    try {
+      const response = await getPDFUrl(doc.id);
+      setPdfUrl(response.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load PDF");
+      setViewingPdfDoc(null);
+    } finally {
+      setIsLoadingPdf(false);
+    }
+  };
+
+  // Close PDF viewer
+  const closePdfViewer = () => {
+    setViewingPdfDoc(null);
+    setPdfUrl(null);
+  };
 
   // Fetch documents
   const fetchDocuments = useCallback(async () => {
@@ -345,6 +374,14 @@ export function MetadataTab() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={(e) => { e.stopPropagation(); openPdfViewer(doc); }}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View PDF
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={(e) => { e.stopPropagation(); openEditModal(doc); }}
                           >
                             <Edit2 className="h-4 w-4 mr-1" />
@@ -522,6 +559,49 @@ export function MetadataTab() {
                   Save Changes
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Viewer Dialog */}
+      <Dialog open={!!viewingPdfDoc} onOpenChange={(open) => !open && closePdfViewer()}>
+        <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {viewingPdfDoc?.title || viewingPdfDoc?.filename}
+            </DialogTitle>
+            <DialogDescription>
+              {viewingPdfDoc?.filename} • {viewingPdfDoc?.chunk_count} chunks indexed
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-0">
+            {isLoadingPdf ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : pdfUrl ? (
+              <PDFViewer 
+                url={pdfUrl} 
+                className="h-full"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                <AlertCircle className="h-6 w-6 mr-2" />
+                Failed to load PDF
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closePdfViewer}>
+              Close
+            </Button>
+            <Button onClick={() => { closePdfViewer(); if (viewingPdfDoc) openEditModal(viewingPdfDoc); }}>
+              <Edit2 className="h-4 w-4 mr-2" />
+              Edit Metadata
             </Button>
           </DialogFooter>
         </DialogContent>
