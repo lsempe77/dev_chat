@@ -241,31 +241,89 @@ def extract_study_mentions(answer: str, citations: List[Dict]) -> List[str]:
     return list(set(mentioned))
 
 
-def get_cited_numbers(answer: str) -> set:
+def get_cited_indices(answer: str, citations: List[Dict]) -> set:
     """
-    Extract citation numbers [1], [2], etc. from the answer.
+    Extract which citation indices (0-based) are referenced in the answer.
+    
+    Detects multiple citation formats:
+    1. Bracketed numbers: [1], [2], [1, 2]
+    2. Ordinal references: "first study", "second study", "third study"
+    3. Study titles mentioned in text
+    4. Author names with years: "Smith (2020)"
     
     Args:
         answer: The generated answer text
+        citations: List of citation dictionaries
         
     Returns:
-        Set of citation numbers found (1-indexed)
+        Set of citation indices (0-based) found in answer
     """
     import re
-    # Match [1], [2], etc. - including grouped citations like [1, 2]
-    pattern = r'\[(\d+(?:,\s*\d+)*)\]'
-    matches = re.findall(pattern, answer)
     
-    numbers = set()
+    cited_indices = set()
+    answer_lower = answer.lower()
+    
+    # Method 1: Bracketed numbers [1], [2], [1, 2]
+    bracket_pattern = r'\[(\d+(?:,\s*\d+)*)\]'
+    matches = re.findall(bracket_pattern, answer)
     for match in matches:
-        # Handle grouped citations like "1, 2"
         for num in match.split(','):
             try:
-                numbers.add(int(num.strip()))
+                idx = int(num.strip()) - 1  # Convert to 0-based
+                if 0 <= idx < len(citations):
+                    cited_indices.add(idx)
             except ValueError:
                 pass
     
-    return numbers
+    # Method 2: Ordinal references ("first study", "second study", etc.)
+    ordinals = [
+        ("first", 0), ("1st", 0),
+        ("second", 1), ("2nd", 1),
+        ("third", 2), ("3rd", 2),
+        ("fourth", 3), ("4th", 3),
+        ("fifth", 4), ("5th", 4),
+        ("sixth", 5), ("6th", 5),
+        ("seventh", 6), ("7th", 6),
+        ("eighth", 7), ("8th", 7),
+        ("ninth", 8), ("9th", 8),
+        ("tenth", 9), ("10th", 9),
+    ]
+    
+    for ordinal, idx in ordinals:
+        # Look for patterns like "the first study", "first study shows"
+        if re.search(rf'\b{ordinal}\s+(?:study|paper|article|research|evaluation|review)\b', answer_lower):
+            if idx < len(citations):
+                cited_indices.add(idx)
+    
+    # Method 3: Title mentions (check if study title appears in answer)
+    for idx, citation in enumerate(citations):
+        title = citation.get("title", "")
+        if title:
+            # Check first 30 chars of title (case-insensitive)
+            title_start = title.lower()[:30]
+            if len(title_start) > 10 and title_start in answer_lower:
+                cited_indices.add(idx)
+        
+        # Method 4: Author + year pattern
+        authors = citation.get("authors", "")
+        year = citation.get("year")
+        if authors and year:
+            # Get first author's last name
+            if isinstance(authors, list):
+                first_author = str(authors[0]) if authors else ""
+            else:
+                first_author = str(authors).split(",")[0].strip()
+            
+            # Extract last name (last word)
+            last_name = first_author.split()[-1] if first_author.split() else ""
+            
+            if last_name and len(last_name) > 2:
+                # Look for "LastName (Year)" or "LastName, Year"
+                author_year_pattern = rf'\b{re.escape(last_name.lower())}\b.*?\b{year}\b'
+                if re.search(author_year_pattern, answer_lower):
+                    cited_indices.add(idx)
+    
+    return cited_indices
 
 
 def ensure_citation_coverage(
@@ -274,19 +332,19 @@ def ensure_citation_coverage(
     max_citations: int = 10,
 ) -> str:
     """
-    Ensure all retrieved sources are cited in the answer.
+    Ensure all retrieved sources are mentioned in the answer.
     
-    This is a post-processing validator that:
-    1. Checks which citations [1], [2], etc. appear in the answer
-    2. For uncited sources, appends a brief mention
+    This post-processor:
+    1. Detects which sources are already cited (by [N], ordinals, titles, or author-year)
+    2. For truly uncited sources, appends a clean "See also" section
     
     Args:
-        answer: The generated answer with some citations
+        answer: The generated answer (may have inline citations)
         citations: All retrieved citation dictionaries
         max_citations: Maximum number of citations to consider
         
     Returns:
-        Answer with all sources cited
+        Answer with all sources referenced
     """
     if not citations:
         return answer
@@ -294,40 +352,48 @@ def ensure_citation_coverage(
     # Limit to max_citations
     citations = citations[:max_citations]
     
-    # Find which citation numbers are already in the answer
-    cited_numbers = get_cited_numbers(answer)
+    # Find which citations are already referenced (0-based indices)
+    cited_indices = get_cited_indices(answer, citations)
     
-    # Find uncited sources (citation numbers are 1-indexed)
-    all_numbers = set(range(1, len(citations) + 1))
-    uncited_numbers = all_numbers - cited_numbers
+    # Find uncited sources
+    all_indices = set(range(len(citations)))
+    uncited_indices = all_indices - cited_indices
     
-    if not uncited_numbers:
-        # All sources cited!
+    if not uncited_indices:
+        # All sources cited - great!
         return answer
     
-    # Build additional citations section
-    additional_mentions = []
-    for num in sorted(uncited_numbers):
-        idx = num - 1
-        if idx < len(citations):
-            citation = citations[idx]
-            title = citation.get("title", "Study")
-            snippet = citation.get("snippet", "")
-            
-            # Create a brief mention of the uncited source
-            if snippet:
-                # Use first sentence of snippet
-                first_sentence = snippet.split('.')[0].strip()
-                if len(first_sentence) > 100:
-                    first_sentence = first_sentence[:100] + "..."
-                additional_mentions.append(f"[{num}] also notes: {first_sentence}.")
-            else:
-                additional_mentions.append(f"See also [{num}] for additional evidence on this topic.")
+    # Build "See also" section for uncited sources
+    see_also_items = []
+    for idx in sorted(uncited_indices):
+        citation = citations[idx]
+        title = citation.get("title", "")
+        year = citation.get("year", "")
+        authors = citation.get("authors", "")
+        
+        # Format: [N] Author (Year) - Title snippet
+        num = idx + 1  # 1-based for display
+        
+        # Get first author
+        if isinstance(authors, list):
+            first_author = str(authors[0]).split(",")[0].strip() if authors else ""
+        else:
+            first_author = str(authors).split(",")[0].strip() if authors else ""
+        
+        # Get short title
+        short_title = title[:50] + "..." if len(title) > 50 else title
+        
+        if first_author and year:
+            see_also_items.append(f"[{num}] {first_author} ({year})")
+        elif short_title:
+            see_also_items.append(f"[{num}] {short_title}")
+        else:
+            see_also_items.append(f"[{num}]")
     
-    if additional_mentions:
-        # Append as "Additional Sources" section
-        additional_section = "\n\n**Additional relevant sources:**\n" + " ".join(additional_mentions)
-        answer = answer.rstrip() + additional_section
+    if see_also_items:
+        # Append as clean "See also" line
+        see_also_text = "\n\n**See also:** " + ", ".join(see_also_items) + "."
+        answer = answer.rstrip() + see_also_text
     
     return answer
 
