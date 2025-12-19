@@ -890,3 +890,83 @@ def scheduled_processing():
     result = orchestrate.remote()
     print(f"Queued {result['queued']} new PDFs")
     return result
+
+
+# ============================================================================
+# HTTP Web Endpoint (for Railway trigger)
+# ============================================================================
+
+@app.function(
+    image=base_image,
+    secrets=[r2_secret, qdrant_secret, cohere_secret],
+    timeout=600,
+)
+@modal.web_endpoint(method="POST")
+def trigger_processing(request: dict = None) -> dict:
+    """
+    HTTP endpoint to trigger PDF processing from Railway/Vercel.
+    
+    POST body (all optional):
+        {
+            "force_reprocess": false,
+            "check_qdrant": true,
+            "max_documents": 10,
+            "api_key": "optional-secret-key"
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "queued": 5,
+            "skipped": 3,
+            "message": "Processing started"
+        }
+    
+    URL will be like:
+        https://[your-workspace]--devchat-mineru-trigger-processing.modal.run
+    """
+    import os
+    from datetime import datetime
+    
+    print(f"Trigger received at {datetime.now().isoformat()}")
+    
+    # Parse request body
+    if request is None:
+        request = {}
+    
+    force_reprocess = request.get("force_reprocess", False)
+    check_qdrant = request.get("check_qdrant", True)
+    max_documents = request.get("max_documents", 10)
+    
+    # Optional API key validation
+    expected_key = os.environ.get("TRIGGER_API_KEY")
+    if expected_key:
+        provided_key = request.get("api_key")
+        if provided_key != expected_key:
+            return {
+                "success": False,
+                "error": "Invalid or missing API key",
+                "queued": 0,
+            }
+    
+    try:
+        # Call the orchestrator (spawns in Modal's infrastructure)
+        result = orchestrate.remote(
+            force_reprocess=force_reprocess,
+            check_qdrant=check_qdrant
+        )
+        
+        return {
+            "success": True,
+            "queued": result.get("queued", 0),
+            "skipped": result.get("skipped", 0),
+            "message": f"Processing triggered. Queued {result.get('queued', 0)} PDFs.",
+        }
+        
+    except Exception as e:
+        print(f"Error in trigger: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "queued": 0,
+        }

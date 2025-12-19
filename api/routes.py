@@ -840,47 +840,54 @@ async def trigger_processing(request: TriggerProcessingRequest):
     """
     Trigger batch processing of pending PDFs.
     
-    Calls the Modal orchestrator function to process new PDFs.
+    Calls the Modal web endpoint to process new PDFs.
+    This works from Railway (unlike subprocess which needs modal CLI).
     """
-    import subprocess
+    import httpx
+    
+    # Modal web endpoint URL - set in environment or use default
+    modal_trigger_url = os.environ.get(
+        "MODAL_TRIGGER_URL",
+        "https://lsempe77--devchat-mineru-trigger-processing.modal.run"
+    )
     
     try:
-        # Run Modal orchestrator command with UTF-8 encoding
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        
-        result = subprocess.run(
-            ["modal", "run", "infrastructure/modal_mineru.py::orchestrate"],
-            capture_output=True,
-            timeout=60,  # Longer timeout for initial run
-            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            env=env,
-            encoding="utf-8",
-            errors="replace",  # Replace undecodable chars
-        )
-        
-        if result.returncode == 0:
-            # Parse output if available
-            logger.info(f"Modal orchestrate triggered: {result.stdout}")
-            return TriggerProcessingResponse(
-                queued=request.max_documents or 10,
-                skipped=0,
-                message=f"Processing triggered. Output: {result.stdout[:200] if result.stdout else 'Started'}",
-            )
-        else:
-            logger.error(f"Modal trigger failed: {result.stderr}")
-            return TriggerProcessingResponse(
-                queued=0,
-                skipped=0,
-                message=f"Trigger failed: {result.stderr[:200] if result.stderr else 'Unknown error'}",
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                modal_trigger_url,
+                json={
+                    "force_reprocess": request.force_reprocess if hasattr(request, 'force_reprocess') else False,
+                    "check_qdrant": True,
+                    "max_documents": request.max_documents or 10,
+                },
+                headers={"Content-Type": "application/json"},
             )
             
-    except subprocess.TimeoutExpired:
-        # This is expected - job continues in background
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"Modal trigger response: {result}")
+                
+                return TriggerProcessingResponse(
+                    queued=result.get("queued", 0),
+                    skipped=result.get("skipped", 0),
+                    message=result.get("message", "Processing triggered"),
+                )
+            else:
+                error_text = response.text[:200] if response.text else "Unknown error"
+                logger.error(f"Modal trigger failed ({response.status_code}): {error_text}")
+                return TriggerProcessingResponse(
+                    queued=0,
+                    skipped=0,
+                    message=f"Trigger failed: HTTP {response.status_code} - {error_text}",
+                )
+                
+    except httpx.TimeoutException:
+        # This might mean processing started but took too long to respond
+        logger.warning("Modal trigger timed out - processing may still be running")
         return TriggerProcessingResponse(
             queued=request.max_documents or 10,
             skipped=0,
-            message="Processing triggered in background (Modal running)",
+            message="Processing triggered (response timed out, but may still be running)",
         )
     except Exception as e:
         logger.error(f"Failed to trigger Modal: {e}")
