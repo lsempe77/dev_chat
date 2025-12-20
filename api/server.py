@@ -5,13 +5,14 @@ Main application entry point.
 """
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from api.qdrant_status import warm_up_qdrant_connection
 from api.routes import admin_router, api_router, chat_router, health_router, router
 from src.config.settings import settings
 from src.utils.logging import get_logger, setup_logging
@@ -19,42 +20,6 @@ from src.utils.logging import get_logger, setup_logging
 # Setup logging
 setup_logging()
 logger = get_logger(__name__)
-
-
-async def initialize_qdrant_connection():
-    """
-    Initialize Qdrant connection in background.
-    
-    This warms up the connection so health checks don't block.
-    """
-    from api.routes import get_indexer, update_qdrant_status
-    
-    try:
-        logger.info("🔌 Initializing Qdrant connection in background...")
-        loop = asyncio.get_event_loop()
-        
-        def _connect():
-            indexer = get_indexer()
-            # Verify connection by getting collections
-            collections = indexer.client.get_collections()
-            return True
-        
-        # Run with timeout
-        result = await asyncio.wait_for(
-            loop.run_in_executor(None, _connect),
-            timeout=30.0  # Allow up to 30 seconds on cold start
-        )
-        
-        # Update cache
-        update_qdrant_status(True, "Connected on startup")
-        logger.info("✅ Qdrant connection initialized successfully")
-        
-    except asyncio.TimeoutError:
-        logger.warning("⚠️ Qdrant connection timed out during startup")
-        update_qdrant_status(False, "Connection timeout during startup")
-    except Exception as e:
-        logger.error(f"❌ Qdrant connection failed during startup: {e}")
-        update_qdrant_status(False, str(e)[:100])
 
 
 @asynccontextmanager
@@ -69,13 +34,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Embedding Model: {settings.embedding_model}")
     logger.info(f"Hybrid Search: {'enabled' if settings.hybrid_enabled else 'disabled'}")
     logger.info(f"Reranking: {'enabled' if settings.rerank_enabled else 'disabled'}")
-    
-    # Initialize Qdrant connection in background (don't block startup)
-    asyncio.create_task(initialize_qdrant_connection())
-    
+
+    warmup_task = asyncio.create_task(warm_up_qdrant_connection())
+
     yield
-    
+
     # Shutdown
+    warmup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await warmup_task
     logger.info("👋 DevChat v2.0 SOTA shutting down...")
 
 
@@ -184,11 +151,11 @@ app.include_router(admin_router)
 app.include_router(api_router)  # Frontend API endpoints
 
 
-# Simple health endpoint that doesn't require any external connections
-# This is used by Railway healthcheck
-@app.get("/health")
+# Simple health endpoint that doesn't collide with the richer /health response
+# Used by Railway healthcheck to avoid cold-start dependency checks
+@app.get("/health/ping", include_in_schema=False)
 async def simple_health():
-    """Simple health check for Railway."""
+    """Lightweight health check for platform probes."""
     return {"status": "ok", "service": "devchat-api", "version": "2.0.0"}
 
 
