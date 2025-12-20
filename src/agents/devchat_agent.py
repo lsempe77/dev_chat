@@ -270,8 +270,9 @@ class DevChatAgent:
                 query=processed_query,
                 context=context,
             )
-            # Log claim extraction stats
-            logger.info(f"Extracted {len(claim_ledger.claims)} claims from {context.num_studies} sources")
+            # Log evidence extraction stats
+            sources_with_evidence = claim_ledger.get_sources_with_claims()
+            logger.info(f"Extracted evidence from {len(sources_with_evidence)}/{context.num_studies} sources")
             model_used = "structured/gpt-4o-mini"
         else:
             # Standard single-pass synthesis
