@@ -15,6 +15,7 @@ from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
+from qdrant_client import models
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1587,17 +1588,56 @@ async def get_metadata_for_review(
         MAX_SCROLL_POINTS = 5000  # Don't scroll through 48k+ vectors
         MAX_DOCS = 200  # We only need a sample for review
         
+        # Build Qdrant filter to push work to DB
+        scroll_filter = None
+        
+        needs_review_condition = models.Filter(
+            should=[
+                models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
+                models.FieldCondition(key="needs_review", is_null=models.IsNullCondition(is_null=True))
+            ]
+        )
+        
+        low_confidence_condition = models.FieldCondition(
+            key="metadata_confidence", 
+            range=models.Range(lt=0.5)
+        )
+        
+        if filter_type == "needs_review":
+            scroll_filter = needs_review_condition
+        elif filter_type == "low_confidence":
+            scroll_filter = models.Filter(must=[low_confidence_condition])
+        else:
+            # Default: Show anything that needs review OR has low confidence
+            scroll_filter = models.Filter(
+                should=[
+                    models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
+                    models.FieldCondition(key="needs_review", is_null=models.IsNullCondition(is_null=True)),
+                    low_confidence_condition
+                ]
+            )
+
         # Scroll through points with limits
         doc_map = {}
         next_offset = None
         points_processed = 0
         
+        # Only fetch necessary payload fields to reduce bandwidth
+        payload_fields = [
+            "doc_id", "pdf_name", "source", "title", "authors", "year", "doi", 
+            "journal", "publisher", "cited_by_count", "is_open_access", 
+            "countries", "sectors", "study_type", "intervention_type", 
+            "sdgs", "keywords", "metadata_source", "metadata_confidence", 
+            "needs_review"
+        ]
+        
         while points_processed < MAX_SCROLL_POINTS and len(doc_map) < MAX_DOCS:
             results, next_offset = indexer.client.scroll(
                 collection_name=indexer.collection_name,
+                scroll_filter=scroll_filter,
                 limit=100,
                 offset=next_offset,
-                with_payload=True,
+                with_payload=payload_fields,
                 with_vectors=False,
             )
             
