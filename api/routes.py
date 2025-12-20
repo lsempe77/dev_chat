@@ -392,6 +392,10 @@ async def health_check():
         "api": True,
         "qdrant": False,
         "llm": False,
+        # Frontend expects these:
+        "r2": False,
+        "cohere": False,
+        "modal": True,  # Assume Modal is available if backend is running
     }
     
     # Check Qdrant
@@ -402,9 +406,20 @@ async def health_check():
     except Exception as e:
         logger.warning(f"Qdrant health check failed: {e}")
     
-    # Check LLM (basic check)
+    # Check LLM/Cohere (basic check - if API keys are configured)
     try:
-        components["llm"] = bool(settings.anthropic_api_key or settings.openai_api_key or settings.openrouter_api_key)
+        has_llm = bool(settings.anthropic_api_key or settings.openai_api_key or settings.openrouter_api_key)
+        components["llm"] = has_llm
+        components["cohere"] = bool(settings.cohere_api_key)
+    except Exception:
+        pass
+    
+    # Check R2 (basic check - if credentials are configured)
+    try:
+        import os
+        r2_access = os.getenv("R2_ACCESS_KEY_ID")
+        r2_secret = os.getenv("R2_SECRET_ACCESS_KEY")
+        components["r2"] = bool(r2_access and r2_secret)
     except Exception:
         pass
     
