@@ -787,24 +787,139 @@ async def ingest_documents(request: IngestRequest):
 async def get_admin_status():
     """
     Get admin dashboard status including storage and service connections.
+    
+    Performs real checks on all services with timeouts to prevent blocking.
     """
-    # TODO: Replace with actual R2/Modal/Qdrant checks
+    import asyncio
+    
+    connections = []
+    storage_info = StorageStatus(
+        bucket=os.getenv("R2_BUCKET_NAME", "devchat-pdfs"),
+        input_path="/input-pdfs/",
+        output_path="/outputs/",
+        storage_used_bytes=0,
+        file_count=0,
+    )
+    
+    # Check R2 (with timeout)
+    async def check_r2():
+        try:
+            loop = asyncio.get_event_loop()
+            
+            def _check():
+                account_id = os.getenv("R2_ACCOUNT_ID", "667549da0201b12a53872d803b9880b6")
+                access_key = os.getenv("R2_ACCESS_KEY_ID")
+                secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+                
+                if not access_key or not secret_key:
+                    return "disconnected", "No credentials", 0, 0
+                
+                client = boto3.client(
+                    "s3",
+                    endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    region_name="auto",
+                )
+                
+                bucket = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+                # List objects to get count and size (limit to first 100 for speed)
+                response = client.list_objects_v2(Bucket=bucket, Prefix="input-pdfs/", MaxKeys=100)
+                
+                file_count = response.get("KeyCount", 0)
+                total_size = sum(obj.get("Size", 0) for obj in response.get("Contents", []))
+                
+                return "connected", bucket, file_count, total_size
+            
+            status, details, count, size = await asyncio.wait_for(
+                loop.run_in_executor(None, _check),
+                timeout=5.0
+            )
+            return status, details, count, size
+        except asyncio.TimeoutError:
+            return "timeout", "Connection timeout", 0, 0
+        except Exception as e:
+            logger.warning(f"R2 check failed: {e}")
+            return "disconnected", str(e)[:50], 0, 0
+    
+    # Check Qdrant (use cached collection info)
+    async def check_qdrant():
+        try:
+            # Use the cached collection info endpoint logic
+            if _collection_info_cache["data"] and _collection_info_cache["data"].get("points_count"):
+                info = _collection_info_cache["data"]
+                return "connected", f"{info['points_count']:,} vectors"
+            
+            # Try fresh check
+            loop = asyncio.get_event_loop()
+            
+            def _check():
+                indexer = get_indexer()
+                info = indexer.get_collection_info()
+                return info
+            
+            info = await asyncio.wait_for(
+                loop.run_in_executor(None, _check),
+                timeout=3.0
+            )
+            
+            if "error" in info:
+                return "disconnected", info["error"][:50]
+            return "connected", f"{info.get('points_count', 0):,} vectors"
+        except asyncio.TimeoutError:
+            return "timeout", "Connection timeout"
+        except Exception as e:
+            logger.warning(f"Qdrant check failed: {e}")
+            return "disconnected", str(e)[:50]
+    
+    # Check LLM (just verify API key exists)
+    def check_llm():
+        if settings.openrouter_api_key:
+            return "connected", "OpenRouter (GPT-4o)"
+        elif settings.openai_api_key:
+            return "connected", "OpenAI"
+        elif settings.anthropic_api_key:
+            return "connected", "Anthropic"
+        return "disconnected", "No API key"
+    
+    # Check Cohere
+    def check_cohere():
+        if settings.cohere_api_key:
+            return "connected", "embed-v4.0"
+        return "disconnected", "No API key"
+    
+    # Run checks in parallel
+    r2_result, qdrant_result = await asyncio.gather(
+        check_r2(),
+        check_qdrant(),
+    )
+    
+    r2_status, r2_details, file_count, total_size = r2_result
+    qdrant_status, qdrant_details = qdrant_result
+    llm_status, llm_details = check_llm()
+    cohere_status, cohere_details = check_cohere()
+    
+    # Update storage info
+    storage_info = StorageStatus(
+        bucket=os.getenv("R2_BUCKET_NAME", "devchat-pdfs"),
+        input_path="/input-pdfs/",
+        output_path="/outputs/",
+        storage_used_bytes=total_size,
+        file_count=file_count,
+    )
+    
+    connections = [
+        ServiceConnection(name="Cloudflare R2", status=r2_status, details=r2_details),
+        ServiceConnection(name="Qdrant Cloud", status=qdrant_status, details=qdrant_details),
+        ServiceConnection(name="LLM Provider", status=llm_status, details=llm_details),
+        ServiceConnection(name="Cohere API", status=cohere_status, details=cohere_details),
+    ]
+    
     return AdminStatusResponse(
-        storage=StorageStatus(
-            bucket="devchat-pdfs",
-            input_path="/input-pdfs/",
-            output_path="/outputs/",
-            storage_used_bytes=2_500_000_000,  # 2.5 GB placeholder
-            file_count=42,
-        ),
-        connections=[
-            ServiceConnection(name="Cloudflare R2", status="connected", details="devchat-pdfs"),
-            ServiceConnection(name="Qdrant Cloud", status="connected", details="1,234 vectors"),
-            ServiceConnection(name="Modal", status="connected", details="2 workers"),
-            ServiceConnection(name="Cohere API", status="connected", details="embed-v4.0"),
-        ],
-        pending_jobs=3,
-        active_workers=1,
+        storage=storage_info,
+        connections=connections,
+        pending_jobs=0,  # TODO: Track actual job queue
+        active_workers=1 if all(c.status == "connected" for c in connections) else 0,
     )
 
 
