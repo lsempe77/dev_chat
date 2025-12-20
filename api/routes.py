@@ -1617,6 +1617,20 @@ async def get_metadata_for_review(
                     doc_id = doc_id[:-4]
                 
                 if doc_id not in doc_map:
+                    # Handle intervention_type - could be string or list
+                    intervention_type_raw = payload.get("intervention_type")
+                    if isinstance(intervention_type_raw, list):
+                        intervention_type = ", ".join(intervention_type_raw) if intervention_type_raw else None
+                    else:
+                        intervention_type = intervention_type_raw
+                    
+                    # Handle study_type - could be string or list
+                    study_type_raw = payload.get("study_type")
+                    if isinstance(study_type_raw, list):
+                        study_type = ", ".join(study_type_raw) if study_type_raw else None
+                    else:
+                        study_type = study_type_raw
+                    
                     doc_map[doc_id] = {
                         "id": doc_id,
                         "title": payload.get("title", doc_id),
@@ -1630,8 +1644,8 @@ async def get_metadata_for_review(
                         "is_open_access": payload.get("is_open_access", False),
                         "countries": payload.get("countries", []),
                         "sectors": payload.get("sectors", []),
-                        "study_type": payload.get("study_type"),
-                        "intervention_type": payload.get("intervention_type"),
+                        "study_type": study_type,
+                        "intervention_type": intervention_type,
                         "sdgs": payload.get("sdgs", []),
                         "keywords": payload.get("keywords", []),
                         "metadata_source": payload.get("metadata_source", "extraction"),
