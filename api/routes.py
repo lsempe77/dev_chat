@@ -628,10 +628,24 @@ async def get_metrics(
     )
 
 
+# Cache for collection info (refreshes every 30 seconds)
+_collection_info_cache = {
+    "data": None,
+    "timestamp": 0
+}
+COLLECTION_CACHE_TTL = 30  # seconds
+
+
 @admin_router.get("/collection")
 async def get_collection_info():
-    """Get vector collection information."""
+    """Get vector collection information. Cached for 30 seconds."""
     import asyncio
+    import time
+    
+    # Check cache first
+    now = time.time()
+    if _collection_info_cache["data"] and (now - _collection_info_cache["timestamp"]) < COLLECTION_CACHE_TTL:
+        return _collection_info_cache["data"]
     
     try:
         # Wrap sync call with timeout to prevent hanging
@@ -642,10 +656,18 @@ async def get_collection_info():
         loop = asyncio.get_event_loop()
         info = await asyncio.wait_for(
             loop.run_in_executor(None, _get_info),
-            timeout=10.0  # 10 second timeout
+            timeout=8.0  # 8 second timeout
         )
+        
+        # Cache the result
+        _collection_info_cache["data"] = info
+        _collection_info_cache["timestamp"] = now
+        
         return info
     except asyncio.TimeoutError:
+        # Return cached data if available, even if stale
+        if _collection_info_cache["data"]:
+            return _collection_info_cache["data"]
         return {
             "error": "Qdrant connection timeout",
             "name": settings.qdrant_collection_name,

@@ -271,7 +271,7 @@ export async function listR2Files(prefix: string = "input-pdfs/"): Promise<R2Lis
  * Get admin status (connections, storage, workers)
  */
 export async function getAdminStatus(): Promise<AdminStatusResponse> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/status`);
+  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/status`, {}, 15000); // 15s timeout
 
   if (!response.ok) {
     throw new Error(`Failed to fetch admin status: ${response.statusText}`);
@@ -289,7 +289,7 @@ export async function getCollectionInfo(): Promise<{
   vectors_count: number;
   status: string;
 }> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/collection`);
+  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/collection`, {}, 15000); // 15s timeout
 
   if (!response.ok) {
     throw new Error(`Failed to fetch collection info: ${response.statusText}`);
