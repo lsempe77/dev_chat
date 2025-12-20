@@ -4,6 +4,7 @@ DevChat v2.0 SOTA - API Routes
 Defines all API endpoints.
 """
 
+import asyncio
 import os
 from datetime import datetime
 from typing import Optional
@@ -650,7 +651,6 @@ def _invalidate_admin_caches() -> None:
 @admin_router.get("/collection")
 async def get_collection_info():
     """Get vector collection information. Cached for 30 seconds."""
-    import asyncio
     import time
     
     # Check cache first
@@ -801,8 +801,6 @@ async def get_admin_status():
     
     Performs real checks on all services with timeouts to prevent blocking.
     """
-    import asyncio
-    
     connections = []
     storage_info = StorageStatus(
         bucket=os.getenv("R2_BUCKET_NAME", "devchat-pdfs"),
@@ -1279,8 +1277,6 @@ async def get_documents(
     Aggregates unique documents from vector payloads.
     Optimized: Limits scroll to avoid timeout with large collections.
     """
-    import asyncio
-    
     try:
         # Serve from cache when requesting the common default view
         now_ts = asyncio.get_event_loop().time()
