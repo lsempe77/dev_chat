@@ -7,6 +7,36 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Timeout for admin API calls (shorter than query timeout)
+const ADMIN_TIMEOUT_MS = 10_000; // 10 seconds
+
+/**
+ * Fetch with timeout for admin endpoints
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = ADMIN_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs / 1000} seconds`);
+    }
+    throw error;
+  }
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -241,7 +271,7 @@ export async function listR2Files(prefix: string = "input-pdfs/"): Promise<R2Lis
  * Get admin status (connections, storage, workers)
  */
 export async function getAdminStatus(): Promise<AdminStatusResponse> {
-  const response = await fetch(`${API_BASE_URL}/admin/status`);
+  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/status`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch admin status: ${response.statusText}`);
@@ -259,7 +289,7 @@ export async function getCollectionInfo(): Promise<{
   vectors_count: number;
   status: string;
 }> {
-  const response = await fetch(`${API_BASE_URL}/admin/collection`);
+  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/collection`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch collection info: ${response.statusText}`);
@@ -277,7 +307,7 @@ export async function checkHealth(): Promise<{
   timestamp: string;
   components: Record<string, boolean>;
 }> {
-  const response = await fetch(`${API_BASE_URL}/health`);
+  const response = await fetchWithTimeout(`${API_BASE_URL}/health`, {}, 5000); // 5s timeout for health
 
   if (!response.ok) {
     throw new Error(`Health check failed: ${response.statusText}`);

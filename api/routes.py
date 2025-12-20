@@ -592,12 +592,35 @@ async def get_metrics(
 @admin_router.get("/collection")
 async def get_collection_info():
     """Get vector collection information."""
+    import asyncio
+    
     try:
-        indexer = QdrantIndexer()
-        info = indexer.get_collection_info()
+        # Wrap sync call with timeout to prevent hanging
+        def _get_info():
+            indexer = QdrantIndexer()
+            return indexer.get_collection_info()
+        
+        loop = asyncio.get_event_loop()
+        info = await asyncio.wait_for(
+            loop.run_in_executor(None, _get_info),
+            timeout=10.0  # 10 second timeout
+        )
         return info
+    except asyncio.TimeoutError:
+        return {
+            "error": "Qdrant connection timeout",
+            "name": settings.qdrant_collection_name,
+            "points_count": 0,
+            "status": "timeout"
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Collection info error: {e}")
+        return {
+            "error": str(e),
+            "name": settings.qdrant_collection_name,
+            "points_count": 0,
+            "status": "error"
+        }
 
 
 @admin_router.post("/indexes")
