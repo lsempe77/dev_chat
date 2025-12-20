@@ -5,6 +5,12 @@ Two-pass approach for citation accuracy:
 1. First pass: Extract structured evidence from EACH source separately
 2. Second pass: Write comprehensive answer using only extracted evidence
 
+Production-ready with:
+- Configurable source limits (prevents timeout with large corpus)
+- Concurrent LLM calls with semaphore (faster, respects rate limits)
+- Graceful error handling and fallbacks
+- Request-level timeouts
+
 Designed for Impact Evaluation research, extracting:
 - Intervention details
 - Outcomes measured  
@@ -16,6 +22,7 @@ References:
 - ALCE benchmark: https://arxiv.org/abs/2305.14627
 """
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass, field
@@ -138,11 +145,18 @@ class StructuredSynthesizer:
     
     Pass 1: Extract claims from each source relevant to query
     Pass 2: Write answer using only extracted claims
+    
+    Production features:
+    - Configurable max sources (settings.max_sources_for_extraction)
+    - Concurrent LLM calls (settings.llm_concurrency_limit)
+    - Timeout handling per extraction
     """
     
     def __init__(self, llm=None):
         self.llm = llm
         self._setup_llm()
+        # Semaphore for concurrent LLM calls
+        self._llm_semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
     
     def _setup_llm(self):
         """Initialize LLM using OpenRouter via OpenAI-like interface."""
@@ -206,34 +220,74 @@ class StructuredSynthesizer:
         citations: List[Dict],
     ) -> ClaimLedger:
         """
-        Pass 1: Extract structured evidence from EACH source separately.
+        Pass 1: Extract structured evidence from sources with production limits.
         
-        Ensures we get evidence from ALL sources, not just the first.
-        Uses Impact Evaluation structure: intervention, outcomes, effects.
+        Features:
+        - Limits sources to settings.max_sources_for_extraction (default 8)
+        - Runs extractions concurrently with semaphore
+        - Graceful timeout handling per source
         """
         ledger = ClaimLedger(query=query, sources=citations)
+        
+        # Apply source limit for production scaling
+        max_sources = min(len(citations), settings.max_sources_for_extraction)
+        if len(citations) > max_sources:
+            logger.info(
+                f"Limiting source extraction from {len(citations)} to {max_sources} "
+                f"(settings.max_sources_for_extraction={settings.max_sources_for_extraction})"
+            )
         
         # Parse context to separate sources
         source_sections = self._split_context_by_source(context_text, len(citations))
         
-        # Extract from EACH source individually
-        for source_id, (source_text, citation) in enumerate(zip(source_sections, citations), 1):
+        # Prepare extraction tasks (limited to max_sources)
+        async def extract_with_semaphore(source_id: int, source_text: str, title: str) -> Optional[StudyEvidence]:
+            """Extract with concurrency control and timeout."""
+            async with self._llm_semaphore:
+                try:
+                    # Timeout per extraction (30 seconds)
+                    return await asyncio.wait_for(
+                        self._extract_single_source(
+                            source_id=source_id,
+                            source_text=source_text,
+                            title=title,
+                            query=query,
+                        ),
+                        timeout=30.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"Extraction timeout for source {source_id}: {title[:50]}...")
+                    return None
+                except Exception as e:
+                    logger.error(f"Extraction error for source {source_id}: {e}")
+                    return None
+        
+        # Create concurrent tasks for limited sources
+        tasks = []
+        for source_id, (source_text, citation) in enumerate(
+            zip(source_sections[:max_sources], citations[:max_sources]), 1
+        ):
             if not source_text.strip():
                 continue
-                
-            evidence = await self._extract_single_source(
-                source_id=source_id,
-                source_text=source_text,
-                title=citation.get('title', f'Study {source_id}'),
-                query=query,
-            )
+            title = citation.get('title', f'Study {source_id}')
+            tasks.append(extract_with_semaphore(source_id, source_text, title))
+        
+        # Run all extractions concurrently
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            if evidence:
-                ledger.evidence.append(evidence)
+            for result in results:
+                if isinstance(result, StudyEvidence):
+                    ledger.evidence.append(result)
+                elif isinstance(result, Exception):
+                    logger.error(f"Extraction task failed: {result}")
         
         # Log which sources we got evidence from
         sources_covered = ledger.get_sources_with_claims()
-        logger.info(f"Extracted evidence from {len(sources_covered)}/{len(citations)} sources: {sources_covered}")
+        logger.info(
+            f"Extracted evidence from {len(sources_covered)}/{len(citations)} sources "
+            f"(processed {max_sources}, succeeded {len(sources_covered)}): {sources_covered}"
+        )
         
         return ledger
     

@@ -59,6 +59,39 @@ app.add_middleware(
 )
 
 
+# Request timeout middleware
+@app.middleware("http")
+async def timeout_middleware(request: Request, call_next):
+    """Add timeout to requests to prevent hanging connections."""
+    import asyncio
+    
+    # Skip timeout for health checks and admin endpoints
+    skip_paths = ["/health", "/admin", "/docs", "/redoc", "/openapi.json"]
+    if any(request.url.path.startswith(p) for p in skip_paths):
+        return await call_next(request)
+    
+    try:
+        # Use configurable timeout from settings
+        return await asyncio.wait_for(
+            call_next(request),
+            timeout=settings.request_timeout_seconds
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            f"Request timeout after {settings.request_timeout_seconds}s: "
+            f"{request.method} {request.url.path}"
+        )
+        return JSONResponse(
+            status_code=504,
+            content={
+                "error": "gateway_timeout",
+                "message": f"Request timed out after {settings.request_timeout_seconds} seconds",
+                "suggestion": "Try a simpler query or reduce the number of studies",
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
+
+
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

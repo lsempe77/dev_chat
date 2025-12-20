@@ -3,6 +3,41 @@ import type { SearchSettings } from "@/components/workbench/SettingsDrawer";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Production timeout settings (in milliseconds)
+const QUERY_TIMEOUT_MS = 120_000; // 2 minutes for complex queries
+const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds for simple requests
+
+/**
+ * Create a fetch request with timeout and abort controller
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(
+        `Request timed out after ${timeoutMs / 1000} seconds. ` +
+        `The query may be too complex or the server is busy. ` +
+        `Try simplifying your query or reducing the number of studies.`
+      );
+    }
+    throw error;
+  }
+}
+
 export async function queryEvidence(
   query: string,
   filters: Filter[] = [],
@@ -28,16 +63,32 @@ export async function queryEvidence(
   
   console.log("[API] Request body:", JSON.stringify(requestBody, null, 2));
   
-  const response = await fetch(`${API_BASE_URL}/api/query`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetchWithTimeout(
+    `${API_BASE_URL}/api/query`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
     },
-    body: JSON.stringify(requestBody),
-  });
+    QUERY_TIMEOUT_MS // Use longer timeout for queries
+  );
 
   if (!response.ok) {
-    throw new Error(`API error: ${response.statusText}`);
+    // Parse error details if available
+    let errorMessage = `API error: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.detail) {
+        errorMessage = errorData.detail;
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+    throw new Error(errorMessage);
   }
 
   return response.json();

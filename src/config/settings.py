@@ -177,6 +177,40 @@ class Settings(BaseSettings):
     query_classification_enabled: bool = Field(default=True)
     
     # =========================================================================
+    # Production Scaling & Performance
+    # =========================================================================
+    # Max sources to process in structured synthesizer (prevents timeout with large corpus)
+    max_sources_for_extraction: int = Field(
+        default=8, 
+        ge=1, 
+        le=20,
+        description="Maximum sources to process for per-source evidence extraction"
+    )
+    # Concurrency for LLM calls (prevents rate limiting and reduces total time)
+    llm_concurrency_limit: int = Field(
+        default=4,
+        ge=1,
+        le=10,
+        description="Max concurrent LLM API calls"
+    )
+    # Request timeout in seconds
+    request_timeout_seconds: int = Field(
+        default=120,
+        ge=30,
+        le=300,
+        description="Maximum time for a single query request"
+    )
+    # Enable response caching
+    enable_response_cache: bool = Field(
+        default=True,
+        description="Cache query responses for identical queries"
+    )
+    response_cache_ttl_seconds: int = Field(
+        default=3600,
+        description="Time-to-live for cached responses in seconds"
+    )
+    
+    # =========================================================================
     # Validators
     # =========================================================================
     
