@@ -77,6 +77,14 @@ api_router = APIRouter(prefix="/api", tags=["Frontend API"])
 _agent: Optional[DevChatAgent] = None
 _indexer: Optional[QdrantIndexer] = None
 
+# Cache for Qdrant connection status (survives between requests)
+_qdrant_status_cache = {
+    "connected": None,  # None = unknown, True/False = known state
+    "last_check": 0,
+    "details": ""
+}
+QDRANT_STATUS_CACHE_TTL = 60  # Seconds to cache the connection status
+
 
 def get_agent() -> DevChatAgent:
     """Get or create the global agent instance."""
@@ -92,6 +100,20 @@ def get_indexer() -> QdrantIndexer:
     if _indexer is None:
         _indexer = QdrantIndexer()
     return _indexer
+
+
+def is_indexer_initialized() -> bool:
+    """Check if the indexer has been initialized without creating it."""
+    return _indexer is not None
+
+
+def update_qdrant_status(connected: bool, details: str = ""):
+    """Update the cached Qdrant connection status."""
+    import time
+    global _qdrant_status_cache
+    _qdrant_status_cache["connected"] = connected
+    _qdrant_status_cache["last_check"] = time.time()
+    _qdrant_status_cache["details"] = details
 
 
 # =============================================================================
@@ -313,6 +335,9 @@ async def query_evidence(request: QueryRequest):
                     settings_dict=cache_key_settings,
                 )
                 
+                # Update Qdrant status on successful query (proves connection works)
+                update_qdrant_status(True, "Query successful")
+                
                 return query_response
                 
         except CircuitOpenError as e:
@@ -395,10 +420,10 @@ async def health_check():
     """
     Check service health.
     
-    Returns status of all components.
-    OPTIMIZED: Uses fast checks with timeouts to avoid blocking.
+    FAST: Never blocks on Qdrant connection. Uses cached status or assumes unknown.
+    This ensures the health endpoint always responds quickly, even on cold start.
     """
-    import asyncio
+    import time
     
     components = {
         "api": True,
@@ -410,25 +435,20 @@ async def health_check():
         "modal": True,  # Assume Modal is available if backend is running
     }
     
-    # Check Qdrant with timeout (fast check only)
-    async def check_qdrant():
-        try:
-            indexer = get_indexer()
-            # Just check if client is connected - don't fetch full collection info
-            loop = asyncio.get_event_loop()
-            collections = await asyncio.wait_for(
-                loop.run_in_executor(None, indexer.client.get_collections),
-                timeout=2.0  # 2 second max
-            )
-            return True
-        except Exception as e:
-            logger.warning(f"Qdrant health check failed: {e}")
-            return False
-    
-    try:
-        components["qdrant"] = await check_qdrant()
-    except Exception:
-        pass
+    # Check Qdrant - use CACHED status, never block
+    # The actual Qdrant check happens in background or on first query
+    now = time.time()
+    if _qdrant_status_cache["connected"] is not None:
+        # Use cached status if available and fresh
+        if (now - _qdrant_status_cache["last_check"]) < QDRANT_STATUS_CACHE_TTL:
+            components["qdrant"] = _qdrant_status_cache["connected"]
+        else:
+            # Stale cache - still use it but mark as potentially outdated
+            components["qdrant"] = _qdrant_status_cache["connected"]
+    elif is_indexer_initialized():
+        # Indexer exists, assume connected (it would have failed on creation otherwise)
+        components["qdrant"] = True
+    # else: leave as False (unknown/not connected)
     
     # Check LLM/Cohere (basic check - if API keys are configured) - instant
     try:
@@ -455,6 +475,89 @@ async def health_check():
         timestamp=datetime.now(),
         components=components,
     )
+
+
+@health_router.get("/deep")
+async def deep_health_check():
+    """
+    Deep health check that actually tests Qdrant connection.
+    
+    Use this for debugging, not for frequent polling.
+    Updates the cached Qdrant status.
+    """
+    import asyncio
+    import time
+    
+    components = {
+        "api": True,
+        "qdrant": False,
+        "llm": False,
+        "r2": False,
+        "cohere": False,
+        "modal": True,
+    }
+    
+    # Actually check Qdrant with timeout
+    async def check_qdrant():
+        global _qdrant_status_cache
+        try:
+            loop = asyncio.get_event_loop()
+            
+            def _check():
+                indexer = get_indexer()
+                # This will block until connection is established
+                collections = indexer.client.get_collections()
+                return True
+            
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, _check),
+                timeout=10.0  # Allow more time for deep check
+            )
+            
+            # Update cache
+            _qdrant_status_cache["connected"] = True
+            _qdrant_status_cache["last_check"] = time.time()
+            _qdrant_status_cache["details"] = "Connected"
+            return True
+        except asyncio.TimeoutError:
+            _qdrant_status_cache["connected"] = False
+            _qdrant_status_cache["last_check"] = time.time()
+            _qdrant_status_cache["details"] = "Connection timeout"
+            return False
+        except Exception as e:
+            _qdrant_status_cache["connected"] = False
+            _qdrant_status_cache["last_check"] = time.time()
+            _qdrant_status_cache["details"] = str(e)[:100]
+            logger.warning(f"Qdrant deep health check failed: {e}")
+            return False
+    
+    components["qdrant"] = await check_qdrant()
+    
+    # Check other services (same as regular health)
+    try:
+        has_llm = bool(settings.anthropic_api_key or settings.openai_api_key or settings.openrouter_api_key)
+        components["llm"] = has_llm
+        components["cohere"] = bool(settings.cohere_api_key)
+    except Exception:
+        pass
+    
+    try:
+        import os
+        r2_access = os.getenv("R2_ACCESS_KEY_ID")
+        r2_secret = os.getenv("R2_SECRET_ACCESS_KEY")
+        components["r2"] = bool(r2_access and r2_secret)
+    except Exception:
+        pass
+    
+    overall_status = "healthy" if all(components.values()) else "degraded"
+    
+    return {
+        "status": overall_status,
+        "version": "2.0.0",
+        "timestamp": datetime.now().isoformat(),
+        "components": components,
+        "qdrant_details": _qdrant_status_cache["details"],
+    }
 
 
 @health_router.get("/production")

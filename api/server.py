@@ -4,6 +4,7 @@ DevChat v2.0 SOTA - FastAPI Server
 Main application entry point.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -20,6 +21,42 @@ setup_logging()
 logger = get_logger(__name__)
 
 
+async def initialize_qdrant_connection():
+    """
+    Initialize Qdrant connection in background.
+    
+    This warms up the connection so health checks don't block.
+    """
+    from api.routes import get_indexer, update_qdrant_status
+    
+    try:
+        logger.info("🔌 Initializing Qdrant connection in background...")
+        loop = asyncio.get_event_loop()
+        
+        def _connect():
+            indexer = get_indexer()
+            # Verify connection by getting collections
+            collections = indexer.client.get_collections()
+            return True
+        
+        # Run with timeout
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _connect),
+            timeout=30.0  # Allow up to 30 seconds on cold start
+        )
+        
+        # Update cache
+        update_qdrant_status(True, "Connected on startup")
+        logger.info("✅ Qdrant connection initialized successfully")
+        
+    except asyncio.TimeoutError:
+        logger.warning("⚠️ Qdrant connection timed out during startup")
+        update_qdrant_status(False, "Connection timeout during startup")
+    except Exception as e:
+        logger.error(f"❌ Qdrant connection failed during startup: {e}")
+        update_qdrant_status(False, str(e)[:100])
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
@@ -32,6 +69,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"Embedding Model: {settings.embedding_model}")
     logger.info(f"Hybrid Search: {'enabled' if settings.hybrid_enabled else 'disabled'}")
     logger.info(f"Reranking: {'enabled' if settings.rerank_enabled else 'disabled'}")
+    
+    # Initialize Qdrant connection in background (don't block startup)
+    asyncio.create_task(initialize_qdrant_connection())
     
     yield
     
