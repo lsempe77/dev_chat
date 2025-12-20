@@ -622,6 +622,30 @@ _collection_info_cache = {
 }
 COLLECTION_CACHE_TTL = 30  # seconds
 
+# Light caches to keep admin tabs from hammering Qdrant when users switch quickly
+DOCUMENTS_CACHE_TTL = 30  # seconds
+_documents_cache = {
+    "data": None,
+    "timestamp": 0,
+    "search": None,
+    "status": None,
+}
+
+METADATA_CACHE_TTL = 30  # seconds
+_metadata_cache = {
+    "data": None,
+    "timestamp": 0,
+    "filter": None,
+}
+
+
+def _invalidate_admin_caches() -> None:
+    """Clear lightweight admin caches after mutations."""
+    _documents_cache["data"] = None
+    _documents_cache["timestamp"] = 0
+    _metadata_cache["data"] = None
+    _metadata_cache["timestamp"] = 0
+
 
 @admin_router.get("/collection")
 async def get_collection_info():
@@ -986,6 +1010,7 @@ async def upload_document(
         )
         
         logger.info(f"Uploaded {file.filename} to R2 as {r2_key} (doc_id={doc_id}, {size_bytes} bytes)")
+        _invalidate_admin_caches()
         
         return UploadResponse(
             success=True,
@@ -1257,6 +1282,18 @@ async def get_documents(
     import asyncio
     
     try:
+        # Serve from cache when requesting the common default view
+        now_ts = asyncio.get_event_loop().time()
+        if (
+            search is None
+            and status is None
+            and offset == 0
+            and limit <= 100
+            and _documents_cache["data"] is not None
+            and (now_ts - _documents_cache["timestamp"]) < DOCUMENTS_CACHE_TTL
+        ):
+            return _documents_cache["data"]
+
         indexer = get_indexer()
         
         # Use executor with timeout to prevent blocking
@@ -1372,13 +1409,22 @@ async def get_documents(
         
         total_chunks = sum(d.chunk_count for d in documents)
         total_pages = sum(d.page_count for d in documents)
-        
-        return DocumentsResponse(
+
+        response_payload = DocumentsResponse(
             documents=documents,
             total_count=total_count,
             total_chunks=total_chunks,
             total_pages=total_pages,
         )
+
+        # Cache only the default view (no filters/search, first page) to keep fresh
+        if search is None and status is None and offset == 0 and limit <= 100:
+            _documents_cache["data"] = response_payload
+            _documents_cache["timestamp"] = asyncio.get_event_loop().time()
+            _documents_cache["search"] = search
+            _documents_cache["status"] = status
+        
+        return response_payload
         
     except asyncio.TimeoutError:
         logger.warning("Documents endpoint timed out")
@@ -1473,6 +1519,7 @@ async def delete_document(document_id: str):
             logger.error(f"Failed to connect to R2: {e}")
         
         success = deleted_vectors > 0 or len(deleted_r2_files) > 0
+        _invalidate_admin_caches()
         
         return {
             "success": success,
@@ -1526,6 +1573,18 @@ async def get_metadata_for_review(
     OPTIMIZED: Limits scrolling to prevent timeout with large collections.
     """
     try:
+        # Serve cached snapshot for the default view to avoid repeat scrolls
+        now_ts = asyncio.get_event_loop().time()
+        if (
+            offset == 0
+            and limit <= 100
+            and (filter_type in {None, "needs_review", "low_confidence"})
+            and _metadata_cache["data"] is not None
+            and _metadata_cache["filter"] == filter_type
+            and (now_ts - _metadata_cache["timestamp"]) < METADATA_CACHE_TTL
+        ):
+            return _metadata_cache["data"]
+
         indexer = get_indexer()
         
         # PRODUCTION OPTIMIZATION: Limit how many points we scroll through
@@ -1626,12 +1685,20 @@ async def get_metadata_for_review(
         total_count = len(documents)
         documents = documents[offset:offset + limit]
         
-        return MetadataReviewResponse(
+        response_payload = MetadataReviewResponse(
             documents=documents,
             total_count=total_count,
             needs_review_count=needs_review_count,
             low_confidence_count=low_confidence_count,
         )
+
+        # Cache default views briefly to smooth tab switching
+        if offset == 0 and limit <= 100 and filter_type in {None, "needs_review", "low_confidence"}:
+            _metadata_cache["data"] = response_payload
+            _metadata_cache["timestamp"] = asyncio.get_event_loop().time()
+            _metadata_cache["filter"] = filter_type
+        
+        return response_payload
         
     except Exception as e:
         logger.error(f"Failed to get metadata for review: {e}")
@@ -1795,6 +1862,7 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
         )
         
         logger.info(f"Updated metadata for {doc_id}: {len(point_ids)} chunks")
+        _invalidate_admin_caches()
         
         return MetadataUpdateResponse(
             success=True,
