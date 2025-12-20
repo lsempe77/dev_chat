@@ -395,14 +395,31 @@ async def health_check():
         "api": True,
         "qdrant": False,
         "llm": False,
+        "r2": False,
+        "cohere": False,
     }
 
     qdrant_status = await get_qdrant_status_snapshot()
     components["qdrant"] = qdrant_status.healthy
 
-    # Check LLM (basic check)
+    # Check LLM (basic check - verify API key exists)
     try:
         components["llm"] = bool(settings.anthropic_api_key or settings.openai_api_key or settings.openrouter_api_key)
+    except Exception:
+        pass
+
+    # Check Cohere (verify API key exists)
+    try:
+        components["cohere"] = bool(settings.cohere_api_key)
+    except Exception:
+        pass
+
+    # Check R2 (verify credentials exist)
+    try:
+        import os
+        r2_access = os.getenv("R2_ACCESS_KEY_ID")
+        r2_secret = os.getenv("R2_SECRET_ACCESS_KEY")
+        components["r2"] = bool(r2_access and r2_secret)
     except Exception:
         pass
 
