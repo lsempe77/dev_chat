@@ -8,7 +8,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Timeout for admin API calls (shorter than query timeout)
-const ADMIN_TIMEOUT_MS = 10_000; // 10 seconds
+const ADMIN_TIMEOUT_MS = 60_000; // 60 seconds
 
 /**
  * Fetch with timeout for admin endpoints
