@@ -72,7 +72,8 @@ class ResolvedMetadata(BaseModel):
     confidence: float = 0.0  # 0-1, based on source quality
     
     # Flags for review
-    needs_review: bool = False
+    # Default to True so humans must verify everything (LLM cannot be trusted fully)
+    needs_review: bool = True
     review_reasons: List[str] = Field(default_factory=list)
     
     # Original filename (for linking back)

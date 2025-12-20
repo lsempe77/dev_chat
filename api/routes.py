@@ -1151,27 +1151,40 @@ async def get_processing_jobs():
         
         # Get indexed doc_ids from Qdrant
         indexed_doc_ids = set()
-        try:
-            indexer = get_indexer()
-            # Scroll through to get unique doc_ids
-            next_offset = None
-            while True:
-                results, next_offset = indexer.client.scroll(
-                    collection_name=indexer.collection_name,
-                    limit=100,
-                    offset=next_offset,
-                    with_payload=["doc_id", "pdf_name"],
-                    with_vectors=False,
-                )
-                for point in results:
-                    payload = point.payload or {}
-                    doc_id = payload.get("doc_id") or payload.get("pdf_name")
-                    if doc_id:
-                        indexed_doc_ids.add(doc_id)
-                if next_offset is None or len(results) == 0:
-                    break
-        except Exception as e:
-            logger.warning(f"Could not get indexed doc_ids: {e}")
+        
+        # Optimization: Use cache if available
+        if _documents_cache["data"] is not None:
+            # Extract IDs from cached response
+            for doc in _documents_cache["data"].documents:
+                indexed_doc_ids.add(doc.id)
+        else:
+            # Fallback: Scroll through to get unique doc_ids
+            try:
+                indexer = get_indexer()
+                next_offset = None
+                # Limit scroll to avoid timeout - we might miss some if > 5000
+                MAX_SCROLL = 5000
+                count = 0
+                
+                while count < MAX_SCROLL:
+                    results, next_offset = indexer.client.scroll(
+                        collection_name=indexer.collection_name,
+                        limit=100,
+                        offset=next_offset,
+                        with_payload=["doc_id", "pdf_name"],
+                        with_vectors=False,
+                    )
+                    for point in results:
+                        payload = point.payload or {}
+                        doc_id = payload.get("doc_id") or payload.get("pdf_name")
+                        if doc_id:
+                            indexed_doc_ids.add(doc_id)
+                    
+                    count += len(results)
+                    if next_offset is None or len(results) == 0:
+                        break
+            except Exception as e:
+                logger.warning(f"Could not get indexed doc_ids: {e}")
         
         # Create job entries
         for doc_id, file_info in r2_files.items():
