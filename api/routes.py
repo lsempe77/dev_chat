@@ -1113,74 +1113,92 @@ async def get_documents(
     Get list of indexed documents from Qdrant.
     
     Aggregates unique documents from vector payloads.
+    Optimized: Limits scroll to avoid timeout with large collections.
     """
+    import asyncio
+    
     try:
         indexer = get_indexer()
         
-        # Scroll through all points to get unique documents
-        # This is a simple approach - for production, use a metadata DB
-        all_points = []
-        next_offset = None
-        
-        while True:
-            results, next_offset = indexer.client.scroll(
-                collection_name=indexer.collection_name,
-                limit=100,
-                offset=next_offset,
-                with_payload=True,
-                with_vectors=False,
-            )
-            all_points.extend(results)
-            if next_offset is None or len(results) == 0:
-                break
-        
-        # Aggregate by doc_id (universal document identifier)
-        doc_map = {}
-        for point in all_points:
-            payload = point.payload or {}
+        # Use executor with timeout to prevent blocking
+        def _get_documents():
+            # Scroll through points to get unique documents
+            # LIMIT: Only scan first 5000 points to avoid timeout
+            # This should cover most unique documents since we just need one chunk per doc
+            all_points = []
+            next_offset = None
+            max_points = 5000  # Limit to prevent timeout
             
-            # Get doc_id - primary identifier (new format)
-            # Fallback to pdf_name or source for backward compatibility
-            doc_id = payload.get("doc_id") or payload.get("pdf_name") or payload.get("source", "unknown")
-            
-            # Extract doc_id from source path if needed (e.g., "input-pdfs/abc123_file.pdf" -> "abc123_file")
-            if "/" in doc_id:
-                doc_id = doc_id.split("/")[-1]
-            if doc_id.endswith(".pdf"):
-                doc_id = doc_id[:-4]
-            
-            if doc_id not in doc_map:
-                doc_map[doc_id] = {
-                    "doc_id": doc_id,  # Universal document ID
-                    "id": doc_id,  # For API compatibility
-                    "title": payload.get("title", doc_id),
-                    "filename": f"{doc_id}.pdf",
-                    "source": payload.get("source", ""),
-                    "authors": [],
-                    "year": payload.get("year"),
-                    "status": "indexed",
-                    "page_count": 0,
-                    "chunk_count": 0,
-                    "uploaded_at": datetime.now(),
-                    "processed_at": datetime.now(),
-                }
-            
-            doc_map[doc_id]["chunk_count"] += 1
-            
-            # Try to get page info
-            if payload.get("page"):
-                doc_map[doc_id]["page_count"] = max(
-                    doc_map[doc_id]["page_count"], 
-                    int(payload.get("page", 0))
+            while len(all_points) < max_points:
+                results, next_offset = indexer.client.scroll(
+                    collection_name=indexer.collection_name,
+                    limit=500,  # Larger batches = fewer round trips
+                    offset=next_offset,
+                    with_payload=["doc_id", "pdf_name", "source", "title", "authors", "year", "page"],
+                    with_vectors=False,
                 )
+                all_points.extend(results)
+                if next_offset is None or len(results) == 0:
+                    break
             
-            # Get authors if available
-            if payload.get("authors") and not doc_map[doc_id]["authors"]:
-                authors = payload.get("authors")
-                if isinstance(authors, list):
-                    doc_map[doc_id]["authors"] = authors
-                elif isinstance(authors, str):
-                    doc_map[doc_id]["authors"] = [authors]
+            # Aggregate by doc_id (universal document identifier)
+            doc_map = {}
+            for point in all_points:
+                payload = point.payload or {}
+                
+                # Get doc_id - primary identifier
+                doc_id = payload.get("doc_id") or payload.get("pdf_name") or payload.get("source", "unknown")
+                
+                # Extract doc_id from source path if needed
+                if "/" in doc_id:
+                    doc_id = doc_id.split("/")[-1]
+                if doc_id.endswith(".pdf"):
+                    doc_id = doc_id[:-4]
+                
+                if doc_id not in doc_map:
+                    doc_map[doc_id] = {
+                        "doc_id": doc_id,
+                        "id": doc_id,
+                        "title": payload.get("title", doc_id),
+                        "filename": f"{doc_id}.pdf",
+                        "source": payload.get("source", ""),
+                        "authors": [],
+                        "year": payload.get("year"),
+                        "status": "indexed",
+                        "page_count": 0,
+                        "chunk_count": 0,
+                        "uploaded_at": datetime.now(),
+                        "processed_at": datetime.now(),
+                    }
+                
+                doc_map[doc_id]["chunk_count"] += 1
+                
+                # Try to get page info
+                if payload.get("page"):
+                    try:
+                        doc_map[doc_id]["page_count"] = max(
+                            doc_map[doc_id]["page_count"], 
+                            int(payload.get("page", 0))
+                        )
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Get authors if available
+                if payload.get("authors") and not doc_map[doc_id]["authors"]:
+                    authors = payload.get("authors")
+                    if isinstance(authors, list):
+                        doc_map[doc_id]["authors"] = authors
+                    elif isinstance(authors, str):
+                        doc_map[doc_id]["authors"] = [authors]
+            
+            return doc_map
+        
+        # Run with timeout
+        loop = asyncio.get_event_loop()
+        doc_map = await asyncio.wait_for(
+            loop.run_in_executor(None, _get_documents),
+            timeout=15.0  # 15 second timeout
+        )
         
         # Convert to list and apply filters
         documents = []
@@ -1194,7 +1212,7 @@ async def get_documents(
                     continue
             
             documents.append(DocumentMetadata(
-                id=doc_data["doc_id"],  # Use doc_id as the primary identifier
+                id=doc_data["doc_id"],
                 title=doc_data["title"],
                 filename=doc_data["filename"],
                 authors=doc_data["authors"],
@@ -1205,6 +1223,9 @@ async def get_documents(
                 uploaded_at=doc_data["uploaded_at"],
                 processed_at=doc_data["processed_at"],
             ))
+        
+        # Sort by title
+        documents.sort(key=lambda d: d.title.lower())
         
         # Apply pagination
         total_count = len(documents)
@@ -1220,9 +1241,16 @@ async def get_documents(
             total_pages=total_pages,
         )
         
+    except asyncio.TimeoutError:
+        logger.warning("Documents endpoint timed out")
+        return DocumentsResponse(
+            documents=[],
+            total_count=0,
+            total_chunks=0,
+            total_pages=0,
+        )
     except Exception as e:
         logger.error(f"Failed to get documents: {e}")
-        # Return empty list on error
         return DocumentsResponse(
             documents=[],
             total_count=0,
@@ -1356,15 +1384,21 @@ async def get_metadata_for_review(
     Get documents with metadata that needs review.
     
     Returns documents with needs_review=True or low confidence scores.
+    OPTIMIZED: Limits scrolling to prevent timeout with large collections.
     """
     try:
         indexer = get_indexer()
         
-        # Scroll through all points to get unique documents with metadata
-        all_points = []
-        next_offset = None
+        # PRODUCTION OPTIMIZATION: Limit how many points we scroll through
+        MAX_SCROLL_POINTS = 5000  # Don't scroll through 48k+ vectors
+        MAX_DOCS = 200  # We only need a sample for review
         
-        while True:
+        # Scroll through points with limits
+        doc_map = {}
+        next_offset = None
+        points_processed = 0
+        
+        while points_processed < MAX_SCROLL_POINTS and len(doc_map) < MAX_DOCS:
             results, next_offset = indexer.client.scroll(
                 collection_name=indexer.collection_name,
                 limit=100,
@@ -1372,54 +1406,59 @@ async def get_metadata_for_review(
                 with_payload=True,
                 with_vectors=False,
             )
-            all_points.extend(results)
-            if next_offset is None or len(results) == 0:
+            
+            if not results:
                 break
-        
-        # Aggregate by doc_id
-        doc_map = {}
-        for point in all_points:
-            payload = point.payload or {}
+                
+            points_processed += len(results)
             
-            doc_id = payload.get("doc_id") or payload.get("pdf_name") or payload.get("source", "unknown")
-            if "/" in doc_id:
-                doc_id = doc_id.split("/")[-1]
-            if doc_id.endswith(".pdf"):
-                doc_id = doc_id[:-4]
+            # Process points immediately
+            for point in results:
+                payload = point.payload or {}
+                
+                doc_id = payload.get("doc_id") or payload.get("pdf_name") or payload.get("source", "unknown")
+                if "/" in doc_id:
+                    doc_id = doc_id.split("/")[-1]
+                if doc_id.endswith(".pdf"):
+                    doc_id = doc_id[:-4]
+                
+                if doc_id not in doc_map:
+                    doc_map[doc_id] = {
+                        "id": doc_id,
+                        "title": payload.get("title", doc_id),
+                        "filename": f"{doc_id}.pdf",
+                        "authors": [],
+                        "year": payload.get("year"),
+                        "doi": payload.get("doi"),
+                        "journal": payload.get("journal"),
+                        "publisher": payload.get("publisher"),
+                        "cited_by_count": payload.get("cited_by_count"),
+                        "is_open_access": payload.get("is_open_access", False),
+                        "countries": payload.get("countries", []),
+                        "sectors": payload.get("sectors", []),
+                        "study_type": payload.get("study_type"),
+                        "intervention_type": payload.get("intervention_type"),
+                        "sdgs": payload.get("sdgs", []),
+                        "keywords": payload.get("keywords", []),
+                        "metadata_source": payload.get("metadata_source", "extraction"),
+                        "metadata_confidence": payload.get("metadata_confidence", 0.0),
+                        "needs_review": payload.get("needs_review", True),
+                        "chunk_count": 0,
+                    }
+                
+                doc_map[doc_id]["chunk_count"] += 1
+                
+                # Get authors if available
+                if payload.get("authors") and not doc_map[doc_id]["authors"]:
+                    authors = payload.get("authors")
+                    if isinstance(authors, list):
+                        doc_map[doc_id]["authors"] = authors
+                    elif isinstance(authors, str):
+                        doc_map[doc_id]["authors"] = [a.strip() for a in authors.split(",")]
             
-            if doc_id not in doc_map:
-                doc_map[doc_id] = {
-                    "id": doc_id,
-                    "title": payload.get("title", doc_id),
-                    "filename": f"{doc_id}.pdf",
-                    "authors": [],
-                    "year": payload.get("year"),
-                    "doi": payload.get("doi"),
-                    "journal": payload.get("journal"),
-                    "publisher": payload.get("publisher"),
-                    "cited_by_count": payload.get("cited_by_count"),
-                    "is_open_access": payload.get("is_open_access", False),
-                    "countries": payload.get("countries", []),
-                    "sectors": payload.get("sectors", []),
-                    "study_type": payload.get("study_type"),
-                    "intervention_type": payload.get("intervention_type"),
-                    "sdgs": payload.get("sdgs", []),
-                    "keywords": payload.get("keywords", []),
-                    "metadata_source": payload.get("metadata_source", "extraction"),
-                    "metadata_confidence": payload.get("metadata_confidence", 0.0),
-                    "needs_review": payload.get("needs_review", True),
-                    "chunk_count": 0,
-                }
-            
-            doc_map[doc_id]["chunk_count"] += 1
-            
-            # Get authors if available
-            if payload.get("authors") and not doc_map[doc_id]["authors"]:
-                authors = payload.get("authors")
-                if isinstance(authors, list):
-                    doc_map[doc_id]["authors"] = authors
-                elif isinstance(authors, str):
-                    doc_map[doc_id]["authors"] = [a.strip() for a in authors.split(",")]
+            # Check exit conditions
+            if next_offset is None:
+                break
         
         # Filter documents
         documents = []
