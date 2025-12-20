@@ -307,7 +307,7 @@ export async function checkHealth(): Promise<{
   timestamp: string;
   components: Record<string, boolean>;
 }> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/health`, {}, 5000); // 5s timeout for health
+  const response = await fetchWithTimeout(`${API_BASE_URL}/health`, {}, 8000); // 8s timeout for health (backend has 2s Qdrant timeout)
 
   if (!response.ok) {
     throw new Error(`Health check failed: ${response.statusText}`);

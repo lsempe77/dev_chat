@@ -396,7 +396,10 @@ async def health_check():
     Check service health.
     
     Returns status of all components.
+    OPTIMIZED: Uses fast checks with timeouts to avoid blocking.
     """
+    import asyncio
+    
     components = {
         "api": True,
         "qdrant": False,
@@ -407,15 +410,27 @@ async def health_check():
         "modal": True,  # Assume Modal is available if backend is running
     }
     
-    # Check Qdrant
-    try:
-        indexer = get_indexer()
-        info = indexer.get_collection_info()
-        components["qdrant"] = "error" not in info
-    except Exception as e:
-        logger.warning(f"Qdrant health check failed: {e}")
+    # Check Qdrant with timeout (fast check only)
+    async def check_qdrant():
+        try:
+            indexer = get_indexer()
+            # Just check if client is connected - don't fetch full collection info
+            loop = asyncio.get_event_loop()
+            collections = await asyncio.wait_for(
+                loop.run_in_executor(None, indexer.client.get_collections),
+                timeout=2.0  # 2 second max
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Qdrant health check failed: {e}")
+            return False
     
-    # Check LLM/Cohere (basic check - if API keys are configured)
+    try:
+        components["qdrant"] = await check_qdrant()
+    except Exception:
+        pass
+    
+    # Check LLM/Cohere (basic check - if API keys are configured) - instant
     try:
         has_llm = bool(settings.anthropic_api_key or settings.openai_api_key or settings.openrouter_api_key)
         components["llm"] = has_llm
@@ -423,7 +438,7 @@ async def health_check():
     except Exception:
         pass
     
-    # Check R2 (basic check - if credentials are configured)
+    # Check R2 (basic check - if credentials are configured) - instant
     try:
         import os
         r2_access = os.getenv("R2_ACCESS_KEY_ID")
