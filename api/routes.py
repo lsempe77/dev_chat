@@ -76,6 +76,7 @@ api_router = APIRouter(prefix="/api", tags=["Frontend API"])
 
 # Global instances (singleton pattern to avoid repeated connections)
 _agent: Optional[DevChatAgent] = None
+_indexer: Optional[QdrantIndexer] = None
 
 
 def get_agent() -> DevChatAgent:
@@ -84,6 +85,14 @@ def get_agent() -> DevChatAgent:
     if _agent is None:
         _agent = DevChatAgent()
     return _agent
+
+
+def get_indexer() -> QdrantIndexer:
+    """Get or create the global indexer instance (avoids repeated Qdrant connections)."""
+    global _indexer
+    if _indexer is None:
+        _indexer = QdrantIndexer()
+    return _indexer
 
 
 # =============================================================================
