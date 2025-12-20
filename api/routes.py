@@ -73,8 +73,9 @@ chat_router = APIRouter(prefix="/chat", tags=["Chat"])
 admin_router = APIRouter(prefix="/admin", tags=["Admin"])
 api_router = APIRouter(prefix="/api", tags=["Frontend API"])
 
-# Global agent instance
+# Global instances (singleton pattern to avoid repeated connections)
 _agent: Optional[DevChatAgent] = None
+_indexer: Optional[QdrantIndexer] = None
 
 
 def get_agent() -> DevChatAgent:
@@ -83,6 +84,14 @@ def get_agent() -> DevChatAgent:
     if _agent is None:
         _agent = DevChatAgent()
     return _agent
+
+
+def get_indexer() -> QdrantIndexer:
+    """Get or create the global indexer instance (avoids repeated Qdrant connections)."""
+    global _indexer
+    if _indexer is None:
+        _indexer = QdrantIndexer()
+    return _indexer
 
 
 # =============================================================================
@@ -400,7 +409,7 @@ async def health_check():
     
     # Check Qdrant
     try:
-        indexer = QdrantIndexer()
+        indexer = get_indexer()
         info = indexer.get_collection_info()
         components["qdrant"] = "error" not in info
     except Exception as e:
@@ -612,7 +621,7 @@ async def get_collection_info():
     try:
         # Wrap sync call with timeout to prevent hanging
         def _get_info():
-            indexer = QdrantIndexer()
+            indexer = get_indexer()
             return indexer.get_collection_info()
         
         loop = asyncio.get_event_loop()
@@ -646,7 +655,7 @@ async def ensure_indexes():
     Safe to call multiple times - will skip already existing indexes.
     """
     try:
-        indexer = QdrantIndexer()
+        indexer = get_indexer()
         results = indexer.ensure_indexes()
         return {
             "success": True,
@@ -665,7 +674,7 @@ async def sample_points(limit: int = 5):
     Useful for debugging what fields are available for filtering/deletion.
     """
     try:
-        indexer = QdrantIndexer()
+        indexer = get_indexer()
         points = indexer.sample_points(limit=limit)
         return {
             "count": len(points),
@@ -980,7 +989,7 @@ async def get_processing_jobs():
         # Get indexed doc_ids from Qdrant
         indexed_doc_ids = set()
         try:
-            indexer = QdrantIndexer()
+            indexer = get_indexer()
             # Scroll through to get unique doc_ids
             next_offset = None
             while True:
@@ -1106,7 +1115,7 @@ async def get_documents(
     Aggregates unique documents from vector payloads.
     """
     try:
-        indexer = QdrantIndexer()
+        indexer = get_indexer()
         
         # Scroll through all points to get unique documents
         # This is a simple approach - for production, use a metadata DB
@@ -1250,7 +1259,7 @@ async def delete_document(document_id: str):
     try:
         # 1. Delete from Qdrant
         try:
-            indexer = QdrantIndexer()
+            indexer = get_indexer()
             deleted_vectors = indexer.delete_by_document_id(doc_id)
             logger.info(f"Deleted {deleted_vectors} vectors for doc_id: {doc_id}")
         except Exception as e:
@@ -1349,7 +1358,7 @@ async def get_metadata_for_review(
     Returns documents with needs_review=True or low confidence scores.
     """
     try:
-        indexer = QdrantIndexer()
+        indexer = get_indexer()
         
         # Scroll through all points to get unique documents with metadata
         all_points = []
@@ -1455,7 +1464,7 @@ async def get_metadata_for_review(
 async def get_document_metadata(document_id: str):
     """Get detailed metadata for a specific document."""
     try:
-        indexer = QdrantIndexer()
+        indexer = get_indexer()
         
         # Clean up doc_id
         doc_id = document_id
@@ -1536,7 +1545,7 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
     Updates all chunks belonging to this document in Qdrant.
     """
     try:
-        indexer = QdrantIndexer()
+        indexer = get_indexer()
         
         # Clean up doc_id
         doc_id = document_id

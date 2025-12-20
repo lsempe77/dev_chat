@@ -18,7 +18,7 @@
 | **Admin Metadata UI** | ✅ Working | Review, edit, verify metadata |
 | **Settings Wiring** | ✅ Done | Frontend settings sent to backend |
 | **LLM Suggestions** | ✅ Done | Context-aware follow-up queries |
-| **Document Corpus** | ⚠️ **3 test PDFs** | Need bulk upload (~5000 papers) |
+| **Document Corpus** | ⚠️ **100 test PDFs** | Need bulk upload (~5000 papers) |
 
 ---
 
@@ -315,9 +315,9 @@ for r in results.points:
 | 🟢 | Frontend ↔ Backend wiring | ✅ Done |
 | 🟢 | Wire Settings to backend | ✅ Done |
 | 🟢 | LLM-based suggestions | ✅ Done |
-| 🟡 P1 | Bulk document ingestion | ⬜ TODO |
+| 🟡 P1 | Bulk document ingestion | ✅ Done  |
 | 🟡 P1 | Match document ingestions (pdfs, etc) with metadata file (uploaded, generated from files, and later searching/completing in crossref) | ⬜ TODO |
-| 🟡 P1 | Admin UI → R2 upload | ⬜ TODO |
+| 🟢 | Admin UI → R2 upload | ✅ Done |
 
 | 🟡 P1 | Run RAGAS evaluation | ⬜ TODO |
 
