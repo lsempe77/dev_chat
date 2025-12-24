@@ -374,7 +374,7 @@ export interface MetadataUpdateResponse {
  * Get documents needing metadata review
  */
 export async function getMetadataForReview(params?: {
-  filter?: "needs_review" | "low_confidence";
+  filter?: "all" | "needs_review" | "low_confidence";
   limit?: number;
   offset?: number;
 }): Promise<MetadataReviewResponse> {
