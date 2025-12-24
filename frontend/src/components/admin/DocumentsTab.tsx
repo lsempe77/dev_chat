@@ -56,7 +56,7 @@ export function DocumentsTab() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await getDocuments({ search: searchQuery || undefined, limit: 200 });
+      const response = await getDocuments({ search: searchQuery || undefined });
       // Map API response to component format
       const docs: Document[] = response.documents.map(d => ({
         id: d.id,

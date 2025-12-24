@@ -680,7 +680,7 @@ async def trigger_processing_endpoint(request: TriggerProcessingRequest):
 async def get_documents(
     search: Optional[str] = Query(None, description="Search query"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(1000, ge=1, description="Max documents to return"),
     offset: int = Query(0, ge=0),
 ):
     """
@@ -973,7 +973,7 @@ async def reprocess_document(document_id: str):
 @router.get("/metadata/review", response_model=MetadataReviewResponse)
 async def get_metadata_for_review(
     filter_type: Optional[str] = Query(None, description="Filter: 'needs_review' or 'low_confidence'"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(1000, ge=1, description="Max documents to return"),
     offset: int = Query(0, ge=0),
 ):
     """
