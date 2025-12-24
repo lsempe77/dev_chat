@@ -122,7 +122,7 @@ export function MetadataTab() {
     try {
       const response = await getMetadataForReview({
         filter: filterType === "all" ? undefined : filterType,
-        limit: 100,
+        limit: 200,
       });
       setDocuments(response.documents);
       setStats({
