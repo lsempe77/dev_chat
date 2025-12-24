@@ -15,6 +15,13 @@ from fastapi.responses import JSONResponse
 from api.qdrant_status import warm_up_qdrant_connection
 from api.routes import admin_router, api_router, chat_router, health_router, router
 from src.config.settings import settings
+
+# Note: Routes are now organized in api/routes/ package:
+# - api/routes/health.py    - Health check endpoints
+# - api/routes/chat.py      - Chat/streaming endpoints  
+# - api/routes/api.py       - Frontend API (query, compare, suggest)
+# - api/routes/admin.py     - Admin dashboard endpoints
+# - api/routes/dependencies.py - Shared singletons and utilities
 from src.utils.logging import get_logger, setup_logging
 
 # Setup logging

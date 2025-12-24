@@ -252,7 +252,7 @@ Page-aware chunking enables clicking citations to jump directly to source pages 
 | **MinerU** | `modal_mineru.py` | Extracts text with `page_idx` per block |
 | **Chunking** | `chunk_content_with_pages()` | Creates chunks preserving page numbers |
 | **Qdrant** | Cloud | Stores chunks with `page_start`, `page_end`, `pages[]` |
-| **Presigned URL API** | `api/routes.py` | Generates secure R2 URLs (1hr expiry) |
+| **Presigned URL API** | `api/routes/admin.py` | Generates secure R2 URLs (1hr expiry) |
 | **PDFViewer** | `frontend/components/pdf/` | Renders PDF with page navigation |
 | **MetadataTab** | `frontend/components/admin/` | "View PDF" button opens viewer |
 
@@ -284,19 +284,28 @@ Page-aware chunking enables clicking citations to jump directly to source pages 
 
 ### Local Development
 
-#### 1. Start Backend (FastAPI)
+#### 1. Install & Setup
 
 ```bash
-# Terminal 1 - Backend API
 cd devchat_v2_sota
 pip install -r requirements.txt
+pip install -e .  # Install package + 'devchat' CLI command
+```
+
+#### 2. Start Backend (FastAPI)
+
+```bash
+# Option A: Using the unified CLI (recommended)
+devchat serve --reload --port 8000
+
+# Option B: Direct uvicorn
 uvicorn api.server:app --reload --port 8000
 ```
 
 Backend runs at: `http://localhost:8000`
 API docs at: `http://localhost:8000/docs`
 
-#### 2. Start Frontend (Next.js)
+#### 3. Start Frontend (Next.js)
 
 ```bash
 # Terminal 2 - Frontend UI
@@ -307,7 +316,7 @@ npm run dev
 
 Frontend runs at: `http://localhost:3000`
 
-#### 3. Environment Variables
+#### 4. Environment Variables
 
 Create `.env` file with:
 ```bash
@@ -325,6 +334,69 @@ QDRANT_API_KEY=...
 LANGFUSE_PUBLIC_KEY=pk-...
 LANGFUSE_SECRET_KEY=sk-...
 LANGFUSE_HOST=https://cloud.langfuse.com
+```
+
+### Document Processing Workflow
+
+The system is designed to process documents automatically without manual terminal commands.
+
+**Prerequisite:** Ensure the Modal app is deployed:
+```bash
+modal deploy infrastructure/modal_mineru.py
+```
+
+1. **Upload**: Go to the **Admin > Processing** tab and upload PDFs.
+2. **Automatic Trigger**: Uploading automatically triggers the processing pipeline on Modal.
+3. **Manual Trigger**: You can also click the **"Start Processing"** button in the Processing tab to retry or process pending files.
+4. **Status**: The Processing tab shows the status of queued and completed jobs.
+
+---
+
+## 🖥️ Unified CLI
+
+DevChat provides a unified command-line interface for all operations. After installing with `pip install -e .`, the `devchat` command becomes available:
+
+```bash
+devchat --help
+```
+
+### Available Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `serve` | Start the API server | `devchat serve --port 8000 --reload` |
+| `ingest` | Ingest documents into Qdrant | `devchat ingest --source ./data/markdown` |
+| `process-pdfs` | Process PDFs with MinerU | `devchat process-pdfs --pdf-dir ./pdfs` |
+| `evaluate` | Run RAGAS evaluation | `devchat evaluate --test-file ./evaluation/test_cases.json` |
+| `citations` | Evaluate citation quality | `devchat citations --batch` |
+| `ragas` | Run RAGAS evaluator directly | `devchat ragas --query "your question"` |
+| `check-metadata` | Debug Qdrant metadata | `devchat check-metadata --list` |
+| `health` | Check service health | `devchat health --detailed` |
+| `version` | Show version info | `devchat version` |
+
+### Command Examples
+
+```bash
+# Start development server with hot reload
+devchat serve --port 8000 --reload
+
+# Ingest documents, recreating the collection
+devchat ingest --source ./data/markdown --recreate
+
+# Process PDFs from a directory
+devchat process-pdfs --pdf-dir ./research_papers --recursive
+
+# Run evaluation on test cases
+devchat evaluate --test-file ./evaluation/test_cases.json --verbose
+
+# Check metadata for a specific document
+devchat check-metadata --doc-id "121378172_Gilligan_2024"
+
+# List all indexed documents
+devchat check-metadata --list
+
+# Check if services are healthy
+devchat health --detailed
 ```
 
 ---
@@ -370,8 +442,15 @@ devchat_v2_sota/
 ├── api/
 │   ├── __init__.py
 │   ├── server.py                # FastAPI application
-│   ├── routes.py                # API endpoints
-│   └── schemas.py               # Pydantic models
+│   ├── schemas.py               # Pydantic models
+│   ├── qdrant_status.py         # Qdrant health monitoring
+│   └── routes/                  # Modular API routes (NEW)
+│       ├── __init__.py          # Auto-discovery & aggregation
+│       ├── dependencies.py      # Shared singletons (agent, indexer, caches)
+│       ├── health.py            # Health check endpoints (/health/*)
+│       ├── chat.py              # Chat & streaming (/chat/*)
+│       ├── api.py               # Frontend API (/api/query, /api/compare)
+│       └── admin.py             # Admin dashboard (/admin/*)
 │
 ├── frontend/                        # Next.js Research Workbench UI ✅
 │   ├── src/
@@ -405,9 +484,14 @@ devchat_v2_sota/
 │   └── test_cases.json          # Golden test set
 │
 ├── scripts/
-│   ├── ingest_documents.py      # CLI for document ingestion
-│   └── run_evaluation.py        # CLI for running evals
+│   ├── ingest_documents.py      # Document ingestion
+│   ├── run_evaluation.py        # RAGAS evaluation
+│   ├── evaluate_citations.py    # Citation quality eval
+│   ├── process_pdfs.py          # PDF processing
+│   ├── mineru_worker.py         # Celery worker for MinerU
+│   └── check_metadata.py        # Metadata debugging
 │
+├── cli.py                       # Unified CLI (NEW) - 'devchat' command
 ├── tests/
 │   ├── __init__.py
 │   ├── test_retrieval.py

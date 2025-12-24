@@ -1,0 +1,155 @@
+"""
+DevChat v2.0 SOTA - Shared Route Dependencies
+
+Common dependencies, singletons, and utilities used across route modules.
+"""
+
+import asyncio
+import os
+from typing import Optional
+
+import boto3
+from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+from fastapi import HTTPException
+
+from src.agents.devchat_agent import DevChatAgent
+from src.config.settings import settings
+from src.ingestion.indexer import QdrantIndexer
+from src.utils.logging import get_logger
+
+# Load environment variables from .env file
+load_dotenv()
+
+logger = get_logger(__name__)
+
+# =============================================================================
+# Global Singletons
+# =============================================================================
+
+_agent: Optional[DevChatAgent] = None
+_indexer: Optional[QdrantIndexer] = None
+
+
+def get_agent() -> DevChatAgent:
+    """Get or create the global agent instance."""
+    global _agent
+    if _agent is None:
+        _agent = DevChatAgent()
+    return _agent
+
+
+def get_indexer() -> QdrantIndexer:
+    """Get or create the global indexer instance (avoids repeated Qdrant connections)."""
+    global _indexer
+    if _indexer is None:
+        _indexer = QdrantIndexer()
+    return _indexer
+
+
+# =============================================================================
+# R2 Client
+# =============================================================================
+
+def get_r2_client():
+    """Create S3 client configured for Cloudflare R2."""
+    account_id = os.getenv("R2_ACCOUNT_ID", "667549da0201b12a53872d803b9880b6")
+    access_key = os.getenv("R2_ACCESS_KEY_ID")
+    secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+    
+    if not access_key or not secret_key:
+        raise HTTPException(
+            status_code=500,
+            detail="R2 credentials not configured. Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY."
+        )
+    
+    return boto3.client(
+        "s3",
+        endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name="auto",
+    )
+
+
+# =============================================================================
+# Cache Management
+# =============================================================================
+
+# Cache for collection info (refreshes every 30 seconds)
+_collection_info_cache = {
+    "data": None,
+    "timestamp": 0
+}
+COLLECTION_CACHE_TTL = 30  # seconds
+
+# Light caches to keep admin tabs from hammering Qdrant when users switch quickly
+DOCUMENTS_CACHE_TTL = 30  # seconds
+_documents_cache = {
+    "data": None,
+    "timestamp": 0,
+    "search": None,
+    "status": None,
+}
+
+METADATA_CACHE_TTL = 30  # seconds
+_metadata_cache = {
+    "data": None,
+    "timestamp": 0,
+    "filter": None,
+}
+
+
+def get_collection_info_cache():
+    """Get the collection info cache."""
+    return _collection_info_cache
+
+
+def get_documents_cache():
+    """Get the documents cache."""
+    return _documents_cache
+
+
+def get_metadata_cache():
+    """Get the metadata cache."""
+    return _metadata_cache
+
+
+def invalidate_admin_caches() -> None:
+    """Clear lightweight admin caches after mutations."""
+    _documents_cache["data"] = None
+    _documents_cache["timestamp"] = 0
+    _metadata_cache["data"] = None
+    _metadata_cache["timestamp"] = 0
+
+
+# =============================================================================
+# Modal Processing Trigger
+# =============================================================================
+
+async def trigger_modal_processing(force_reprocess: bool = False, max_documents: int = 10):
+    """Helper to trigger Modal processing via webhook."""
+    import httpx
+    
+    # Modal web endpoint URL
+    modal_trigger_url = os.environ.get(
+        "MODAL_TRIGGER_URL",
+        "https://lsempe77--devchat-mineru-trigger-processing.modal.run"
+    )
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Fire and forget - short timeout since we don't need to wait for completion
+            # The Modal endpoint returns quickly anyway (it spawns background tasks)
+            await client.post(
+                modal_trigger_url,
+                json={
+                    "force_reprocess": force_reprocess,
+                    "check_qdrant": True,
+                    "max_documents": max_documents,
+                },
+                headers={"Content-Type": "application/json"},
+            )
+            logger.info(f"Triggered Modal processing via {modal_trigger_url}")
+    except Exception as e:
+        logger.error(f"Failed to trigger Modal processing: {e}")
