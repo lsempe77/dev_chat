@@ -83,8 +83,8 @@ _collection_info_cache = {
 }
 COLLECTION_CACHE_TTL = 30  # seconds
 
-# Light caches to keep admin tabs from hammering Qdrant when users switch quickly
-DOCUMENTS_CACHE_TTL = 30  # seconds
+# Longer cache TTL because scanning 400K+ vectors is expensive
+DOCUMENTS_CACHE_TTL = 300  # 5 minutes
 _documents_cache = {
     "data": None,
     "timestamp": 0,

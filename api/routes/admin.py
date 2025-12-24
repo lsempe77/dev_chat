@@ -708,17 +708,15 @@ async def get_documents(
         
         # Use executor with timeout to prevent blocking
         def _get_documents():
-            # Scroll through points to get unique documents
-            # LIMIT: Only scan first 5000 points to avoid timeout
-            # This should cover most unique documents since we just need one chunk per doc
+            # Scroll through ALL points to get accurate document counts
+            # With 400K+ vectors this can take 30-60s, so we cache aggressively
             all_points = []
             next_offset = None
-            max_points = 5000  # Limit to prevent timeout
             
-            while len(all_points) < max_points:
+            while True:
                 results, next_offset = indexer.client.scroll(
                     collection_name=indexer.collection_name,
-                    limit=500,  # Larger batches = fewer round trips
+                    limit=1000,  # Larger batches = fewer round trips
                     offset=next_offset,
                     with_payload=["doc_id", "pdf_name", "source", "title", "authors", "year", "page"],
                     with_vectors=False,
@@ -783,7 +781,7 @@ async def get_documents(
         loop = asyncio.get_event_loop()
         doc_map = await asyncio.wait_for(
             loop.run_in_executor(None, _get_documents),
-            timeout=15.0  # 15 second timeout
+            timeout=120.0  # 2 minute timeout for full corpus scan
         )
         
         # Convert to list and apply filters
