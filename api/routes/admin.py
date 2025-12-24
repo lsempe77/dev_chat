@@ -708,12 +708,14 @@ async def get_documents(
         
         # Use executor with timeout to prevent blocking
         def _get_documents():
-            # Scroll through ALL points to get accurate document counts
-            # With 400K+ vectors this can take 30-60s, so we cache aggressively
+            # Scroll to get unique documents (not all chunks)
+            # We only need one chunk per doc to get metadata
+            # Limit scan to 10K points - should find all unique docs
             all_points = []
             next_offset = None
+            max_points = 10000
             
-            while True:
+            while len(all_points) < max_points:
                 results, next_offset = indexer.client.scroll(
                     collection_name=indexer.collection_name,
                     limit=1000,  # Larger batches = fewer round trips
@@ -781,7 +783,7 @@ async def get_documents(
         loop = asyncio.get_event_loop()
         doc_map = await asyncio.wait_for(
             loop.run_in_executor(None, _get_documents),
-            timeout=120.0  # 2 minute timeout for full corpus scan
+            timeout=30.0  # 30 second timeout
         )
         
         # Convert to list and apply filters
@@ -815,7 +817,13 @@ async def get_documents(
         total_count = len(documents)
         documents = documents[offset:offset + limit]
         
-        total_chunks = sum(d.chunk_count for d in documents)
+        # Get total chunks from Qdrant count() - instant, no scanning
+        try:
+            count_result = indexer.client.count(collection_name=indexer.collection_name)
+            total_chunks = count_result.count
+        except Exception:
+            total_chunks = sum(d.chunk_count for d in documents)
+        
         total_pages = sum(d.page_count for d in documents)
 
         response_payload = DocumentsResponse(
