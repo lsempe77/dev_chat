@@ -1003,35 +1003,26 @@ async def get_metadata_for_review(
         MAX_SCROLL_POINTS = 5000  # Don't scroll through 48k+ vectors
         MAX_DOCS = 200  # We only need a sample for review
         
-        # Build Qdrant filter to push work to DB
+        # NOTE: Qdrant requires payload indexes for filtering.
+        # Since needs_review may not be indexed, we scroll without filter
+        # and do client-side filtering to avoid "Index required" errors.
         scroll_filter = None
         
-        # Note: is_null is a simple boolean in qdrant-client 1.16+
-        needs_review_condition = models.Filter(
-            should=[
-                models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
-                models.FieldCondition(key="needs_review", is_null=True)
-            ]
-        )
+        # Client-side filter functions
+        def needs_review_check(payload):
+            return payload.get("needs_review") is True or payload.get("needs_review") is None
         
-        low_confidence_condition = models.FieldCondition(
-            key="metadata_confidence", 
-            range=models.Range(lt=0.5)
-        )
+        def low_confidence_check(payload):
+            conf = payload.get("metadata_confidence")
+            return conf is not None and conf < 0.5
         
         if filter_type == "needs_review":
-            scroll_filter = needs_review_condition
+            filter_fn = needs_review_check
         elif filter_type == "low_confidence":
-            scroll_filter = models.Filter(must=[low_confidence_condition])
+            filter_fn = low_confidence_check
         else:
             # Default: Show anything that needs review OR has low confidence
-            scroll_filter = models.Filter(
-                should=[
-                    models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
-                    models.FieldCondition(key="needs_review", is_null=True),
-                    low_confidence_condition
-                ]
-            )
+            filter_fn = lambda p: needs_review_check(p) or low_confidence_check(p)
 
         # Scroll through points with limits
         doc_map = {}
@@ -1062,9 +1053,13 @@ async def get_metadata_for_review(
                 
             points_processed += len(results)
             
-            # Process points immediately
+            # Process points immediately (with client-side filtering)
             for point in results:
                 payload = point.payload or {}
+                
+                # Apply client-side filter
+                if not filter_fn(payload):
+                    continue
                 
                 doc_id = payload.get("doc_id") or payload.get("pdf_name") or payload.get("source", "unknown")
                 if "/" in doc_id:
