@@ -34,19 +34,18 @@ router = APIRouter(prefix="/api", tags=["Frontend API"])
 
 
 def _generate_pdf_url(document_id: str) -> str | None:
-    """Generate a presigned R2 URL for a PDF document."""
+    """Generate a presigned R2 URL for a PDF document.
+    
+    Optimized: Skip file existence check - generate URL directly.
+    Frontend will handle 404s gracefully.
+    """
     try:
         r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
         r2_key = f"input-pdfs/{document_id}.pdf"
         
-        # Check if file exists
-        try:
-            r2_client.head_object(Bucket=bucket_name, Key=r2_key)
-        except ClientError:
-            return None
-        
-        # Generate presigned URL (valid for 1 hour)
+        # Generate presigned URL directly (valid for 1 hour)
+        # Skip head_object check for performance
         return r2_client.generate_presigned_url(
             'get_object',
             Params={'Bucket': bucket_name, 'Key': r2_key},
