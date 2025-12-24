@@ -1026,8 +1026,11 @@ async def get_metadata_for_review(
             filter_fn = needs_review_check
         elif filter_type == "low_confidence":
             filter_fn = low_confidence_check
+        elif filter_type == "all":
+            # Show all documents without filtering
+            filter_fn = lambda p: True
         else:
-            # Default: Show anything that needs review OR has low confidence
+            # Default (None): Show anything that needs review OR has low confidence
             filter_fn = lambda p: needs_review_check(p) or low_confidence_check(p)
 
         # Scroll through points with limits

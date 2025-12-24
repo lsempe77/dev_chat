@@ -121,7 +121,7 @@ export function MetadataTab() {
     setError(null);
     try {
       const response = await getMetadataForReview({
-        filter: filterType === "all" ? undefined : filterType,
+        filter: filterType,  // "all", "needs_review", or "low_confidence"
       });
       setDocuments(response.documents);
       setStats({
