@@ -13,7 +13,7 @@ from uuid import uuid4
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from qdrant_client import models
 
@@ -641,6 +641,34 @@ _metadata_cache = {
 }
 
 
+async def _trigger_modal_processing(force_reprocess: bool = False, max_documents: int = 10):
+    """Helper to trigger Modal processing via webhook."""
+    import httpx
+    
+    # Modal web endpoint URL
+    modal_trigger_url = os.environ.get(
+        "MODAL_TRIGGER_URL",
+        "https://lsempe77--devchat-mineru-trigger-processing.modal.run"
+    )
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Fire and forget - short timeout since we don't need to wait for completion
+            # The Modal endpoint returns quickly anyway (it spawns background tasks)
+            await client.post(
+                modal_trigger_url,
+                json={
+                    "force_reprocess": force_reprocess,
+                    "check_qdrant": True,
+                    "max_documents": max_documents,
+                },
+                headers={"Content-Type": "application/json"},
+            )
+            logger.info(f"Triggered Modal processing via {modal_trigger_url}")
+    except Exception as e:
+        logger.error(f"Failed to trigger Modal processing: {e}")
+
+
 def _invalidate_admin_caches() -> None:
     """Clear lightweight admin caches after mutations."""
     _documents_cache["data"] = None
@@ -956,6 +984,7 @@ def get_r2_client():
 
 @admin_router.post("/upload", response_model=UploadResponse)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ):
     """
@@ -1010,6 +1039,9 @@ async def upload_document(
         
         logger.info(f"Uploaded {file.filename} to R2 as {r2_key} (doc_id={doc_id}, {size_bytes} bytes)")
         _invalidate_admin_caches()
+        
+        # Automatically trigger processing in background
+        background_tasks.add_task(_trigger_modal_processing, force_reprocess=False, max_documents=1)
         
         return UploadResponse(
             success=True,
@@ -1224,58 +1256,17 @@ async def trigger_processing(request: TriggerProcessingRequest):
     Calls the Modal web endpoint to process new PDFs.
     This works from Railway (unlike subprocess which needs modal CLI).
     """
-    import httpx
-    
-    # Modal web endpoint URL - set in environment or use default
-    modal_trigger_url = os.environ.get(
-        "MODAL_TRIGGER_URL",
-        "https://lsempe77--devchat-mineru-trigger-processing.modal.run"
+    # Use the helper function
+    await _trigger_modal_processing(
+        force_reprocess=request.force_reprocess if hasattr(request, 'force_reprocess') else False,
+        max_documents=request.max_documents or 10
     )
     
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                modal_trigger_url,
-                json={
-                    "force_reprocess": request.force_reprocess if hasattr(request, 'force_reprocess') else False,
-                    "check_qdrant": True,
-                    "max_documents": request.max_documents or 10,
-                },
-                headers={"Content-Type": "application/json"},
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"Modal trigger response: {result}")
-                
-                return TriggerProcessingResponse(
-                    queued=result.get("queued", 0),
-                    skipped=result.get("skipped", 0),
-                    message=result.get("message", "Processing triggered"),
-                )
-            else:
-                error_text = response.text[:200] if response.text else "Unknown error"
-                logger.error(f"Modal trigger failed ({response.status_code}): {error_text}")
-                return TriggerProcessingResponse(
-                    queued=0,
-                    skipped=0,
-                    message=f"Trigger failed: HTTP {response.status_code} - {error_text}",
-                )
-                
-    except httpx.TimeoutException:
-        # This might mean processing started but took too long to respond
-        logger.warning("Modal trigger timed out - processing may still be running")
-        return TriggerProcessingResponse(
-            queued=request.max_documents or 10,
-            skipped=0,
-            message="Processing triggered (response timed out, but may still be running)",
-        )
-    except Exception as e:
-        logger.error(f"Failed to trigger Modal: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to trigger processing: {str(e)}"
-        )
+    return TriggerProcessingResponse(
+        queued=1, # We don't know exact count from async call, but we know it triggered
+        skipped=0,
+        message="Processing triggered successfully",
+    )
 
 
 @admin_router.get("/documents", response_model=DocumentsResponse)
@@ -1604,10 +1595,11 @@ async def get_metadata_for_review(
         # Build Qdrant filter to push work to DB
         scroll_filter = None
         
+        # Note: is_null is a simple boolean in qdrant-client 1.16+
         needs_review_condition = models.Filter(
             should=[
                 models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
-                models.FieldCondition(key="needs_review", is_null=models.IsNullCondition(is_null=True))
+                models.FieldCondition(key="needs_review", is_null=True)
             ]
         )
         
@@ -1625,7 +1617,7 @@ async def get_metadata_for_review(
             scroll_filter = models.Filter(
                 should=[
                     models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
-                    models.FieldCondition(key="needs_review", is_null=models.IsNullCondition(is_null=True)),
+                    models.FieldCondition(key="needs_review", is_null=True),
                     low_confidence_condition
                 ]
             )

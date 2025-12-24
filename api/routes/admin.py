@@ -1006,10 +1006,11 @@ async def get_metadata_for_review(
         # Build Qdrant filter to push work to DB
         scroll_filter = None
         
+        # Note: is_null is a simple boolean in qdrant-client 1.16+
         needs_review_condition = models.Filter(
             should=[
                 models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
-                models.FieldCondition(key="needs_review", is_null=models.IsNullCondition(is_null=True))
+                models.FieldCondition(key="needs_review", is_null=True)
             ]
         )
         
@@ -1027,7 +1028,7 @@ async def get_metadata_for_review(
             scroll_filter = models.Filter(
                 should=[
                     models.FieldCondition(key="needs_review", match=models.MatchValue(value=True)),
-                    models.FieldCondition(key="needs_review", is_null=models.IsNullCondition(is_null=True)),
+                    models.FieldCondition(key="needs_review", is_null=True),
                     low_confidence_condition
                 ]
             )
