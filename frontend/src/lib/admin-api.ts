@@ -320,28 +320,80 @@ export async function checkHealth(): Promise<{
 // Metadata Review Types & Functions
 // =============================================================================
 
+/**
+ * Zotero-compatible document metadata structure
+ */
 export interface DocumentMetadataDetail {
   id: string;
   title: string;
   filename: string;
   authors: string[];
   year?: number;
+  abstract?: string;
+  
+  // Zotero item type
+  item_type?: string;  // journalArticle, book, bookSection, report, thesis, conferencePaper, etc.
+  
+  // Identifiers
   doi?: string;
-  journal?: string;
+  isbn?: string;
+  issn?: string;
+  url?: string;
+  
+  // Publication info (journal articles, magazines)
+  publication?: string;  // Journal/Magazine name
+  journal?: string;  // Alias for backward compatibility
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  edition?: string;
+  
+  // Publisher info
   publisher?: string;
+  place?: string;  // Publication place
+  
+  // Series info
+  series?: string;
+  series_number?: string;
+  
+  // Book-specific
+  book_title?: string;  // For book sections
+  num_pages?: number;  // Total pages
+  
+  // Report/Thesis specific
+  institution?: string;  // Report institution or thesis university
+  report_number?: string;
+  report_type?: string;  // "Technical Report", "Working Paper"
+  thesis_type?: string;  // "PhD Dissertation", "Master's Thesis"
+  
+  // Conference-specific
+  conference_name?: string;
+  proceedings_title?: string;
+  
+  // Access info
+  accessed_date?: string;
+  
+  // Citation metrics
   cited_by_count?: number;
   is_open_access: boolean;
-  item_type?: string;  // journalArticle, book, report, workingPaper, etc.
+  
+  // 3ie Classification
   countries: string[];
   sectors: string[];
-  study_type?: string;
+  study_type?: string;  // RCT, Quasi-experimental, etc.
   intervention_type?: string;
   sdgs: string[];
   keywords: string[];
+  
+  // Processing metadata
   metadata_source: string;
   metadata_confidence: number;
   needs_review: boolean;
   chunk_count: number;
+  page_count?: number;
+  
+  // Extra fields (JSON)
+  extra?: Record<string, unknown>;
 }
 
 export interface MetadataReviewResponse {
@@ -351,18 +403,69 @@ export interface MetadataReviewResponse {
   low_confidence_count: number;
 }
 
+/**
+ * Zotero-compatible metadata update request
+ */
 export interface MetadataUpdateRequest {
+  // Core
   title?: string;
   authors?: string[];
   year?: number;
-  doi?: string;
-  journal?: string;
+  abstract?: string;
+  
+  // Item type
   item_type?: string;
+  
+  // Identifiers
+  doi?: string;
+  isbn?: string;
+  issn?: string;
+  url?: string;
+  
+  // Publication
+  publication?: string;
+  journal?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  edition?: string;
+  
+  // Publisher
+  publisher?: string;
+  place?: string;
+  
+  // Series
+  series?: string;
+  series_number?: string;
+  
+  // Book
+  book_title?: string;
+  num_pages?: number;
+  
+  // Report/Thesis
+  institution?: string;
+  report_number?: string;
+  report_type?: string;
+  thesis_type?: string;
+  
+  // Conference
+  conference_name?: string;
+  proceedings_title?: string;
+  
+  // Access
+  accessed_date?: string;
+  
+  // Classification
   countries?: string[];
   sectors?: string[];
   study_type?: string;
   intervention_type?: string;
+  
+  // Review status
   needs_review?: boolean;
+  
+  // Extra fields
+  extra?: Record<string, unknown>;
 }
 
 export interface MetadataUpdateResponse {

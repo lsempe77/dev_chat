@@ -182,10 +182,10 @@ async def get_collection_info():
         }
 
 
-@router.post("/migrate/add-item-type")
-async def migrate_add_item_type():
+@router.post("/migrate/add-zotero-fields")
+async def migrate_add_zotero_fields():
     """
-    Add item_type column to PostgreSQL documents table if it doesn't exist.
+    Add all Zotero-compatible columns to PostgreSQL documents table if they don't exist.
     Safe to call multiple times.
     """
     try:
@@ -197,10 +197,40 @@ async def migrate_add_item_type():
         
         db = await get_db_session()
         try:
-            await db.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS item_type VARCHAR(100)"))
+            # List of all Zotero-compatible columns to add
+            columns = [
+                ("item_type", "VARCHAR(100)"),
+                ("volume", "VARCHAR(50)"),
+                ("issue", "VARCHAR(50)"),
+                ("pages", "VARCHAR(50)"),
+                ("edition", "VARCHAR(50)"),
+                ("isbn", "VARCHAR(50)"),
+                ("issn", "VARCHAR(50)"),
+                ("series", "VARCHAR(255)"),
+                ("series_number", "VARCHAR(50)"),
+                ("place", "VARCHAR(255)"),
+                ("url", "TEXT"),
+                ("accessed_date", "VARCHAR(50)"),
+                ("abstract", "TEXT"),
+                ("short_title", "VARCHAR(500)"),
+                ("report_number", "VARCHAR(100)"),
+                ("institution", "VARCHAR(500)"),
+                ("thesis_type", "VARCHAR(100)"),
+                ("conference_name", "VARCHAR(500)"),
+                ("proceedings_title", "VARCHAR(500)"),
+            ]
+            
+            added = []
+            for col_name, col_type in columns:
+                try:
+                    await db.execute(text(f"ALTER TABLE documents ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
+                    added.append(col_name)
+                except Exception as col_error:
+                    logger.warning(f"Could not add column {col_name}: {col_error}")
+            
             await db.commit()
-            logger.info("Migration: item_type column added successfully")
-            return {"status": "success", "message": "item_type column added"}
+            logger.info(f"Migration: Zotero columns added successfully: {added}")
+            return {"status": "success", "message": f"Zotero columns added: {added}"}
         finally:
             await db.close()
     except Exception as e:
@@ -1141,22 +1171,56 @@ async def get_metadata_for_review(
                                 filename=d.filename,
                                 authors=d.authors or [],
                                 year=d.year,
+                                abstract=d.abstract,
+                                item_type=d.item_type,
+                                # Identifiers
                                 doi=d.doi,
+                                isbn=d.isbn,
+                                issn=d.issn,
+                                url=d.url,
+                                # Publication
+                                publication=d.publication,
                                 journal=d.journal,
+                                volume=d.volume,
+                                issue=d.issue,
+                                pages=d.pages,
+                                edition=d.edition,
+                                # Publisher
                                 publisher=d.publisher,
+                                place=d.place,
+                                # Series
+                                series=d.series,
+                                series_number=d.series_number,
+                                # Book
+                                book_title=d.book_title,
+                                num_pages=d.num_pages,
+                                # Report/Thesis
+                                institution=d.institution,
+                                report_number=d.report_number,
+                                report_type=d.report_type,
+                                thesis_type=d.thesis_type,
+                                # Conference
+                                conference_name=d.conference_name,
+                                proceedings_title=d.proceedings_title,
+                                # Access
+                                accessed_date=d.accessed_date,
+                                # Metrics
                                 cited_by_count=d.cited_by_count,
                                 is_open_access=d.is_open_access,
-                                item_type=d.item_type,
+                                # Classification
                                 countries=d.countries or [],
                                 sectors=d.sectors or [],
                                 study_type=d.study_type,
                                 intervention_type=d.intervention_type,
                                 sdgs=d.sdgs or [],
                                 keywords=d.keywords or [],
+                                # Processing
                                 metadata_source=d.metadata_source,
                                 metadata_confidence=d.metadata_confidence,
                                 needs_review=d.needs_review,
                                 chunk_count=d.chunk_count or 0,
+                                page_count=d.page_count or 0,
+                                extra=d.extra,
                             )
                             for d in docs
                         ],
@@ -1417,21 +1481,56 @@ async def get_document_metadata(document_id: str):
             filename=f"{doc_id}.pdf",
             authors=authors,
             year=payload.get("year"),
+            abstract=payload.get("abstract"),
+            item_type=payload.get("item_type"),
+            # Identifiers
             doi=payload.get("doi"),
+            isbn=payload.get("isbn"),
+            issn=payload.get("issn"),
+            url=payload.get("url"),
+            # Publication
+            publication=payload.get("publication"),
             journal=payload.get("journal"),
+            volume=payload.get("volume"),
+            issue=payload.get("issue"),
+            pages=payload.get("pages"),
+            edition=payload.get("edition"),
+            # Publisher
             publisher=payload.get("publisher"),
+            place=payload.get("place"),
+            # Series
+            series=payload.get("series"),
+            series_number=payload.get("series_number"),
+            # Book
+            book_title=payload.get("book_title"),
+            num_pages=payload.get("num_pages"),
+            # Report/Thesis
+            institution=payload.get("institution"),
+            report_number=payload.get("report_number"),
+            report_type=payload.get("report_type"),
+            thesis_type=payload.get("thesis_type"),
+            # Conference
+            conference_name=payload.get("conference_name"),
+            proceedings_title=payload.get("proceedings_title"),
+            # Access
+            accessed_date=payload.get("accessed_date"),
+            # Metrics
             cited_by_count=payload.get("cited_by_count"),
             is_open_access=payload.get("is_open_access", False),
+            # Classification
             countries=payload.get("countries", []),
             sectors=payload.get("sectors", []),
             study_type=payload.get("study_type"),
             intervention_type=payload.get("intervention_type"),
             sdgs=payload.get("sdgs", []),
             keywords=payload.get("keywords", []),
+            # Processing
             metadata_source=payload.get("metadata_source", "extraction"),
             metadata_confidence=payload.get("metadata_confidence", 0.0),
             needs_review=payload.get("needs_review", True),
             chunk_count=count_result.count,
+            page_count=payload.get("page_count", 0),
+            extra=payload.get("extra"),
         )
         
     except HTTPException:
@@ -1468,20 +1567,74 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
                     async with db:
                         from src.database.repository import DocumentRepository
                         
-                        # Build update dict
+                        # Build update dict with all Zotero fields
                         update_data = {}
+                        # Core
                         if update.title is not None:
                             update_data["title"] = update.title
                         if update.authors is not None:
                             update_data["authors"] = update.authors
                         if update.year is not None:
                             update_data["year"] = update.year
-                        if update.doi is not None:
-                            update_data["doi"] = update.doi
-                        if update.journal is not None:
-                            update_data["journal"] = update.journal
+                        if update.abstract is not None:
+                            update_data["abstract"] = update.abstract
                         if update.item_type is not None:
                             update_data["item_type"] = update.item_type
+                        # Identifiers
+                        if update.doi is not None:
+                            update_data["doi"] = update.doi
+                        if update.isbn is not None:
+                            update_data["isbn"] = update.isbn
+                        if update.issn is not None:
+                            update_data["issn"] = update.issn
+                        if update.url is not None:
+                            update_data["url"] = update.url
+                        # Publication
+                        if update.publication is not None:
+                            update_data["publication"] = update.publication
+                        if update.journal is not None:
+                            update_data["journal"] = update.journal
+                        if update.volume is not None:
+                            update_data["volume"] = update.volume
+                        if update.issue is not None:
+                            update_data["issue"] = update.issue
+                        if update.pages is not None:
+                            update_data["pages"] = update.pages
+                        if update.edition is not None:
+                            update_data["edition"] = update.edition
+                        # Publisher
+                        if update.publisher is not None:
+                            update_data["publisher"] = update.publisher
+                        if update.place is not None:
+                            update_data["place"] = update.place
+                        # Series
+                        if update.series is not None:
+                            update_data["series"] = update.series
+                        if update.series_number is not None:
+                            update_data["series_number"] = update.series_number
+                        # Book
+                        if update.book_title is not None:
+                            update_data["book_title"] = update.book_title
+                        if update.num_pages is not None:
+                            update_data["num_pages"] = update.num_pages
+                        # Report/Thesis
+                        if update.institution is not None:
+                            update_data["institution"] = update.institution
+                        if update.report_number is not None:
+                            update_data["report_number"] = update.report_number
+                        if update.report_type is not None:
+                            update_data["report_type"] = update.report_type
+                        if update.thesis_type is not None:
+                            update_data["thesis_type"] = update.thesis_type
+                        # Conference
+                        if update.conference_name is not None:
+                            update_data["conference_name"] = update.conference_name
+                        if update.proceedings_title is not None:
+                            update_data["proceedings_title"] = update.proceedings_title
+                        # Access
+                        if update.accessed_date is not None:
+                            update_data["accessed_date"] = update.accessed_date
+                        # Classification
                         if update.countries is not None:
                             update_data["countries"] = update.countries
                         if update.sectors is not None:
@@ -1492,6 +1645,9 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
                             update_data["intervention_type"] = update.intervention_type
                         if update.needs_review is not None:
                             update_data["needs_review"] = update.needs_review
+                        # Extra
+                        if update.extra is not None:
+                            update_data["extra"] = update.extra
                         
                         # Mark as user-verified
                         update_data["metadata_source"] = "user"
@@ -1534,18 +1690,74 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
                     break
             
             if all_points:
-                # Prepare payload update
+                # Prepare payload update with all Zotero fields
                 payload_update = {}
+                # Core
                 if update.title is not None:
                     payload_update["title"] = update.title
                 if update.authors is not None:
                     payload_update["authors"] = update.authors
                 if update.year is not None:
                     payload_update["year"] = update.year
+                if update.abstract is not None:
+                    payload_update["abstract"] = update.abstract
+                if update.item_type is not None:
+                    payload_update["item_type"] = update.item_type
+                # Identifiers
                 if update.doi is not None:
                     payload_update["doi"] = update.doi
+                if update.isbn is not None:
+                    payload_update["isbn"] = update.isbn
+                if update.issn is not None:
+                    payload_update["issn"] = update.issn
+                if update.url is not None:
+                    payload_update["url"] = update.url
+                # Publication
+                if update.publication is not None:
+                    payload_update["publication"] = update.publication
                 if update.journal is not None:
                     payload_update["journal"] = update.journal
+                if update.volume is not None:
+                    payload_update["volume"] = update.volume
+                if update.issue is not None:
+                    payload_update["issue"] = update.issue
+                if update.pages is not None:
+                    payload_update["pages"] = update.pages
+                if update.edition is not None:
+                    payload_update["edition"] = update.edition
+                # Publisher
+                if update.publisher is not None:
+                    payload_update["publisher"] = update.publisher
+                if update.place is not None:
+                    payload_update["place"] = update.place
+                # Series
+                if update.series is not None:
+                    payload_update["series"] = update.series
+                if update.series_number is not None:
+                    payload_update["series_number"] = update.series_number
+                # Book
+                if update.book_title is not None:
+                    payload_update["book_title"] = update.book_title
+                if update.num_pages is not None:
+                    payload_update["num_pages"] = update.num_pages
+                # Report/Thesis
+                if update.institution is not None:
+                    payload_update["institution"] = update.institution
+                if update.report_number is not None:
+                    payload_update["report_number"] = update.report_number
+                if update.report_type is not None:
+                    payload_update["report_type"] = update.report_type
+                if update.thesis_type is not None:
+                    payload_update["thesis_type"] = update.thesis_type
+                # Conference
+                if update.conference_name is not None:
+                    payload_update["conference_name"] = update.conference_name
+                if update.proceedings_title is not None:
+                    payload_update["proceedings_title"] = update.proceedings_title
+                # Access
+                if update.accessed_date is not None:
+                    payload_update["accessed_date"] = update.accessed_date
+                # Classification
                 if update.countries is not None:
                     payload_update["countries"] = update.countries
                 if update.sectors is not None:

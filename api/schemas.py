@@ -333,28 +333,80 @@ class DocumentMetadata(BaseModel):
 
 
 class DocumentMetadataDetail(BaseModel):
-    """Extended metadata for document review."""
+    """
+    Extended metadata for document review.
+    Zotero-compatible field structure for bibliographic metadata.
+    """
     id: str
     title: str
     filename: str
     authors: List[str] = []
     year: Optional[int] = None
+    abstract: Optional[str] = None
+    
+    # Zotero item type
+    item_type: Optional[str] = None  # journalArticle, book, bookSection, report, thesis, conferencePaper, etc.
+    
+    # Identifiers
     doi: Optional[str] = None
-    journal: Optional[str] = None
+    isbn: Optional[str] = None
+    issn: Optional[str] = None
+    url: Optional[str] = None
+    
+    # Publication info (journal articles, magazines)
+    publication: Optional[str] = None  # Journal/Magazine name
+    journal: Optional[str] = None  # Alias for backward compatibility
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    edition: Optional[str] = None
+    
+    # Publisher info
     publisher: Optional[str] = None
+    place: Optional[str] = None  # Publication place
+    
+    # Series info
+    series: Optional[str] = None
+    series_number: Optional[str] = None
+    
+    # Book-specific
+    book_title: Optional[str] = None  # For book sections
+    num_pages: Optional[int] = None  # Total pages
+    
+    # Report/Thesis specific
+    institution: Optional[str] = None  # Report institution or thesis university
+    report_number: Optional[str] = None
+    report_type: Optional[str] = None  # "Technical Report", "Working Paper"
+    thesis_type: Optional[str] = None  # "PhD Dissertation", "Master's Thesis"
+    
+    # Conference-specific
+    conference_name: Optional[str] = None
+    proceedings_title: Optional[str] = None
+    
+    # Access info
+    accessed_date: Optional[str] = None
+    
+    # Citation metrics
     cited_by_count: Optional[int] = None
     is_open_access: Optional[bool] = False
-    item_type: Optional[str] = None  # journalArticle, book, report, workingPaper, etc.
+    
+    # 3ie Classification
     countries: List[str] = []
     sectors: List[str] = []
-    study_type: Optional[str] = None
+    study_type: Optional[str] = None  # RCT, Quasi-experimental, etc.
     intervention_type: Optional[str] = None
     sdgs: List[str] = []
     keywords: List[str] = []
+    
+    # Processing metadata
     metadata_source: Optional[str] = "extraction"
     metadata_confidence: float = 0.0
     needs_review: bool = True
     chunk_count: int = 0
+    page_count: int = 0
+    
+    # Extra fields (JSON)
+    extra: Optional[Dict[str, Any]] = None
 
 
 class MetadataReviewResponse(BaseModel):
@@ -366,18 +418,69 @@ class MetadataReviewResponse(BaseModel):
 
 
 class MetadataUpdateRequest(BaseModel):
-    """Request to update document metadata."""
+    """
+    Request to update document metadata.
+    Zotero-compatible field structure.
+    """
+    # Core
     title: Optional[str] = None
     authors: Optional[List[str]] = None
     year: Optional[int] = None
-    doi: Optional[str] = None
-    journal: Optional[str] = None
+    abstract: Optional[str] = None
+    
+    # Item type
     item_type: Optional[str] = None
+    
+    # Identifiers
+    doi: Optional[str] = None
+    isbn: Optional[str] = None
+    issn: Optional[str] = None
+    url: Optional[str] = None
+    
+    # Publication
+    publication: Optional[str] = None
+    journal: Optional[str] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    edition: Optional[str] = None
+    
+    # Publisher
+    publisher: Optional[str] = None
+    place: Optional[str] = None
+    
+    # Series
+    series: Optional[str] = None
+    series_number: Optional[str] = None
+    
+    # Book
+    book_title: Optional[str] = None
+    num_pages: Optional[int] = None
+    
+    # Report/Thesis
+    institution: Optional[str] = None
+    report_number: Optional[str] = None
+    report_type: Optional[str] = None
+    thesis_type: Optional[str] = None
+    
+    # Conference
+    conference_name: Optional[str] = None
+    proceedings_title: Optional[str] = None
+    
+    # Access
+    accessed_date: Optional[str] = None
+    
+    # 3ie Classification
     countries: Optional[List[str]] = None
     sectors: Optional[List[str]] = None
     study_type: Optional[str] = None
     intervention_type: Optional[str] = None
+    
+    # Review status
     needs_review: Optional[bool] = None
+    
+    # Extra fields
+    extra: Optional[Dict[str, Any]] = None
 
 
 class MetadataUpdateResponse(BaseModel):

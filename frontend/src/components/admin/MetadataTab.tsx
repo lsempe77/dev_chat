@@ -63,7 +63,27 @@ const ITEM_TYPES = [
   "manuscript",
   "document",
   "webpage",
+  "dataset",
+  "preprint",
   "other",
+];
+
+// Thesis types (Zotero-compatible)
+const THESIS_TYPES = [
+  "PhD Dissertation",
+  "Master's Thesis",
+  "Bachelor's Thesis",
+  "Doctoral Thesis",
+];
+
+// Report types (Zotero-compatible)
+const REPORT_TYPES = [
+  "Technical Report",
+  "Working Paper",
+  "Policy Brief",
+  "Research Report",
+  "White Paper",
+  "Annual Report",
 ];
 
 const STUDY_TYPES = [
@@ -90,6 +110,23 @@ const SECTORS = [
   "environment",
   "other",
 ];
+
+// Define which fields to show for each item type (Zotero-compatible)
+const FIELDS_BY_ITEM_TYPE: Record<string, string[]> = {
+  journalArticle: ["publication", "volume", "issue", "pages", "doi", "issn"],
+  book: ["publisher", "place", "edition", "isbn", "series", "series_number", "num_pages"],
+  bookSection: ["book_title", "publisher", "place", "edition", "pages", "isbn", "series"],
+  report: ["institution", "report_number", "report_type", "place", "pages", "series"],
+  workingPaper: ["institution", "report_number", "place", "series"],
+  thesis: ["institution", "thesis_type", "place", "num_pages"],
+  conferencePaper: ["conference_name", "proceedings_title", "publisher", "place", "pages", "doi"],
+  manuscript: ["place", "num_pages"],
+  document: ["publisher", "place"],
+  webpage: ["url", "accessed_date"],
+  dataset: ["publisher", "url", "doi"],
+  preprint: ["publication", "doi", "url"],
+  other: ["publisher", "place"],
+};
 
 export function MetadataTab() {
   const [documents, setDocuments] = useState<DocumentMetadataDetail[]>([]);
@@ -165,16 +202,47 @@ export function MetadataTab() {
   const openEditModal = (doc: DocumentMetadataDetail) => {
     setEditingDoc(doc);
     setEditForm({
+      // Core fields
       title: doc.title,
       authors: doc.authors,
       year: doc.year,
+      item_type: doc.item_type,
+      // Identifiers
       doi: doc.doi,
+      isbn: doc.isbn,
+      issn: doc.issn,
+      url: doc.url,
+      // Publication
+      publication: doc.publication || doc.journal,  // Fallback to journal for backward compat
       journal: doc.journal,
+      volume: doc.volume,
+      issue: doc.issue,
+      pages: doc.pages,
+      edition: doc.edition,
+      // Publisher
+      publisher: doc.publisher,
+      place: doc.place,
+      // Series
+      series: doc.series,
+      series_number: doc.series_number,
+      // Book
+      book_title: doc.book_title,
+      num_pages: doc.num_pages,
+      // Report/Thesis
+      institution: doc.institution,
+      report_number: doc.report_number,
+      report_type: doc.report_type,
+      thesis_type: doc.thesis_type,
+      // Conference
+      conference_name: doc.conference_name,
+      proceedings_title: doc.proceedings_title,
+      // Access
+      accessed_date: doc.accessed_date,
+      // Classification
       countries: doc.countries,
       sectors: doc.sectors,
       study_type: doc.study_type,
       intervention_type: doc.intervention_type,
-      item_type: doc.item_type,
     });
   };
 
@@ -490,7 +558,7 @@ export function MetadataTab() {
 
       {/* Edit Modal */}
       <Dialog open={!!editingDoc} onOpenChange={(open) => !open && setEditingDoc(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Document Metadata</DialogTitle>
             <DialogDescription>
@@ -499,8 +567,9 @@ export function MetadataTab() {
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* === ITEM TYPE (always shown first) === */}
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Item Type</Label>
+              <Label className="text-right font-semibold">Item Type</Label>
               <Select
                 value={editForm.item_type || ""}
                 onValueChange={(value) => setEditForm({ ...editForm, item_type: value })}
@@ -516,6 +585,11 @@ export function MetadataTab() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* === CORE FIELDS (always shown) === */}
+            <div className="border-t pt-4 mt-2">
+              <p className="text-sm font-medium text-muted-foreground mb-3">Core Information</p>
             </div>
 
             <div className="grid grid-cols-4 items-center gap-4">
@@ -550,23 +624,337 @@ export function MetadataTab() {
               />
             </div>
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">DOI</Label>
-              <Input
-                className="col-span-3"
-                value={editForm.doi || ""}
-                onChange={(e) => setEditForm({ ...editForm, doi: e.target.value })}
-                placeholder="10.xxxx/yyyy"
-              />
-            </div>
+            {/* === DYNAMIC FIELDS BASED ON ITEM TYPE === */}
+            {editForm.item_type && FIELDS_BY_ITEM_TYPE[editForm.item_type] && (
+              <>
+                <div className="border-t pt-4 mt-2">
+                  <p className="text-sm font-medium text-muted-foreground mb-3">
+                    {editForm.item_type === "journalArticle" && "Journal Information"}
+                    {editForm.item_type === "book" && "Book Information"}
+                    {editForm.item_type === "bookSection" && "Book Section Information"}
+                    {editForm.item_type === "report" && "Report Information"}
+                    {editForm.item_type === "workingPaper" && "Working Paper Information"}
+                    {editForm.item_type === "thesis" && "Thesis Information"}
+                    {editForm.item_type === "conferencePaper" && "Conference Paper Information"}
+                    {editForm.item_type === "webpage" && "Web Page Information"}
+                    {editForm.item_type === "dataset" && "Dataset Information"}
+                    {editForm.item_type === "preprint" && "Preprint Information"}
+                    {!["journalArticle", "book", "bookSection", "report", "workingPaper", "thesis", "conferencePaper", "webpage", "dataset", "preprint"].includes(editForm.item_type) && "Publication Information"}
+                  </p>
+                </div>
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Journal</Label>
-              <Input
-                className="col-span-3"
-                value={editForm.journal || ""}
-                onChange={(e) => setEditForm({ ...editForm, journal: e.target.value })}
-              />
+                {/* Publication/Journal */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("publication") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Publication</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.publication || editForm.journal || ""}
+                      onChange={(e) => setEditForm({ ...editForm, publication: e.target.value, journal: e.target.value })}
+                      placeholder="Journal or magazine name"
+                    />
+                  </div>
+                )}
+
+                {/* Volume */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("volume") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Volume</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.volume || ""}
+                      onChange={(e) => setEditForm({ ...editForm, volume: e.target.value })}
+                      placeholder="e.g., 12"
+                    />
+                  </div>
+                )}
+
+                {/* Issue */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("issue") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Issue</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.issue || ""}
+                      onChange={(e) => setEditForm({ ...editForm, issue: e.target.value })}
+                      placeholder="e.g., 3"
+                    />
+                  </div>
+                )}
+
+                {/* Pages */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("pages") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Pages</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.pages || ""}
+                      onChange={(e) => setEditForm({ ...editForm, pages: e.target.value })}
+                      placeholder="e.g., 123-145"
+                    />
+                  </div>
+                )}
+
+                {/* DOI (for item types that show it) */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("doi") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">DOI</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.doi || ""}
+                      onChange={(e) => setEditForm({ ...editForm, doi: e.target.value })}
+                      placeholder="10.xxxx/yyyy"
+                    />
+                  </div>
+                )}
+
+                {/* ISSN */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("issn") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">ISSN</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.issn || ""}
+                      onChange={(e) => setEditForm({ ...editForm, issn: e.target.value })}
+                      placeholder="e.g., 1234-5678"
+                    />
+                  </div>
+                )}
+
+                {/* ISBN */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("isbn") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">ISBN</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.isbn || ""}
+                      onChange={(e) => setEditForm({ ...editForm, isbn: e.target.value })}
+                      placeholder="e.g., 978-3-16-148410-0"
+                    />
+                  </div>
+                )}
+
+                {/* Publisher */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("publisher") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Publisher</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.publisher || ""}
+                      onChange={(e) => setEditForm({ ...editForm, publisher: e.target.value })}
+                      placeholder="Publisher name"
+                    />
+                  </div>
+                )}
+
+                {/* Place */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("place") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Place</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.place || ""}
+                      onChange={(e) => setEditForm({ ...editForm, place: e.target.value })}
+                      placeholder="Publication place (e.g., Washington, DC)"
+                    />
+                  </div>
+                )}
+
+                {/* Edition */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("edition") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Edition</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.edition || ""}
+                      onChange={(e) => setEditForm({ ...editForm, edition: e.target.value })}
+                      placeholder="e.g., 2 (for 2nd edition)"
+                    />
+                  </div>
+                )}
+
+                {/* Series */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("series") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Series</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.series || ""}
+                      onChange={(e) => setEditForm({ ...editForm, series: e.target.value })}
+                      placeholder="Series title"
+                    />
+                  </div>
+                )}
+
+                {/* Series Number */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("series_number") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Series Number</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.series_number || ""}
+                      onChange={(e) => setEditForm({ ...editForm, series_number: e.target.value })}
+                      placeholder="Number in series"
+                    />
+                  </div>
+                )}
+
+                {/* # of Pages */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("num_pages") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right"># of Pages</Label>
+                    <Input
+                      className="col-span-3"
+                      type="number"
+                      value={editForm.num_pages || ""}
+                      onChange={(e) => setEditForm({ ...editForm, num_pages: parseInt(e.target.value) || undefined })}
+                      placeholder="Total pages"
+                    />
+                  </div>
+                )}
+
+                {/* Book Title (for book sections) */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("book_title") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Book Title</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.book_title || ""}
+                      onChange={(e) => setEditForm({ ...editForm, book_title: e.target.value })}
+                      placeholder="Title of the book containing this chapter"
+                    />
+                  </div>
+                )}
+
+                {/* Institution (for reports/theses) */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("institution") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">
+                      {editForm.item_type === "thesis" ? "University" : "Institution"}
+                    </Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.institution || ""}
+                      onChange={(e) => setEditForm({ ...editForm, institution: e.target.value })}
+                      placeholder={editForm.item_type === "thesis" ? "University name" : "Institution name"}
+                    />
+                  </div>
+                )}
+
+                {/* Report Number */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("report_number") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Report Number</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.report_number || ""}
+                      onChange={(e) => setEditForm({ ...editForm, report_number: e.target.value })}
+                      placeholder="e.g., WPS-2024-001"
+                    />
+                  </div>
+                )}
+
+                {/* Report Type */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("report_type") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Report Type</Label>
+                    <Select
+                      value={editForm.report_type || ""}
+                      onValueChange={(value) => setEditForm({ ...editForm, report_type: value })}
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Select report type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {REPORT_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Thesis Type */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("thesis_type") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Thesis Type</Label>
+                    <Select
+                      value={editForm.thesis_type || ""}
+                      onValueChange={(value) => setEditForm({ ...editForm, thesis_type: value })}
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Select thesis type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {THESIS_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Conference Name */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("conference_name") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Conference Name</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.conference_name || ""}
+                      onChange={(e) => setEditForm({ ...editForm, conference_name: e.target.value })}
+                      placeholder="Name of the conference"
+                    />
+                  </div>
+                )}
+
+                {/* Proceedings Title */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("proceedings_title") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Proceedings Title</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.proceedings_title || ""}
+                      onChange={(e) => setEditForm({ ...editForm, proceedings_title: e.target.value })}
+                      placeholder="Title of conference proceedings"
+                    />
+                  </div>
+                )}
+
+                {/* URL */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("url") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">URL</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.url || ""}
+                      onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </div>
+                )}
+
+                {/* Accessed Date */}
+                {FIELDS_BY_ITEM_TYPE[editForm.item_type]?.includes("accessed_date") && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Accessed</Label>
+                    <Input
+                      className="col-span-3"
+                      value={editForm.accessed_date || ""}
+                      onChange={(e) => setEditForm({ ...editForm, accessed_date: e.target.value })}
+                      placeholder="YYYY-MM-DD"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* === 3ie CLASSIFICATION (always shown) === */}
+            <div className="border-t pt-4 mt-2">
+              <p className="text-sm font-medium text-muted-foreground mb-3">3ie Classification</p>
             </div>
 
             <div className="grid grid-cols-4 items-center gap-4">
