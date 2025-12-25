@@ -808,10 +808,10 @@ async def _get_documents_from_qdrant(
         def _get_documents():
             # Scroll to get unique documents (not all chunks)
             # We only need one chunk per doc to get metadata
-            # Limit scan to 10K points - should find all unique docs
+            # Scan enough points to find all unique docs (~50K for 100 docs at 4K chunks/doc)
             all_points = []
             next_offset = None
-            max_points = 10000
+            max_points = 50000
             
             while len(all_points) < max_points:
                 results, next_offset = indexer.client.scroll(
@@ -1166,9 +1166,10 @@ async def _get_metadata_for_review_from_qdrant(
 
         indexer = get_indexer()
         
-        # PRODUCTION OPTIMIZATION: Limit how many points we scroll through
-        MAX_SCROLL_POINTS = 5000  # Don't scroll through 48k+ vectors
-        MAX_DOCS = 200  # We only need a sample for review
+        # PRODUCTION OPTIMIZATION: Match the documents endpoint scan limit
+        # With 413K+ vectors, we need to scan enough to find all unique docs
+        MAX_SCROLL_POINTS = 50000  # Scan up to 50K points (enough for ~100 docs at 4K chunks/doc avg)
+        MAX_DOCS = 500  # Max unique documents to return
         
         # NOTE: Qdrant requires payload indexes for filtering.
         # Since needs_review may not be indexed, we scroll without filter

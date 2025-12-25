@@ -62,10 +62,12 @@ async def get_db_session():
         return None
     
     try:
-        from src.database.connection import async_session
-        if async_session is None:
+        # Import the module to access the current value of async_session
+        # (not a cached import-time value)
+        import src.database.connection as db_conn
+        if db_conn.async_session is None:
             return None
-        return async_session()
+        return db_conn.async_session()
     except Exception:
         return None
 
