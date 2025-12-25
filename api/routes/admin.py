@@ -1419,11 +1419,11 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
     """
     Update metadata for a document.
     
-    Updates all chunks belonging to this document in Qdrant.
+    Updates PostgreSQL (primary) and Qdrant (vector payloads).
     """
+    from .dependencies import is_postgres_available, get_db_session
+    
     try:
-        indexer = get_indexer()
-        
         # Clean up doc_id
         doc_id = document_id
         if "/" in doc_id:
@@ -1431,76 +1431,130 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
         if doc_id.endswith(".pdf"):
             doc_id = doc_id[:-4]
         
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        updated_chunks = 0
         
-        # Get all points for this document
-        all_points = []
-        next_offset = None
+        # Update PostgreSQL first (primary source of truth)
+        if is_postgres_available():
+            try:
+                db = await get_db_session()
+                if db:
+                    async with db:
+                        from src.database.repository import DocumentRepository
+                        
+                        # Build update dict
+                        update_data = {}
+                        if update.title is not None:
+                            update_data["title"] = update.title
+                        if update.authors is not None:
+                            update_data["authors"] = update.authors
+                        if update.year is not None:
+                            update_data["year"] = update.year
+                        if update.doi is not None:
+                            update_data["doi"] = update.doi
+                        if update.journal is not None:
+                            update_data["journal"] = update.journal
+                        if update.countries is not None:
+                            update_data["countries"] = update.countries
+                        if update.sectors is not None:
+                            update_data["sectors"] = update.sectors
+                        if update.study_type is not None:
+                            update_data["study_type"] = update.study_type
+                        if update.intervention_type is not None:
+                            update_data["intervention_type"] = update.intervention_type
+                        if update.needs_review is not None:
+                            update_data["needs_review"] = update.needs_review
+                        
+                        # Mark as user-verified
+                        update_data["metadata_source"] = "user"
+                        update_data["metadata_confidence"] = 1.0
+                        
+                        # Update in PostgreSQL
+                        doc = await DocumentRepository.update(db, doc_id, update_data)
+                        if doc:
+                            updated_chunks = doc.chunk_count or 0
+                            logger.info(f"Updated PostgreSQL metadata for {doc_id}")
+                        else:
+                            logger.warning(f"Document {doc_id} not found in PostgreSQL")
+            except Exception as e:
+                logger.warning(f"PostgreSQL update failed: {e}")
         
-        while True:
-            results, next_offset = indexer.client.scroll(
-                collection_name=indexer.collection_name,
-                scroll_filter=Filter(
-                    must=[
-                        FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
-                    ]
-                ),
-                limit=100,
-                offset=next_offset,
-                with_payload=True,
-                with_vectors=False,
-            )
-            all_points.extend(results)
-            if next_offset is None or len(results) == 0:
-                break
+        # Also update Qdrant payloads for consistency
+        try:
+            indexer = get_indexer()
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            
+            # Get all points for this document
+            all_points = []
+            next_offset = None
+            
+            while True:
+                results, next_offset = indexer.client.scroll(
+                    collection_name=indexer.collection_name,
+                    scroll_filter=Filter(
+                        must=[
+                            FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
+                        ]
+                    ),
+                    limit=100,
+                    offset=next_offset,
+                    with_payload=False,
+                    with_vectors=False,
+                )
+                all_points.extend(results)
+                if next_offset is None or len(results) == 0:
+                    break
+            
+            if all_points:
+                # Prepare payload update
+                payload_update = {}
+                if update.title is not None:
+                    payload_update["title"] = update.title
+                if update.authors is not None:
+                    payload_update["authors"] = update.authors
+                if update.year is not None:
+                    payload_update["year"] = update.year
+                if update.doi is not None:
+                    payload_update["doi"] = update.doi
+                if update.journal is not None:
+                    payload_update["journal"] = update.journal
+                if update.countries is not None:
+                    payload_update["countries"] = update.countries
+                if update.sectors is not None:
+                    payload_update["sectors"] = update.sectors
+                if update.study_type is not None:
+                    payload_update["study_type"] = update.study_type
+                if update.intervention_type is not None:
+                    payload_update["intervention_type"] = update.intervention_type
+                if update.needs_review is not None:
+                    payload_update["needs_review"] = update.needs_review
+                
+                payload_update["metadata_source"] = "user"
+                payload_update["metadata_confidence"] = 1.0
+                
+                # Update all points
+                point_ids = [str(p.id) for p in all_points]
+                
+                indexer.client.set_payload(
+                    collection_name=indexer.collection_name,
+                    payload=payload_update,
+                    points=point_ids,
+                )
+                
+                updated_chunks = len(point_ids)
+                logger.info(f"Updated Qdrant metadata for {doc_id}: {len(point_ids)} chunks")
+        except Exception as e:
+            logger.warning(f"Qdrant update failed: {e}")
         
-        if not all_points:
+        if updated_chunks == 0:
             raise HTTPException(status_code=404, detail=f"Document not found: {doc_id}")
         
-        # Prepare payload update
-        payload_update = {}
-        if update.title is not None:
-            payload_update["title"] = update.title
-        if update.authors is not None:
-            payload_update["authors"] = update.authors
-        if update.year is not None:
-            payload_update["year"] = update.year
-        if update.doi is not None:
-            payload_update["doi"] = update.doi
-        if update.journal is not None:
-            payload_update["journal"] = update.journal
-        if update.countries is not None:
-            payload_update["countries"] = update.countries
-        if update.sectors is not None:
-            payload_update["sectors"] = update.sectors
-        if update.study_type is not None:
-            payload_update["study_type"] = update.study_type
-        if update.intervention_type is not None:
-            payload_update["intervention_type"] = update.intervention_type
-        if update.needs_review is not None:
-            payload_update["needs_review"] = update.needs_review
-        
-        # Mark as user-verified
-        payload_update["metadata_source"] = "user"
-        payload_update["metadata_confidence"] = 1.0  # User-verified is highest confidence
-        
-        # Update all points
-        point_ids = [str(p.id) for p in all_points]
-        
-        indexer.client.set_payload(
-            collection_name=indexer.collection_name,
-            payload=payload_update,
-            points=point_ids,
-        )
-        
-        logger.info(f"Updated metadata for {doc_id}: {len(point_ids)} chunks")
         invalidate_admin_caches()
         
         return MetadataUpdateResponse(
             success=True,
             document_id=doc_id,
-            updated_chunks=len(point_ids),
-            message=f"Updated metadata for {len(point_ids)} chunks",
+            updated_chunks=updated_chunks,
+            message=f"Updated metadata for {updated_chunks} chunks",
         )
         
     except HTTPException:
