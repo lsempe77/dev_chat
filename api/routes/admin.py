@@ -192,7 +192,7 @@ async def migrate_add_item_type():
         from .dependencies import is_postgres_available, get_db_session
         from sqlalchemy import text
         
-        if not await is_postgres_available():
+        if not is_postgres_available():
             return {"status": "skipped", "message": "PostgreSQL not available"}
         
         db = await get_db_session()
