@@ -5,7 +5,7 @@ Async PostgreSQL connection using SQLAlchemy 2.0.
 """
 
 import os
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
@@ -20,20 +20,28 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Database URL from environment
-# Format: postgresql+asyncpg://user:password@host:port/dbname
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+# Global engine and session - initialized at runtime by init_database()
+engine: Optional[AsyncEngine] = None
+async_session: Optional[async_sessionmaker[AsyncSession]] = None
 
-# Handle Railway's postgres:// vs postgresql:// format
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-elif DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Create async engine
-# NullPool for serverless/Railway (no persistent connections)
-engine: AsyncEngine = None
-async_session: async_sessionmaker[AsyncSession] = None
+def _get_database_url() -> str:
+    """
+    Get and normalize the DATABASE_URL from environment.
+    Called at runtime, not import time, to ensure env vars are available.
+    """
+    url = os.getenv("DATABASE_URL", "")
+    
+    if not url:
+        return ""
+    
+    # Handle Railway's postgres:// vs postgresql:// format
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    
+    return url
 
 
 def init_database(database_url: str = None) -> tuple[AsyncEngine, async_sessionmaker]:
@@ -44,7 +52,8 @@ def init_database(database_url: str = None) -> tuple[AsyncEngine, async_sessionm
     """
     global engine, async_session
     
-    url = database_url or DATABASE_URL
+    # Get URL at runtime (not import time) to ensure env vars are available
+    url = database_url or _get_database_url()
     
     if not url:
         logger.warning("DATABASE_URL not set - PostgreSQL features disabled")
@@ -63,6 +72,8 @@ def init_database(database_url: str = None) -> tuple[AsyncEngine, async_sessionm
         class_=AsyncSession,
         expire_on_commit=False,
     )
+    
+    logger.info("✅ Database engine and session factory created")
     
     return engine, async_session
 
