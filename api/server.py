@@ -5,6 +5,7 @@ Main application entry point.
 """
 
 import asyncio
+import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 
@@ -42,6 +43,18 @@ async def lifespan(app: FastAPI):
     logger.info(f"Hybrid Search: {'enabled' if settings.hybrid_enabled else 'disabled'}")
     logger.info(f"Reranking: {'enabled' if settings.rerank_enabled else 'disabled'}")
 
+    # Initialize PostgreSQL if DATABASE_URL is set
+    if os.getenv("DATABASE_URL"):
+        try:
+            from src.database.connection import init_database, create_tables
+            init_database()
+            await create_tables()
+            logger.info("✅ PostgreSQL metadata store initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ PostgreSQL not available: {e} - falling back to Qdrant")
+    else:
+        logger.info("ℹ️ DATABASE_URL not set - using Qdrant for metadata")
+
     warmup_task = asyncio.create_task(warm_up_qdrant_connection())
 
     yield
@@ -50,6 +63,15 @@ async def lifespan(app: FastAPI):
     warmup_task.cancel()
     with suppress(asyncio.CancelledError):
         await warmup_task
+    
+    # Close database connections
+    if os.getenv("DATABASE_URL"):
+        try:
+            from src.database.connection import close_database
+            await close_database()
+        except Exception:
+            pass
+    
     logger.info("👋 DevChat v2.0 SOTA shutting down...")
 
 

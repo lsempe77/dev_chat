@@ -35,6 +35,7 @@
 | **PDF Parser** | Modal | MinerU 2.6.8 on T4 GPU |
 | **Storage** | Cloudflare R2 | Bucket: `devchat-pdfs` |
 | **Vector DB** | Qdrant Cloud | Collection: `devchat_v2` (EU) |
+| **Metadata DB** | Railway PostgreSQL | Document metadata (planned) |
 | **Embeddings** | Cohere | embed-v4.0 (1536 dims) |
 | **LLM (Fast)** | OpenRouter | GPT-4o-mini |
 | **LLM (Reasoning)** | OpenRouter | GPT-4o |
@@ -71,6 +72,7 @@ Branch: main
 
 | Task | Description | Status |
 |------|-------------|--------|
+| **PostgreSQL Metadata Store** | Dedicated database for document metadata (instant queries vs Qdrant scroll) | 🔄 In Progress |
 | **PDF Viewer in Metadata Tab** | Open PDF side-by-side while editing metadata | ✅ Done |
 | **Clickable Citations → PDF** | Click citation → opens PDF at page, with highlight text | ✅ Done |
 | **Citation Coverage Validator** | Ensures all retrieved sources are cited in answer | ✅ Done |

@@ -48,6 +48,29 @@ def get_indexer() -> QdrantIndexer:
 
 
 # =============================================================================
+# Database (PostgreSQL)
+# =============================================================================
+
+def is_postgres_available() -> bool:
+    """Check if PostgreSQL is configured and available."""
+    return bool(os.getenv("DATABASE_URL"))
+
+
+async def get_db_session():
+    """Get database session if available. Returns None if not configured."""
+    if not is_postgres_available():
+        return None
+    
+    try:
+        from src.database.connection import async_session
+        if async_session is None:
+            return None
+        return async_session()
+    except Exception:
+        return None
+
+
+# =============================================================================
 # R2 Client
 # =============================================================================
 

@@ -684,11 +684,67 @@ async def get_documents(
     offset: int = Query(0, ge=0),
 ):
     """
-    Get list of indexed documents from Qdrant.
+    Get list of indexed documents.
     
-    Aggregates unique documents from vector payloads.
-    Optimized: Limits scroll to avoid timeout with large collections.
+    Uses PostgreSQL for instant queries if available,
+    falls back to Qdrant scroll if not.
     """
+    from .dependencies import is_postgres_available, get_db_session
+    
+    # Try PostgreSQL first (instant queries)
+    if is_postgres_available():
+        try:
+            db = await get_db_session()
+            if db:
+                async with db:
+                    from src.database.repository import DocumentRepository
+                    
+                    # Get documents
+                    docs = await DocumentRepository.list_all(
+                        db,
+                        search=search,
+                        status=status,
+                        limit=limit,
+                        offset=offset,
+                    )
+                    
+                    # Get stats
+                    stats = await DocumentRepository.get_stats(db)
+                    
+                    return DocumentsResponse(
+                        documents=[
+                            DocumentMetadata(
+                                id=d.id,
+                                title=d.title,
+                                filename=d.filename,
+                                authors=d.authors or [],
+                                year=d.year,
+                                status=d.status,
+                                page_count=d.page_count,
+                                chunk_count=d.chunk_count,
+                                uploaded_at=d.created_at,
+                                processed_at=d.updated_at,
+                            )
+                            for d in docs
+                        ],
+                        total_count=stats["total"],
+                        total_chunks=stats["total_chunks"],
+                        total_pages=stats["total_pages"],
+                    )
+        except Exception as e:
+            logger.warning(f"PostgreSQL query failed, falling back to Qdrant: {e}")
+    
+    # Fallback to Qdrant (slow but works without Postgres)
+    return await _get_documents_from_qdrant(search, status, limit, offset)
+
+
+async def _get_documents_from_qdrant(
+    search: Optional[str],
+    status: Optional[str],
+    limit: int,
+    offset: int,
+) -> DocumentsResponse:
+    """Legacy Qdrant-based document listing (slow but works without Postgres)."""
     documents_cache = get_documents_cache()
     
     try:
@@ -978,16 +1034,79 @@ async def reprocess_document(document_id: str):
 
 @router.get("/metadata/review", response_model=MetadataReviewResponse)
 async def get_metadata_for_review(
-    filter_type: Optional[str] = Query(None, description="Filter: 'needs_review' or 'low_confidence'"),
+    filter_type: Optional[str] = Query(None, description="Filter: 'needs_review', 'low_confidence', or 'all'"),
     limit: int = Query(1000, ge=1, description="Max documents to return"),
     offset: int = Query(0, ge=0),
 ):
     """
     Get documents with metadata that needs review.
     
-    Returns documents with needs_review=True or low confidence scores.
-    OPTIMIZED: Limits scrolling to prevent timeout with large collections.
+    Uses PostgreSQL for instant queries if available,
+    falls back to Qdrant scroll if not.
     """
+    from .dependencies import is_postgres_available, get_db_session
+    
+    # Try PostgreSQL first (instant queries)
+    if is_postgres_available():
+        try:
+            db = await get_db_session()
+            if db:
+                async with db:
+                    from src.database.repository import DocumentRepository
+                    
+                    # Get documents for review
+                    docs = await DocumentRepository.get_for_review(
+                        db,
+                        filter_type=filter_type,
+                        limit=limit,
+                        offset=offset,
+                    )
+                    
+                    # Get stats
+                    stats = await DocumentRepository.get_stats(db)
+                    
+                    return MetadataReviewResponse(
+                        documents=[
+                            DocumentMetadataDetail(
+                                id=d.id,
+                                title=d.title,
+                                filename=d.filename,
+                                authors=d.authors or [],
+                                year=d.year,
+                                doi=d.doi,
+                                journal=d.journal,
+                                publisher=d.publisher,
+                                cited_by_count=d.cited_by_count,
+                                is_open_access=d.is_open_access,
+                                countries=d.countries or [],
+                                sectors=d.sectors or [],
+                                study_type=d.study_type,
+                                intervention_type=d.intervention_type,
+                                sdgs=d.sdgs or [],
+                                keywords=d.keywords or [],
+                                metadata_source=d.metadata_source,
+                                metadata_confidence=d.metadata_confidence,
+                                needs_review=d.needs_review,
+                            )
+                            for d in docs
+                        ],
+                        total_count=stats["total"],
+                        needs_review_count=stats["needs_review"],
+                        low_confidence_count=stats["low_confidence"],
+                    )
+        except Exception as e:
+            logger.warning(f"PostgreSQL query failed, falling back to Qdrant: {e}")
+    
+    # Fallback to Qdrant (slow but works without Postgres)
+    return await _get_metadata_for_review_from_qdrant(filter_type, limit, offset)
+
+
+async def _get_metadata_for_review_from_qdrant(
+    filter_type: Optional[str],
+    limit: int,
+    offset: int,
+) -> MetadataReviewResponse:
+    """Legacy Qdrant-based metadata review (slow but works without Postgres)."""
     metadata_cache = get_metadata_cache()
     
     try:
