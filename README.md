@@ -16,7 +16,8 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
 | **Frontend (Vercel)** | ✅ Live | https://dev-chat-frontend.vercel.app/ |
 | **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing + metadata enrichment |
-| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (146 chunks) |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (413K+ vectors) |
+| **Metadata DB (Postgres)** | ✅ Live | 94 documents, instant queries (~5ms) |
 | **End-to-End RAG** | ✅ Working | Query → Retrieval → Rerank → Generate |
 | **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM enrichment |
 | **Admin Metadata UI** | ✅ Working | Review & edit metadata, mark as verified |
@@ -33,6 +34,7 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 - [x] **Smart Metadata Resolution Pipeline** - CrossRef → OpenAlex → LLM enrichment ✅
 - [x] **Settings Wiring** - Connect frontend settings panel to backend parameters ✅
 - [x] **Admin Metadata Review UI** - Edit & verify document metadata ✅
+- [x] **PostgreSQL Dual-Store** - Instant admin queries via dedicated metadata DB ✅
 - [ ] **Bulk PDF Upload** - Process 3ie's full corpus (~5000 PDFs)
 
 ### Medium Priority  
@@ -183,6 +185,53 @@ src/ingestion/metadata/
 ┌───────────────────────────────▼─────────────────────────────────────────┐
 │                    RESPONSE + CITATIONS                                  │
 └─────────────────────────────────────────────────────────────────────────┘
+
+---
+
+## 🗄️ PostgreSQL Dual-Store Architecture
+
+Production-grade metadata storage for instant admin queries:
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        DUAL-STORE PATTERN                                   │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌─────────────────────┐              ┌─────────────────────┐             │
+│   │     PostgreSQL      │              │       Qdrant        │             │
+│   │   (Metadata Store)  │              │   (Vector Store)    │             │
+│   ├─────────────────────┤              ├─────────────────────┤             │
+│   │ • 94 documents      │              │ • 413K+ embeddings  │             │
+│   │ • CRUD operations   │              │ • Semantic search   │             │
+│   │ • Instant queries   │              │ • Hybrid retrieval  │             │
+│   │ • ~5ms response     │              │ • Chunk payloads    │             │
+│   └──────────┬──────────┘              └──────────┬──────────┘             │
+│              │                                    │                        │
+│              └─────────────┬──────────────────────┘                        │
+│                            ▼                                               │
+│              ┌─────────────────────────┐                                   │
+│              │      Admin Routes       │                                   │
+│              │ /admin/documents        │                                   │
+│              │ /admin/metadata         │                                   │
+│              └─────────────────────────┘                                   │
+│                                                                             │
+│   WHY: Qdrant scroll through 413K vectors = 2-3 seconds                    │
+│        PostgreSQL indexed query = ~5 milliseconds                          │
+│                                                                             │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation
+
+```
+src/database/
+├── models.py       # Document SQLAlchemy model
+├── connection.py   # Async PostgreSQL connection
+└── repository.py   # CRUD operations
+
+scripts/
+└── sync_qdrant_to_postgres.py  # One-time migration
+```
 
 ---
 

@@ -29,13 +29,13 @@
 ### Production Stack
 
 | Service | Provider | Details |
-|---------|----------|---------|
+|---------|----------|----------|
 | **Frontend** | Vercel | Next.js 15, auto-deploy from GitHub |
 | **Backend** | Railway | FastAPI, slim Docker image |
 | **PDF Parser** | Modal | MinerU 2.6.8 on T4 GPU |
 | **Storage** | Cloudflare R2 | Bucket: `devchat-pdfs` |
-| **Vector DB** | Qdrant Cloud | Collection: `devchat_v2` (EU) |
-| **Metadata DB** | Railway PostgreSQL | Document metadata (planned) |
+| **Vector DB** | Qdrant Cloud | Collection: `devchat_v2` (413K+ vectors) |
+| **Metadata DB** | Railway PostgreSQL | 94 documents, instant queries (~5ms) |
 | **Embeddings** | Cohere | embed-v4.0 (1536 dims) |
 | **LLM (Fast)** | OpenRouter | GPT-4o-mini |
 | **LLM (Reasoning)** | OpenRouter | GPT-4o |
@@ -72,7 +72,7 @@ Branch: main
 
 | Task | Description | Status |
 |------|-------------|--------|
-| **PostgreSQL Metadata Store** | Dedicated database for document metadata (instant queries vs Qdrant scroll) | 🔄 In Progress |
+| **PostgreSQL Metadata Store** | Dedicated database for document metadata (instant queries vs Qdrant scroll) | ✅ Done |
 | **PDF Viewer in Metadata Tab** | Open PDF side-by-side while editing metadata | ✅ Done |
 | **Clickable Citations → PDF** | Click citation → opens PDF at page, with highlight text | ✅ Done |
 | **Citation Coverage Validator** | Ensures all retrieved sources are cited in answer | ✅ Done |
@@ -152,6 +152,169 @@ Smart metadata extraction from multiple authoritative sources:
 
 ```
 src/ingestion/metadata/
+```
+
+---
+
+## 🗄️ PostgreSQL Dual-Store Architecture (December 2025)
+
+Production-grade metadata storage with instant queries:
+
+### Why PostgreSQL?
+
+| Operation | Qdrant (Before) | PostgreSQL (After) |
+|-----------|-----------------|--------------------|
+| List 94 documents | ~2-3 seconds (scroll 413K vectors) | **~5ms** |
+| Count documents | ~1 second (full scan) | **<1ms** |
+| Filter by needs_review | ~2 seconds | **<5ms** |
+| Aggregate stats | Not possible | **Instant** |
+
+### Dual-Store Pattern
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        DUAL-STORE ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌─────────────────────┐              ┌─────────────────────┐          │
+│   │     PostgreSQL      │              │       Qdrant        │          │
+│   │   (Metadata Store)  │              │   (Vector Store)    │          │
+│   ├─────────────────────┤              ├─────────────────────┤          │
+│   │ • Document metadata │              │ • 413K+ embeddings  │          │
+│   │ • 94 documents      │              │ • Semantic search   │          │
+│   │ • CRUD operations   │              │ • Hybrid retrieval  │          │
+│   │ • Instant queries   │              │ • Chunk payloads    │          │
+│   │ • Full SQL support  │              │                     │          │
+│   └──────────┬──────────┘              └──────────┬──────────┘          │
+│              │                                     │                     │
+│              └─────────────┬───────────────────────┘                     │
+│                            │                                             │
+│                            ▼                                             │
+│              ┌─────────────────────────┐                                │
+│              │      Admin Routes       │                                │
+│              │ /admin/documents        │                                │
+│              │ /admin/metadata         │                                │
+│              │ /admin/db-status        │                                │
+│              └─────────────────────────┘                                │
+│                                                                          │
+│   SYNC STRATEGY:                                                        │
+│   • Initial: scripts/sync_qdrant_to_postgres.py (one-time migration)   │
+│   • Ongoing: Update Postgres when documents are ingested/modified       │
+│   • Fallback: If Postgres unavailable, routes fall back to Qdrant      │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Database Schema
+
+```sql
+CREATE TABLE documents (
+    id VARCHAR(255) PRIMARY KEY,
+    title TEXT NOT NULL,
+    filename VARCHAR(500) NOT NULL,
+    authors TEXT[],
+    year INTEGER,
+    doi VARCHAR(255),
+    journal VARCHAR(500),
+    publisher VARCHAR(500),
+    abstract TEXT,
+    cited_by_count INTEGER,
+    is_open_access BOOLEAN,
+    countries TEXT[],
+    sectors TEXT[],
+    study_type VARCHAR(255),
+    intervention_type VARCHAR(500),
+    sdgs TEXT[],
+    keywords TEXT[],
+    chunk_count INTEGER DEFAULT 0,
+    page_count INTEGER DEFAULT 0,
+    metadata_source VARCHAR(50),
+    metadata_confidence FLOAT DEFAULT 0.0,
+    needs_review BOOLEAN DEFAULT TRUE,
+    status VARCHAR(50) DEFAULT 'indexed',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    extra JSONB
+);
+```
+
+### Implementation Files
+
+```
+src/database/
+├── __init__.py           # Package exports
+├── models.py             # SQLAlchemy Document model
+├── connection.py         # Async PostgreSQL connection
+└── repository.py         # CRUD operations
+
+scripts/
+└── sync_qdrant_to_postgres.py   # Migration utility
+
+api/routes/
+└── admin.py              # Uses Postgres when available
+```
+
+### Environment Variables
+
+```bash
+# Railway internal (backend → Postgres)
+DATABASE_URL=postgresql://postgres:***@postgres.railway.internal:5432/railway
+
+# Public (for local scripts)
+DATABASE_URL=postgresql://postgres:***@crossover.proxy.rlwy.net:24886/railway
+```
+
+### Debug Endpoint
+
+```bash
+# Check PostgreSQL status
+curl https://3iechat.up.railway.app/admin/db-status
+
+# Response:
+{
+  "postgres_available": true,
+  "database_url": "postgresql://postgres:***@postgres.railway.internal:5432/railway",
+  "document_count": 94,
+  "connection": "success"
+}
+```
+
+---
+
+## 🖥️ Unified CLI (December 2025)
+
+Single `devchat` command for all operations:
+
+```bash
+# Install CLI
+pip install -e .
+
+# Available commands
+devchat --help
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `devchat serve` | Start API server (`--port`, `--reload`) |
+| `devchat ingest` | Ingest documents (`--source`, `--recreate`) |
+| `devchat process-pdfs` | Process PDFs with MinerU (`--pdf-dir`) |
+| `devchat evaluate` | Run RAGAS evaluation (`--test-file`) |
+| `devchat citations` | Evaluate citation quality (`--batch`) |
+| `devchat ragas` | Run RAGAS evaluator (`--query`) |
+| `devchat check-metadata` | Debug Qdrant metadata (`--list`, `--doc-id`) |
+| `devchat health` | Check service health (`--detailed`) |
+| `devchat version` | Show version info |
+
+### Example Usage
+
+```bash
+# Development server with hot reload
+devchat serve --port 8000 --reload
+
+# Ingest markdown documents
+devchat ingest --source ./data/markdown --recreate
 ├── __init__.py
 ├── doi_extractor.py      # Extract DOI from PDF
 ├── crossref_client.py    # CrossRef API
