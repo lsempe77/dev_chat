@@ -500,6 +500,25 @@ export function MetadataTab() {
 
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">Item Type</Label>
+              <Select
+                value={editForm.item_type || ""}
+                onValueChange={(value) => setEditForm({ ...editForm, item_type: value })}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select item type (Zotero-style)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ITEM_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Title</Label>
               <Input
                 className="col-span-3"
@@ -597,25 +616,6 @@ export function MetadataTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {STUDY_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Item Type</Label>
-              <Select
-                value={editForm.item_type || ""}
-                onValueChange={(value) => setEditForm({ ...editForm, item_type: value })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select item type (Zotero-style)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ITEM_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
                     </SelectItem>
