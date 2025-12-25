@@ -331,6 +331,7 @@ export interface DocumentMetadataDetail {
   publisher?: string;
   cited_by_count?: number;
   is_open_access: boolean;
+  item_type?: string;  // journalArticle, book, report, workingPaper, etc.
   countries: string[];
   sectors: string[];
   study_type?: string;
@@ -356,6 +357,7 @@ export interface MetadataUpdateRequest {
   year?: number;
   doi?: string;
   journal?: string;
+  item_type?: string;
   countries?: string[];
   sectors?: string[];
   study_type?: string;

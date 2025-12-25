@@ -51,6 +51,21 @@ import {
 } from "@/lib/admin-api";
 import { PDFViewer } from "@/components/pdf";
 
+// Zotero-compatible item types
+const ITEM_TYPES = [
+  "journalArticle",
+  "book",
+  "bookSection",
+  "report",
+  "workingPaper",
+  "thesis",
+  "conferencePaper",
+  "manuscript",
+  "document",
+  "webpage",
+  "other",
+];
+
 const STUDY_TYPES = [
   "RCT",
   "quasi-experimental",
@@ -159,6 +174,7 @@ export function MetadataTab() {
       sectors: doc.sectors,
       study_type: doc.study_type,
       intervention_type: doc.intervention_type,
+      item_type: doc.item_type,
     });
   };
 
@@ -368,6 +384,12 @@ export function MetadataTab() {
                                 {doc.study_type}
                               </Badge>
                             )}
+                            {doc.item_type && (
+                              <Badge variant="outline" className="gap-1">
+                                <FileText className="h-3 w-3" />
+                                {doc.item_type}
+                              </Badge>
+                            )}
                           </div>
 
                           <div className="text-xs text-muted-foreground">
@@ -575,6 +597,25 @@ export function MetadataTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {STUDY_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right">Item Type</Label>
+              <Select
+                value={editForm.item_type || ""}
+                onValueChange={(value) => setEditForm({ ...editForm, item_type: value })}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select item type (Zotero-style)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ITEM_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
                     </SelectItem>

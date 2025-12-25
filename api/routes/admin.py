@@ -1120,6 +1120,7 @@ async def get_metadata_for_review(
                                 publisher=d.publisher,
                                 cited_by_count=d.cited_by_count,
                                 is_open_access=d.is_open_access,
+                                item_type=d.item_type,
                                 countries=d.countries or [],
                                 sectors=d.sectors or [],
                                 study_type=d.study_type,
@@ -1453,6 +1454,8 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
                             update_data["doi"] = update.doi
                         if update.journal is not None:
                             update_data["journal"] = update.journal
+                        if update.item_type is not None:
+                            update_data["item_type"] = update.item_type
                         if update.countries is not None:
                             update_data["countries"] = update.countries
                         if update.sectors is not None:

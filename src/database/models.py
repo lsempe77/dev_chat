@@ -52,6 +52,7 @@ class Document(Base):
     is_open_access: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     
     # Classification metadata
+    item_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # journalArticle, book, report, etc.
     countries: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     sectors: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     study_type: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

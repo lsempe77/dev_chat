@@ -344,6 +344,7 @@ class DocumentMetadataDetail(BaseModel):
     publisher: Optional[str] = None
     cited_by_count: Optional[int] = None
     is_open_access: Optional[bool] = False
+    item_type: Optional[str] = None  # journalArticle, book, report, workingPaper, etc.
     countries: List[str] = []
     sectors: List[str] = []
     study_type: Optional[str] = None
@@ -371,6 +372,7 @@ class MetadataUpdateRequest(BaseModel):
     year: Optional[int] = None
     doi: Optional[str] = None
     journal: Optional[str] = None
+    item_type: Optional[str] = None
     countries: Optional[List[str]] = None
     sectors: Optional[List[str]] = None
     study_type: Optional[str] = None
