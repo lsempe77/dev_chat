@@ -1129,6 +1129,7 @@ async def get_metadata_for_review(
                                 metadata_source=d.metadata_source,
                                 metadata_confidence=d.metadata_confidence,
                                 needs_review=d.needs_review,
+                                chunk_count=d.chunk_count or 0,
                             )
                             for d in docs
                         ],
