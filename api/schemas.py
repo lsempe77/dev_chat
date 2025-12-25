@@ -343,14 +343,14 @@ class DocumentMetadataDetail(BaseModel):
     journal: Optional[str] = None
     publisher: Optional[str] = None
     cited_by_count: Optional[int] = None
-    is_open_access: bool = False
+    is_open_access: Optional[bool] = False
     countries: List[str] = []
     sectors: List[str] = []
     study_type: Optional[str] = None
     intervention_type: Optional[str] = None
     sdgs: List[str] = []
     keywords: List[str] = []
-    metadata_source: str = "extraction"
+    metadata_source: Optional[str] = "extraction"
     metadata_confidence: float = 0.0
     needs_review: bool = True
     chunk_count: int = 0
