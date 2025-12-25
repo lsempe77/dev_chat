@@ -60,6 +60,48 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
 # =============================================================================
+# Database Status (Debug)
+# =============================================================================
+
+@router.get("/db-status")
+async def get_db_status():
+    """Check PostgreSQL connection status (debug endpoint)."""
+    from .dependencies import is_postgres_available, get_db_session
+    
+    db_url = os.getenv("DATABASE_URL", "")
+    # Mask password for security
+    if "@" in db_url and ":" in db_url:
+        parts = db_url.split("@")
+        prefix = parts[0].rsplit(":", 1)[0] + ":***"
+        db_url_masked = prefix + "@" + "@".join(parts[1:])
+    else:
+        db_url_masked = db_url if db_url else "(not set)"
+    
+    result = {
+        "postgres_available": is_postgres_available(),
+        "database_url": db_url_masked,
+    }
+    
+    if is_postgres_available():
+        try:
+            db = await get_db_session()
+            if db:
+                async with db:
+                    from sqlalchemy import text
+                    res = await db.execute(text("SELECT COUNT(*) FROM documents"))
+                    count = res.scalar()
+                    result["document_count"] = count
+                    result["connection"] = "success"
+            else:
+                result["connection"] = "session_unavailable"
+        except Exception as e:
+            result["connection"] = "error"
+            result["error"] = str(e)
+    
+    return result
+
+
+# =============================================================================
 # Metrics Endpoints
 # =============================================================================
 
