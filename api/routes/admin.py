@@ -182,6 +182,32 @@ async def get_collection_info():
         }
 
 
+@router.post("/migrate/add-item-type")
+async def migrate_add_item_type():
+    """
+    Add item_type column to PostgreSQL documents table if it doesn't exist.
+    Safe to call multiple times.
+    """
+    try:
+        from .dependencies import is_postgres_available, get_db_session
+        from sqlalchemy import text
+        
+        if not await is_postgres_available():
+            return {"status": "skipped", "message": "PostgreSQL not available"}
+        
+        db = await get_db_session()
+        try:
+            await db.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS item_type VARCHAR(100)"))
+            await db.commit()
+            logger.info("Migration: item_type column added successfully")
+            return {"status": "success", "message": "item_type column added"}
+        finally:
+            await db.close()
+    except Exception as e:
+        logger.error(f"Migration error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/indexes")
 async def ensure_indexes():
     """
