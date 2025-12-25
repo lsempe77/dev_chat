@@ -1132,6 +1132,7 @@ async def get_metadata_for_review(
         documents = []
         needs_review_count = 0
         low_confidence_count = 0
+        total_docs = len(doc_map)  # Total documents BEFORE filtering
         
         for doc_data in doc_map.values():
             # Count stats
@@ -1152,12 +1153,11 @@ async def get_metadata_for_review(
         documents.sort(key=lambda d: d.metadata_confidence)
         
         # Apply pagination
-        total_count = len(documents)
         documents = documents[offset:offset + limit]
         
         response_payload = MetadataReviewResponse(
             documents=documents,
-            total_count=total_count,
+            total_count=total_docs,  # Always the total, not filtered count
             needs_review_count=needs_review_count,
             low_confidence_count=low_confidence_count,
         )
