@@ -49,7 +49,6 @@ export function DocumentsTab() {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalChunks, setTotalChunks] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
 
   // Fetch documents from API
   const fetchDocuments = useCallback(async () => {
@@ -72,7 +71,6 @@ export function DocumentsTab() {
       }));
       setDocuments(docs);
       setTotalChunks(response.total_chunks);
-      setTotalPages(response.total_pages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load documents");
     } finally {
@@ -218,17 +216,6 @@ export function DocumentsTab() {
                 <p className="text-2xl font-bold">{indexedCount}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Pages</p>
-                <p className="text-2xl font-bold">{totalPages.toLocaleString()}</p>
-              </div>
-              <FileText className="h-8 w-8 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
