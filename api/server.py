@@ -44,14 +44,21 @@ async def lifespan(app: FastAPI):
     logger.info(f"Reranking: {'enabled' if settings.rerank_enabled else 'disabled'}")
 
     # Initialize PostgreSQL if DATABASE_URL is set
-    if os.getenv("DATABASE_URL"):
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
         try:
+            logger.info(f"Initializing PostgreSQL: {db_url.split('@')[-1] if '@' in db_url else 'configured'}")
             from src.database.connection import init_database, create_tables
-            init_database()
-            await create_tables()
-            logger.info("✅ PostgreSQL metadata store initialized")
+            engine, session = init_database()
+            if engine and session:
+                await create_tables()
+                logger.info("✅ PostgreSQL metadata store initialized successfully")
+            else:
+                logger.warning("⚠️ init_database returned None - check DATABASE_URL format")
         except Exception as e:
-            logger.warning(f"⚠️ PostgreSQL not available: {e} - falling back to Qdrant")
+            import traceback
+            logger.error(f"⚠️ PostgreSQL init failed: {e}")
+            logger.error(traceback.format_exc())
     else:
         logger.info("ℹ️ DATABASE_URL not set - using Qdrant for metadata")
 
