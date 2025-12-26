@@ -12,6 +12,7 @@ import {
   Search,
   Edit2,
   Check,
+  CheckCircle,
   AlertCircle,
   Loader2,
   RefreshCw,
@@ -19,6 +20,8 @@ import {
   Building,
   Beaker,
   Eye,
+  ExternalLink,
+  X,
 } from "lucide-react";
 import { 
   getMetadataForReview, 
@@ -460,12 +463,12 @@ export function MetadataTab() {
 
       {/* Edit Modal */}
       <MetadataEditDialog
-        editingDoc={editingDoc}
+        document={editingDoc}
         editForm={editForm}
         setEditForm={setEditForm}
-        saving={saving}
+        isSaving={isSaving}
         onClose={() => setEditingDoc(null)}
-        onSave={handleSaveMetadata}
+        onSave={handleSave}
       />
     </div>
   );
