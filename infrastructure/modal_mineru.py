@@ -314,29 +314,57 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
     s3 = get_r2_client()
     bucket = get_bucket_name()
     
-    # List input PDFs
+    # List input PDFs (with pagination for >1000 files)
     input_prefix = "input-pdfs/"
-    response = s3.list_objects_v2(Bucket=bucket, Prefix=input_prefix)
+    pdf_keys = []
+    continuation_token = None
     
-    if "Contents" not in response:
+    while True:
+        if continuation_token:
+            response = s3.list_objects_v2(
+                Bucket=bucket, Prefix=input_prefix, ContinuationToken=continuation_token
+            )
+        else:
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=input_prefix)
+        
+        if "Contents" in response:
+            pdf_keys.extend([
+                obj["Key"] for obj in response["Contents"]
+                if obj["Key"].lower().endswith(".pdf")
+            ])
+        
+        if response.get("IsTruncated"):
+            continuation_token = response.get("NextContinuationToken")
+        else:
+            break
+    
+    if not pdf_keys:
         return {"message": "No PDFs found in input-pdfs/", "queued": 0}
-    
-    pdf_keys = [
-        obj["Key"] for obj in response["Contents"]
-        if obj["Key"].lower().endswith(".pdf")
-    ]
     
     print(f"Found {len(pdf_keys)} PDFs in R2")
     
-    # Check which ones already have outputs in R2
+    # Check which ones already have outputs in R2 (with pagination)
     output_prefix = "outputs/json/"
-    existing_response = s3.list_objects_v2(Bucket=bucket, Prefix=output_prefix)
     existing_outputs = set()
+    continuation_token = None
     
-    if "Contents" in existing_response:
-        existing_outputs = {
-            Path(obj["Key"]).stem for obj in existing_response["Contents"]
-        }
+    while True:
+        if continuation_token:
+            existing_response = s3.list_objects_v2(
+                Bucket=bucket, Prefix=output_prefix, ContinuationToken=continuation_token
+            )
+        else:
+            existing_response = s3.list_objects_v2(Bucket=bucket, Prefix=output_prefix)
+        
+        if "Contents" in existing_response:
+            existing_outputs.update(
+                Path(obj["Key"]).stem for obj in existing_response["Contents"]
+            )
+        
+        if existing_response.get("IsTruncated"):
+            continuation_token = existing_response.get("NextContinuationToken")
+        else:
+            break
     
     print(f"Found {len(existing_outputs)} existing JSON outputs in R2")
     
