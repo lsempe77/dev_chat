@@ -142,11 +142,11 @@ class Settings(BaseSettings):
     final_top_k: int = Field(default=10, ge=1, description="Final context chunks")
     
     # =========================================================================
-    # Chunking
+    # Chunking (256 words = better precision for RAG retrieval)
     # =========================================================================
-    chunk_size: int = Field(default=512, ge=100)
+    chunk_size: int = Field(default=256, ge=100)
     chunk_overlap: int = Field(default=50, ge=0)
-    parent_chunk_size: int = Field(default=2048, ge=256)
+    parent_chunk_size: int = Field(default=1024, ge=256)  # Parent = 4x child
     use_semantic_chunking: bool = Field(default=True)
     
     # =========================================================================

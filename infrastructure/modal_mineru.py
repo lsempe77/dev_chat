@@ -1014,14 +1014,18 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
         print(f"  Note: Could not create indexes: {e}")
     
     # Chunk content - use page-aware chunking if content_list available
+    # Using 256 words per chunk for more granular RAG retrieval
+    CHUNK_SIZE = 256
+    CHUNK_OVERLAP = 50
+    
     if content_list:
-        print(f"  Using page-aware chunking from {len(content_list)} content items...")
-        chunks_with_pages = chunk_content_with_pages(content_list, chunk_size=512, overlap=50)
+        print(f"  Using page-aware chunking from {len(content_list)} content items (chunk_size={CHUNK_SIZE})...")
+        chunks_with_pages = chunk_content_with_pages(content_list, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
         chunks = [c["text"] for c in chunks_with_pages]
         chunk_pages = chunks_with_pages  # Keep full info for payload
     else:
-        print("  Using simple chunking (no page info available)")
-        chunks = chunk_content(content, chunk_size=512, overlap=50)
+        print(f"  Using simple chunking (chunk_size={CHUNK_SIZE}, no page info available)")
+        chunks = chunk_content(content, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
         chunk_pages = None
     
     if not chunks:
@@ -1104,7 +1108,7 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
     return len(points)
 
 
-def chunk_content(text: str, chunk_size: int = 512, overlap: int = 50) -> list[str]:
+def chunk_content(text: str, chunk_size: int = 256, overlap: int = 50) -> list[str]:
     """Split text into overlapping chunks (legacy - no page info)."""
     words = text.split()
     chunks = []
@@ -1117,13 +1121,13 @@ def chunk_content(text: str, chunk_size: int = 512, overlap: int = 50) -> list[s
     return chunks
 
 
-def chunk_content_with_pages(content_list: list, chunk_size: int = 512, overlap: int = 50) -> list[dict]:
+def chunk_content_with_pages(content_list: list, chunk_size: int = 256, overlap: int = 50) -> list[dict]:
     """
     Split structured content into chunks, preserving page numbers.
     
     Args:
         content_list: MinerU content list with page_idx for each item
-        chunk_size: Target chunk size in words
+        chunk_size: Target chunk size in words (default 256 for better RAG precision)
         overlap: Word overlap between chunks
         
     Returns:
