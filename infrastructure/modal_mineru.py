@@ -107,12 +107,13 @@ def compute_content_hash(content: bytes) -> str:
     return hashlib.md5(content).hexdigest()[:16]
 
 
-def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int]:
+def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
     """
     Check if a PDF is already indexed in Qdrant.
     
     Returns:
-        (is_indexed, chunk_count)
+        (is_indexed, chunk_count, error_message)
+        - error_message is None if check succeeded, otherwise contains error details
     """
     import os
     from qdrant_client import QdrantClient
@@ -128,7 +129,7 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int]:
         try:
             qdrant.get_collection("devchat_v2")
         except Exception:
-            return False, 0
+            return False, 0, None  # Collection doesn't exist, not an error
         
         # Try to count with filter - this requires payload index
         try:
@@ -138,7 +139,7 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int]:
                     must=[FieldCondition(key="pdf_name", match=MatchValue(value=pdf_name))]
                 ),
             )
-            return result.count > 0, result.count
+            return result.count > 0, result.count, None
         except Exception as filter_error:
             # If filter fails (no index), fall back to scroll search
             if "index required" in str(filter_error).lower():
@@ -151,12 +152,14 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int]:
                     with_payload=["pdf_name"],
                 )
                 count = sum(1 for r in results if r.payload.get("pdf_name") == pdf_name)
-                return count > 0, count
+                return count > 0, count, None
             raise
             
     except Exception as e:
-        print(f"  Qdrant check failed: {e}")
-        return False, 0
+        error_msg = str(e)
+        print(f"  Qdrant check failed: {error_msg}")
+        # Return error so caller can decide how to handle
+        return False, 0, error_msg
 
 
 def delete_qdrant_chunks(pdf_name: str) -> int:
@@ -289,7 +292,7 @@ def sync_to_postgres(doc_id: str, metadata: dict, chunk_count: int, page_count: 
     secrets=[r2_secret, qdrant_secret],
     timeout=300,
 )
-def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True) -> dict:
+def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_documents: int = 0) -> dict:
     """
     Scan R2 for new PDFs and queue them for processing.
     
@@ -301,6 +304,7 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True) -> dic
     Args:
         force_reprocess: If True, reprocess all PDFs even if outputs exist
         check_qdrant: If True, also verify Qdrant indexing (slower but thorough)
+        max_documents: Maximum number of PDFs to queue (0 = unlimited)
         
     Returns:
         dict with counts of queued, skipped, and failed PDFs
@@ -341,6 +345,8 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True) -> dic
     skipped_r2 = []
     skipped_qdrant = []
     needs_reindex = []
+    skipped_limit = []  # PDFs skipped due to max_documents limit
+    skipped_errors = []  # PDFs skipped due to Qdrant check errors
     
     for pdf_key in pdf_keys:
         pdf_name = Path(pdf_key).stem
@@ -351,13 +357,25 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True) -> dic
         if has_r2_output and not force_reprocess:
             # Check 2: Qdrant indexed? (optional but recommended)
             if check_qdrant:
-                is_indexed, chunk_count = check_qdrant_indexed(pdf_name)
+                is_indexed, chunk_count, qdrant_error = check_qdrant_indexed(pdf_name)
+                
+                # If Qdrant check failed with error, skip this PDF to avoid duplicate processing
+                if qdrant_error:
+                    skipped_errors.append({"key": pdf_key, "error": qdrant_error})
+                    print(f"  ❌ Skipping (Qdrant error, R2 has output): {pdf_key} - {qdrant_error}")
+                    continue
+                
                 if is_indexed:
                     skipped_qdrant.append({"key": pdf_key, "chunks": chunk_count})
                     print(f"  ✓ Skipping (R2 + Qdrant OK, {chunk_count} chunks): {pdf_key}")
                     continue
                 else:
                     # R2 has output but Qdrant missing - needs re-indexing only
+                    # Also respect max_documents limit for re-indexing
+                    if max_documents > 0 and (len(queued) + len(needs_reindex)) >= max_documents:
+                        skipped_limit.append(pdf_key)
+                        print(f"  ⏸ Skipping (limit reached): {pdf_key}")
+                        continue
                     needs_reindex.append(pdf_key)
                     print(f"  ⚠ Re-indexing (R2 OK, Qdrant missing): {pdf_key}")
                     process_pdf.spawn(pdf_key=pdf_key, skip_extraction=True)
@@ -366,6 +384,12 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True) -> dic
                 skipped_r2.append(pdf_key)
                 print(f"  Skipping (R2 output exists): {pdf_key}")
                 continue
+        
+        # Check max_documents limit before queuing
+        if max_documents > 0 and (len(queued) + len(needs_reindex)) >= max_documents:
+            skipped_limit.append(pdf_key)
+            print(f"  ⏸ Skipping (limit reached): {pdf_key}")
+            continue
         
         # Queue for full processing
         print(f"  Queuing: {pdf_key}")
@@ -376,10 +400,14 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True) -> dic
         "queued": len(queued),
         "skipped_r2_only": len(skipped_r2),
         "skipped_fully_indexed": len(skipped_qdrant),
+        "skipped_qdrant_errors": len(skipped_errors),
         "needs_reindex": len(needs_reindex),
+        "skipped_limit": len(skipped_limit),
+        "max_documents": max_documents,
         "total": len(pdf_keys),
         "queued_files": queued[:10],
         "reindex_files": needs_reindex[:10],
+        "error_files": [e["key"] for e in skipped_errors[:5]],
     }
 
 
@@ -1510,16 +1538,21 @@ def trigger_processing(request: dict = None) -> dict:
     
     try:
         # Call the orchestrator (spawns in Modal's infrastructure)
+        # Pass max_documents to limit number of PDFs processed
         result = orchestrate.remote(
             force_reprocess=force_reprocess,
-            check_qdrant=check_qdrant
+            check_qdrant=check_qdrant,
+            max_documents=max_documents
         )
         
         return {
             "success": True,
             "queued": result.get("queued", 0),
-            "skipped": result.get("skipped", 0),
-            "message": f"Processing triggered. Queued {result.get('queued', 0)} PDFs.",
+            "reindexed": result.get("needs_reindex", 0),
+            "skipped_limit": result.get("skipped_limit", 0),
+            "skipped_errors": result.get("skipped_qdrant_errors", 0),
+            "max_documents": max_documents,
+            "message": f"Processing triggered. Queued {result.get('queued', 0)} PDFs, re-indexing {result.get('needs_reindex', 0)}.",
         }
         
     except Exception as e:
