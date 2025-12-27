@@ -364,25 +364,30 @@ async def preview_import(
     else:
         raise HTTPException(status_code=400, detail="Unknown file format. Supported: .ris, .bib, .csv")
     
-    # For large files, skip duplicate checking in preview (will check during confirm)
-    # This prevents 700+ individual DB queries which times out
+    # Fast duplicate check: single DB query, then in-memory O(1) lookups
     duplicates = []
-    if len(entries) <= 100 and is_postgres_available():
+    if is_postgres_available():
         db = await get_db_session()
         if db:
-            async with db:
-                from src.database.repository import DocumentRepository
-                # Get all existing titles in one query for comparison
-                existing_docs = await DocumentRepository.list_all(db, limit=10000)
-                existing_titles = {doc.title.lower().strip() for doc in existing_docs if doc.title}
-                
-                # Check each entry against cached titles
-                for entry in entries:
-                    if entry.title.lower().strip() in existing_titles:
-                        duplicates.append(entry.title)
-    elif len(entries) > 100:
-        # Add a note that duplicate check was skipped
-        errors.append(f"Note: Duplicate check skipped for {len(entries)} entries (will check during import)")
+            try:
+                async with db:
+                    from src.database.repository import DocumentRepository
+                    # Single query to get all existing titles
+                    existing_docs = await DocumentRepository.list_all(db, limit=50000)
+                    existing_titles = {doc.title.lower().strip() for doc in existing_docs if doc.title}
+                    existing_dois = {doc.doi.lower().strip() for doc in existing_docs if doc.doi}
+                    
+                    # O(1) in-memory lookup for each entry
+                    for entry in entries:
+                        title_normalized = entry.title.lower().strip()
+                        doi_normalized = (entry.doi or "").lower().strip()
+                        
+                        if title_normalized in existing_titles:
+                            duplicates.append(entry.title)
+                        elif doi_normalized and doi_normalized in existing_dois:
+                            duplicates.append(f"{entry.title} (DOI match)")
+            except Exception as e:
+                errors.append(f"Warning: Could not check for duplicates: {str(e)}")
     
     return ImportPreviewResponse(
         parsed_count=len(entries),
