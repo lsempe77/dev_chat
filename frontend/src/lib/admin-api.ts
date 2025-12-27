@@ -50,6 +50,7 @@ export interface UploadResponse {
   is_duplicate?: boolean;
   existing_doc_id?: string;
   content_hash?: string;
+  message?: string;
 }
 
 export interface ProcessingJob {
