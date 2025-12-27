@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Clock,
   Loader2,
-  FileText
+  FileText,
+  RotateCw
 } from "lucide-react";
 import { 
   getProcessingJobs, 
@@ -323,7 +324,7 @@ export function ProcessingTab() {
                           size="sm"
                           onClick={() => retryJob(job.id)}
                         >
-                          <RefreshCw className="h-3 w-3 mr-1" />
+                          <RotateCw className="h-3 w-3 mr-1" />
                           Retry
                         </Button>
                       )}
