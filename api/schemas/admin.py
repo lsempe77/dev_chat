@@ -24,6 +24,8 @@ class UploadResponse(BaseModel):
     size_bytes: int
     queued_for_processing: bool = False
     doc_id: Optional[str] = None
+    message: Optional[str] = None
+    is_duplicate: bool = False  # True if file already existed (content hash match)
 
 
 class ProcessingJob(BaseModel):

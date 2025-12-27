@@ -14,6 +14,9 @@ export interface UploadResponse {
   r2_key: string;
   size_bytes: number;
   queued_for_processing: boolean;
+  doc_id?: string;
+  message?: string;
+  is_duplicate?: boolean;
 }
 
 export interface ProcessingJob {

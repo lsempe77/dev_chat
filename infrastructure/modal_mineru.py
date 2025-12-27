@@ -343,6 +343,31 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
     
     print(f"Found {len(pdf_keys)} PDFs in R2")
     
+    # Detect duplicates by base name (ignoring hash prefix)
+    # Format: {hash}_{base_name}.pdf -> extract base_name
+    def extract_base_name(pdf_key: str) -> str:
+        """Extract base name without hash prefix."""
+        stem = Path(pdf_key).stem  # e.g., "abc12345_Author_(2020)"
+        if "_" in stem and len(stem.split("_")[0]) == 8:
+            # Looks like our format: {8-char-hash}_{base_name}
+            return "_".join(stem.split("_")[1:])
+        return stem
+    
+    # Group PDFs by base name to find duplicates
+    base_name_to_keys = {}
+    for pdf_key in pdf_keys:
+        base = extract_base_name(pdf_key)
+        if base not in base_name_to_keys:
+            base_name_to_keys[base] = []
+        base_name_to_keys[base].append(pdf_key)
+    
+    # Identify duplicates (same base name, different hash)
+    duplicates = {base: keys for base, keys in base_name_to_keys.items() if len(keys) > 1}
+    if duplicates:
+        print(f"⚠ Found {len(duplicates)} duplicate base names with multiple versions:")
+        for base, keys in list(duplicates.items())[:5]:
+            print(f"    {base}: {[Path(k).stem for k in keys]}")
+    
     # Check which ones already have outputs in R2 (with pagination)
     output_prefix = "outputs/json/"
     existing_outputs = set()
@@ -368,6 +393,11 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
     
     print(f"Found {len(existing_outputs)} existing JSON outputs in R2")
     
+    # Also check Qdrant for indexed base names (to skip duplicates of already-indexed docs)
+    indexed_base_names = set()
+    for output_name in existing_outputs:
+        indexed_base_names.add(extract_base_name(f"{output_name}.pdf"))
+    
     # Queue new PDFs for processing
     queued = []
     skipped_r2 = []
@@ -375,9 +405,17 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
     needs_reindex = []
     skipped_limit = []  # PDFs skipped due to max_documents limit
     skipped_errors = []  # PDFs skipped due to Qdrant check errors
+    skipped_duplicates = []  # PDFs skipped because another version is already indexed
     
     for pdf_key in pdf_keys:
         pdf_name = Path(pdf_key).stem
+        base_name = extract_base_name(pdf_key)
+        
+        # Check if this is a duplicate of an already-indexed document
+        if base_name in indexed_base_names and pdf_name not in existing_outputs:
+            skipped_duplicates.append(pdf_key)
+            print(f"  🔄 Skipping duplicate (another version indexed): {pdf_key}")
+            continue
         
         # Check 1: R2 output exists?
         has_r2_output = pdf_name in existing_outputs
@@ -429,13 +467,16 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
         "skipped_r2_only": len(skipped_r2),
         "skipped_fully_indexed": len(skipped_qdrant),
         "skipped_qdrant_errors": len(skipped_errors),
+        "skipped_duplicates": len(skipped_duplicates),
         "needs_reindex": len(needs_reindex),
         "skipped_limit": len(skipped_limit),
         "max_documents": max_documents,
         "total": len(pdf_keys),
+        "duplicate_groups": len(duplicates),
         "queued_files": queued[:10],
         "reindex_files": needs_reindex[:10],
         "error_files": [e["key"] for e in skipped_errors[:5]],
+        "duplicate_files": skipped_duplicates[:5],
     }
 
 

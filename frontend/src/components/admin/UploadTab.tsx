@@ -19,10 +19,12 @@ import { uploadDocument } from "@/lib/admin-api";
 
 interface FileToUpload {
   file: File;
-  status: "pending" | "uploading" | "completed" | "error";
+  status: "pending" | "uploading" | "completed" | "error" | "duplicate";
   progress: number;
   error?: string;
   r2Key?: string;
+  isDuplicate?: boolean;
+  message?: string;
 }
 
 export function UploadTab() {
@@ -75,7 +77,7 @@ export function UploadTab() {
   };
 
   const clearCompleted = () => {
-    setFiles(prev => prev.filter(f => f.status !== "completed"));
+    setFiles(prev => prev.filter(f => f.status !== "completed" && f.status !== "duplicate"));
   };
 
   const uploadFiles = async () => {
@@ -102,15 +104,29 @@ export function UploadTab() {
         
         clearInterval(progressInterval);
         
-        // Update status to completed
-        setFiles(prev => prev.map((f, idx) => 
-          idx === i ? { 
-            ...f, 
-            status: "completed" as const, 
-            progress: 100,
-            r2Key: result.r2_key,
-          } : f
-        ));
+        // Check if it was a duplicate
+        if (result.is_duplicate) {
+          setFiles(prev => prev.map((f, idx) => 
+            idx === i ? { 
+              ...f, 
+              status: "duplicate" as const, 
+              progress: 100,
+              r2Key: result.r2_key,
+              isDuplicate: true,
+              message: result.message || "Document already exists",
+            } : f
+          ));
+        } else {
+          // Update status to completed
+          setFiles(prev => prev.map((f, idx) => 
+            idx === i ? { 
+              ...f, 
+              status: "completed" as const, 
+              progress: 100,
+              r2Key: result.r2_key,
+            } : f
+          ));
+        }
         
       } catch (error) {
         setFiles(prev => prev.map((f, idx) => 
@@ -128,6 +144,7 @@ export function UploadTab() {
 
   const pendingCount = files.filter(f => f.status === "pending").length;
   const completedCount = files.filter(f => f.status === "completed").length;
+  const duplicateCount = files.filter(f => f.status === "duplicate").length;
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -206,16 +223,18 @@ export function UploadTab() {
                 <Badge variant="secondary">{files.length}</Badge>
               )}
             </CardTitle>
-            {completedCount > 0 && (
+            {(completedCount > 0 || duplicateCount > 0) && (
               <Button variant="ghost" size="sm" onClick={clearCompleted}>
-                Clear completed
+                Clear completed {duplicateCount > 0 && `(${duplicateCount} duplicate${duplicateCount !== 1 ? "s" : ""})`}
               </Button>
             )}
           </div>
           <CardDescription>
             {pendingCount > 0 
               ? `${pendingCount} file${pendingCount !== 1 ? "s" : ""} ready to upload`
-              : "No files in queue"
+              : duplicateCount > 0
+                ? `${duplicateCount} duplicate${duplicateCount !== 1 ? "s" : ""} detected`
+                : "No files in queue"
             }
           </CardDescription>
         </CardHeader>
@@ -251,7 +270,7 @@ export function UploadTab() {
                           </div>
                         )}
                       </div>
-                      <div className="shrink-0">
+                      <div className="shrink-0 flex items-center gap-2">
                         {f.status === "pending" && (
                           <Button
                             variant="ghost"
@@ -267,6 +286,11 @@ export function UploadTab() {
                         )}
                         {f.status === "completed" && (
                           <CheckCircle className="h-4 w-4 text-green-500" />
+                        )}
+                        {f.status === "duplicate" && (
+                          <Badge variant="secondary" className="text-xs">
+                            Already exists
+                          </Badge>
                         )}
                         {f.status === "error" && (
                           <AlertCircle className="h-4 w-4 text-red-500" />
