@@ -3,13 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { 
   Settings, 
-  Save,
   TestTube,
   CheckCircle,
   AlertCircle,
@@ -21,7 +17,7 @@ import {
   Trash2,
   AlertTriangle
 } from "lucide-react";
-import { getAdminStatus, checkHealth, getCollectionInfo } from "@/lib/admin-api";
+import { getAdminStatus, checkHealth, getCollectionInfo, getBackendSettings, BackendSettings } from "@/lib/admin-api";
 
 interface ConnectionStatus {
   name: string;
@@ -29,13 +25,36 @@ interface ConnectionStatus {
   details?: string;
 }
 
+interface StorageStats {
+  bucket: string;
+  inputPath: string;
+  outputPath: string;
+  storageUsedBytes: number;
+  fileCount: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
 export function SettingsTab() {
-  const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isResettingQdrant, setIsResettingQdrant] = useState(false);
   const [isResettingR2, setIsResettingR2] = useState(false);
   const [isResettingDB, setIsResettingDB] = useState(false);
   const [dangerConfirm, setDangerConfirm] = useState<string | null>(null);
+  const [storageStats, setStorageStats] = useState<StorageStats>({
+    bucket: "devchat-pdfs",
+    inputPath: "/input-pdfs/",
+    outputPath: "/outputs/",
+    storageUsedBytes: 0,
+    fileCount: 0,
+  });
+  const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
   const [connections, setConnections] = useState<ConnectionStatus[]>([
     { name: "Cloudflare R2", status: "checking", details: "Checking..." },
     { name: "Qdrant Cloud", status: "checking", details: "Checking..." },
@@ -43,34 +62,17 @@ export function SettingsTab() {
     { name: "Cohere API", status: "checking", details: "Checking..." },
   ]);
 
-  // MinerU Settings
-  const [mineruSettings, setMineruSettings] = useState({
-    enableOcr: true,
-    enableTableExtraction: true,
-    enableFormulaExtraction: true,
-    device: "auto",
-    language: "auto",
-    maxConcurrentJobs: 4,
-  });
-
-  // Processing Settings
-  const [processingSettings, setProcessingSettings] = useState({
-    chunkSize: 512,
-    chunkOverlap: 50,
-    autoProcessOnUpload: true,
-    retryFailedJobs: true,
-    maxRetries: 3,
-  });
-
   // Fetch connection status from backend
   const fetchStatus = useCallback(async () => {
     setIsLoading(true);
     
     try {
-      // Fetch health and collection info in parallel
-      const [healthResult, collectionResult] = await Promise.allSettled([
+      // Fetch health, collection info, admin status, and settings in parallel
+      const [healthResult, collectionResult, statusResult, settingsResult] = await Promise.allSettled([
         checkHealth(),
         getCollectionInfo(),
+        getAdminStatus(),
+        getBackendSettings(),
       ]);
 
       const newConnections: ConnectionStatus[] = [];
@@ -97,6 +99,25 @@ export function SettingsTab() {
         newConnections.push({ name: "Cloudflare R2", status: "disconnected", details: "Backend unreachable" });
         newConnections.push({ name: "Cohere API", status: "disconnected", details: "Backend unreachable" });
         newConnections.push({ name: "Modal", status: "disconnected", details: "Backend unreachable" });
+      }
+
+      // Update storage stats from admin status
+      if (statusResult.status === "fulfilled") {
+        const status = statusResult.value;
+        if (status.storage) {
+          setStorageStats({
+            bucket: status.storage.bucket || "devchat-pdfs",
+            inputPath: status.storage.input_path || "/input-pdfs/",
+            outputPath: status.storage.output_path || "/outputs/",
+            storageUsedBytes: status.storage.storage_used_bytes || 0,
+            fileCount: status.storage.file_count || 0,
+          });
+        }
+      }
+
+      // Update backend settings
+      if (settingsResult.status === "fulfilled") {
+        setBackendSettings(settingsResult.value);
       }
 
       // Check Qdrant
@@ -140,15 +161,6 @@ export function SettingsTab() {
   const testAllConnections = async () => {
     setConnections(prev => prev.map(c => ({ ...c, status: "checking" as const })));
     await fetchStatus();
-  };
-
-  const saveSettings = async () => {
-    setIsSaving(true);
-    
-    // TODO: Save to backend when settings endpoint is available
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setIsSaving(false);
   };
 
   // Danger Zone Actions
@@ -300,7 +312,7 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
-      {/* MinerU Settings */}
+      {/* MinerU Settings - Read from backend */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -308,79 +320,35 @@ export function SettingsTab() {
             PDF Processing (MinerU)
           </CardTitle>
           <CardDescription>
-            Configure document extraction settings
+            Document extraction settings (configured on Modal)
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
+        <CardContent className="space-y-4">
+          <div className="p-4 rounded-lg bg-muted/50 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Enable OCR</Label>
-                <p className="text-xs text-muted-foreground">
-                  Extract text from scanned documents
-                </p>
-              </div>
-              <Switch
-                checked={mineruSettings.enableOcr}
-                onCheckedChange={(checked) => 
-                  setMineruSettings(prev => ({ ...prev, enableOcr: checked }))
-                }
-              />
+              <span className="text-sm text-muted-foreground">OCR Enabled</span>
+              <Badge variant="secondary">Yes</Badge>
             </div>
-            
             <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Extract Tables</Label>
-                <p className="text-xs text-muted-foreground">
-                  Parse tables as structured HTML
-                </p>
-              </div>
-              <Switch
-                checked={mineruSettings.enableTableExtraction}
-                onCheckedChange={(checked) => 
-                  setMineruSettings(prev => ({ ...prev, enableTableExtraction: checked }))
-                }
-              />
+              <span className="text-sm text-muted-foreground">Table Extraction</span>
+              <Badge variant="secondary">Yes</Badge>
             </div>
-            
             <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Extract Formulas</Label>
-                <p className="text-xs text-muted-foreground">
-                  Convert math equations to LaTeX
-                </p>
-              </div>
-              <Switch
-                checked={mineruSettings.enableFormulaExtraction}
-                onCheckedChange={(checked) => 
-                  setMineruSettings(prev => ({ ...prev, enableFormulaExtraction: checked }))
-                }
-              />
+              <span className="text-sm text-muted-foreground">Formula Extraction</span>
+              <Badge variant="secondary">Yes</Badge>
             </div>
-
-            <div className="space-y-2">
-              <Label>Max Concurrent Jobs</Label>
-              <Input
-                type="number"
-                min={1}
-                max={10}
-                value={mineruSettings.maxConcurrentJobs}
-                onChange={(e) => 
-                  setMineruSettings(prev => ({ 
-                    ...prev, 
-                    maxConcurrentJobs: parseInt(e.target.value) || 1 
-                  }))
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Number of PDFs to process in parallel (affects cost)
-              </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Device</span>
+              <Badge variant="outline">GPU (Modal A10G)</Badge>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            MinerU runs on Modal GPU workers. Settings are configured in the Modal deployment.
+          </p>
         </CardContent>
       </Card>
 
-      {/* Chunking Settings */}
+      {/* Chunking Settings - Read from backend */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -388,72 +356,52 @@ export function SettingsTab() {
             Chunking & Indexing
           </CardTitle>
           <CardDescription>
-            Configure how documents are split and stored
+            How documents are split and stored (read from backend)
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-4 grid-cols-2">
-            <div className="space-y-2">
-              <Label>Chunk Size (words)</Label>
-              <Input
-                type="number"
-                min={100}
-                max={2000}
-                value={processingSettings.chunkSize}
-                onChange={(e) => 
-                  setProcessingSettings(prev => ({ 
-                    ...prev, 
-                    chunkSize: parseInt(e.target.value) || 512 
-                  }))
-                }
-              />
+        <CardContent className="space-y-4">
+          <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Chunk Size</span>
+              <span className="text-sm font-medium">{backendSettings?.chunking.chunk_size ?? 512} tokens</span>
             </div>
-            <div className="space-y-2">
-              <Label>Overlap (words)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={200}
-                value={processingSettings.chunkOverlap}
-                onChange={(e) => 
-                  setProcessingSettings(prev => ({ 
-                    ...prev, 
-                    chunkOverlap: parseInt(e.target.value) || 50 
-                  }))
-                }
-              />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Chunk Overlap</span>
+              <span className="text-sm font-medium">{backendSettings?.chunking.chunk_overlap ?? 50} tokens</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Parent Chunk Size</span>
+              <span className="text-sm font-medium">{backendSettings?.chunking.parent_chunk_size ?? 2048} tokens</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Semantic Chunking</span>
+              <Badge variant={backendSettings?.chunking.use_semantic_chunking ? "default" : "secondary"}>
+                {backendSettings?.chunking.use_semantic_chunking ? "Enabled" : "Disabled"}
+              </Badge>
             </div>
           </div>
           
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Auto-process on Upload</Label>
-              <p className="text-xs text-muted-foreground">
-                Start processing immediately after upload
-              </p>
+          <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+            <h4 className="text-sm font-medium">Retrieval Settings</h4>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Initial Retrieval (top_k)</span>
+              <span className="text-sm font-medium">{backendSettings?.retrieval.retrieval_top_k ?? 50}</span>
             </div>
-            <Switch
-              checked={processingSettings.autoProcessOnUpload}
-              onCheckedChange={(checked) => 
-                setProcessingSettings(prev => ({ ...prev, autoProcessOnUpload: checked }))
-              }
-            />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Final Context</span>
+              <span className="text-sm font-medium">{backendSettings?.retrieval.final_top_k ?? 10} chunks</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Reranking</span>
+              <Badge variant={backendSettings?.retrieval.rerank_enabled ? "default" : "secondary"}>
+                {backendSettings?.retrieval.rerank_enabled ? backendSettings?.retrieval.rerank_model : "Disabled"}
+              </Badge>
+            </div>
           </div>
           
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Retry Failed Jobs</Label>
-              <p className="text-xs text-muted-foreground">
-                Automatically retry failed processing jobs
-              </p>
-            </div>
-            <Switch
-              checked={processingSettings.retryFailedJobs}
-              onCheckedChange={(checked) => 
-                setProcessingSettings(prev => ({ ...prev, retryFailedJobs: checked }))
-              }
-            />
-          </div>
+          <p className="text-xs text-muted-foreground">
+            These settings are configured via environment variables on Railway.
+          </p>
         </CardContent>
       </Card>
 
@@ -465,26 +413,30 @@ export function SettingsTab() {
             Storage Configuration
           </CardTitle>
           <CardDescription>
-            Cloudflare R2 bucket settings
+            Cloudflare R2 bucket settings (read from backend)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="p-4 rounded-lg bg-muted/50 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Bucket</span>
-              <Badge variant="secondary">devchat-pdfs</Badge>
+              <Badge variant="secondary">{storageStats.bucket}</Badge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Input Path</span>
-              <code className="text-xs bg-muted px-2 py-1 rounded">/input-pdfs/</code>
+              <code className="text-xs bg-muted px-2 py-1 rounded">{storageStats.inputPath}</code>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Output Path</span>
-              <code className="text-xs bg-muted px-2 py-1 rounded">/outputs/</code>
+              <code className="text-xs bg-muted px-2 py-1 rounded">{storageStats.outputPath}</code>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Files</span>
+              <span className="text-sm font-medium">{storageStats.fileCount.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Storage Used</span>
-              <span className="text-sm">2.4 GB / 10 GB</span>
+              <span className="text-sm font-medium">{formatBytes(storageStats.storageUsedBytes)}</span>
             </div>
           </div>
           
@@ -595,31 +547,11 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
-      {/* Save Button */}
-      <div className="md:col-span-2 flex justify-end gap-2">
-        <Button variant="outline">
-          Reset to Defaults
-        </Button>
-        <Button onClick={saveSettings} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Settings
-            </>
-          )}
-        </Button>
-      </div>
-
       {/* Settings Note */}
       <div className="md:col-span-2">
         <p className="text-xs text-muted-foreground text-center">
-          ⚠️ Note: MinerU and Chunking settings are currently display-only. 
-          Settings are configured via environment variables on the backend.
+          All settings are read from the backend and configured via environment variables.
+          Contact admin to change settings on Railway (backend) or Modal (PDF processing).
         </p>
       </div>
     </div>

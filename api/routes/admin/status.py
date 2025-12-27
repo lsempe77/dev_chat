@@ -245,3 +245,44 @@ async def get_admin_status():
         pending_jobs=0,  # TODO: Track actual job queue
         active_workers=1 if all(c.status == "connected" for c in connections) else 0,
     )
+
+
+@router.get("/settings")
+async def get_settings():
+    """
+    Get current application settings (read-only).
+    
+    These are configured via environment variables on the backend.
+    """
+    return {
+        "chunking": {
+            "chunk_size": settings.chunk_size,
+            "chunk_overlap": settings.chunk_overlap,
+            "parent_chunk_size": settings.parent_chunk_size,
+            "use_semantic_chunking": settings.use_semantic_chunking,
+        },
+        "retrieval": {
+            "hybrid_enabled": settings.hybrid_enabled,
+            "hybrid_alpha": settings.hybrid_alpha,
+            "retrieval_top_k": settings.retrieval_top_k,
+            "final_top_k": settings.final_top_k,
+            "rerank_enabled": settings.rerank_enabled,
+            "rerank_model": settings.rerank_model,
+            "rerank_top_n": settings.rerank_top_n,
+        },
+        "embeddings": {
+            "provider": settings.embedding_provider,
+            "model": settings.embedding_model,
+            "dimension": settings.embedding_dimension,
+        },
+        "llm": {
+            "provider": settings.llm_provider.value,
+            "fast_model": settings.llm_fast_model,
+            "reasoning_model": settings.llm_reasoning_model,
+            "temperature": settings.llm_temperature,
+            "max_tokens": settings.llm_max_tokens,
+        },
+        "processing": {
+            "qdrant_collection": settings.qdrant_collection_name,
+        },
+    }
