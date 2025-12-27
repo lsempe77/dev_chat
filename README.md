@@ -15,14 +15,13 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 |-----------|--------|-------------|
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
 | **Frontend (Vercel)** | ✅ Live | https://dev-chat-frontend.vercel.app/ |
-| **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing + metadata enrichment |
-| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (413K+ vectors) |
-| **Metadata DB (Postgres)** | ✅ Live | 94 documents, instant queries (~5ms) |
+| **PDF Pipeline (Modal)** | ✅ Working | MinerU GPU processing (manual trigger, no hourly schedule) |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (256-word chunks) |
+| **Metadata DB (Postgres)** | ✅ Live | Document metadata, instant queries (~5ms) |
 | **End-to-End RAG** | ✅ Working | Query → Retrieval → Rerank → Generate |
-| **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM enrichment |
-| **Admin Metadata UI** | ✅ Working | Review & edit metadata, mark as verified |
+| **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM (item_type, volume, issue, pages) |
+| **Admin Metadata UI** | ✅ Working | Side-by-side editing with PDF viewer |
 | **Settings Wiring** | ✅ Done | Frontend settings sent to backend |
-| **Document Corpus** | ✅ Done | 100 documents ingested |
 
 **Live Demo:** https://dev-chat-frontend.vercel.app/
 

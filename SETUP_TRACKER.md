@@ -1,8 +1,8 @@
 # DevChat v2.0 SOTA - Setup & Progress Tracker
 
 **Created:** December 17, 2025  
-**Last Updated:** December 24, 2025  
-**Status:** ✅ Production Deployed | ✅ Metadata Pipeline Working | ✅ Unified CLI | ✅ 100 Documents Ingested
+**Last Updated:** December 27, 2025  
+**Status:** ✅ Production Deployed | ✅ Metadata Pipeline Working | ✅ Side-by-Side Editor | ✅ 256-word Chunks
 
 ---
 
@@ -12,15 +12,15 @@
 |-----------|--------|-----------|
 | **Frontend (Vercel)** | ✅ Live | https://dev-chat-frontend.vercel.app/ |
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
-| **PDF Processing (Modal)** | ✅ Working | `devchat-mineru` app with T4 GPU |
-| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection (146 chunks) |
-| **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM enrichment |
-| **Admin Metadata UI** | ✅ Working | Review, edit, verify metadata |
+| **PDF Processing (Modal)** | ✅ Working | `devchat-mineru` app with T4 GPU (manual trigger only) |
+| **Vector DB (Qdrant)** | ✅ Connected | `devchat_v2` collection |
+| **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM enrichment (with item_type, volume, issue, pages) |
+| **Admin Metadata UI** | ✅ Working | Side-by-side editing with PDF viewer |
 | **Settings Wiring** | ✅ Done | Frontend settings sent to backend |
 | **LLM Suggestions** | ✅ Done | Context-aware follow-up queries |
 | **Unified CLI** | ✅ Done | `devchat` command with all operations |
 | **Modular Routes** | ✅ Done | `api/routes/` split by domain |
-| **Document Corpus** | ✅ Done | 100 documents ingested |
+| **Chunking** | ✅ Optimized | 256 words/chunk for better RAG precision |
 
 ---
 
@@ -64,9 +64,11 @@ Branch: main
 | **Wire Settings to Backend** | Pass `relevanceThreshold`, `maxStudies`, `answerStyle`, `useReranking` | ✅ Done |
 | **LLM-Based Suggestions** | Generate contextual "Try next" queries using LLM | ✅ Done |
 | **Admin Metadata UI** | Review, edit, verify document metadata | ✅ Done |
-| **Admin UI Upload Wiring** | Drag-drop → R2 upload → Modal trigger | ✅ Done |
-| **Fix Study Card Display** | Authors showing "()", year showing "Unknown" | ✅ Done |
-| **Ingest Real Corpus** | Upload 3ie papers via Admin UI → R2 → Modal → Qdrant | ✅ Done (100 docs) |
+| **Side-by-Side Metadata Editor** | Edit form as panel, view PDF alongside | ✅ Done |
+| **Modal Hourly Schedule Disabled** | Processing now manual-only from Admin UI | ✅ Done |
+| **Duplicate Processing Prevention** | R2 lock mechanism prevents parallel processing | ✅ Done |
+| **256-word Chunks** | Smaller chunks for better RAG precision | ✅ Done |
+| **item_type Extraction** | Extract volume, issue, pages from CrossRef/OpenAlex | ✅ Done |
 
 ### P1 - Important (This Month)
 
