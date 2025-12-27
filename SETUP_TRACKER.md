@@ -315,52 +315,6 @@ devchat serve --port 8000 --reload
 
 # Ingest markdown documents
 devchat ingest --source ./data/markdown --recreate
-├── __init__.py
-├── doi_extractor.py      # Extract DOI from PDF
-├── crossref_client.py    # CrossRef API
-├── openalex_client.py    # OpenAlex API
-├── llm_extractor.py      # LLM gap fill
-├── bibliography.py       # RIS/BibTeX/CSV parser
-├── fuzzy_matcher.py      # Title/author matching
-└── resolver.py           # Orchestrator
-```
-
----
-
-## 🖥️ Unified CLI (December 2025)
-
-Single `devchat` command for all operations:
-
-```bash
-# Install CLI
-pip install -e .
-
-# Available commands
-devchat --help
-```
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `devchat serve` | Start API server (`--port`, `--reload`) |
-| `devchat ingest` | Ingest documents (`--source`, `--recreate`) |
-| `devchat process-pdfs` | Process PDFs with MinerU (`--pdf-dir`) |
-| `devchat evaluate` | Run RAGAS evaluation (`--test-file`) |
-| `devchat citations` | Evaluate citation quality (`--batch`) |
-| `devchat ragas` | Run RAGAS evaluator (`--query`) |
-| `devchat check-metadata` | Debug Qdrant metadata (`--list`, `--doc-id`) |
-| `devchat health` | Check service health (`--detailed`) |
-| `devchat version` | Show version info |
-
-### Example Usage
-
-```bash
-# Development server with hot reload
-devchat serve --port 8000 --reload
-
-# Ingest markdown documents
-devchat ingest --source ./data/markdown --recreate
 
 # Check all indexed documents
 devchat check-metadata --list

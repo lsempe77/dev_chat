@@ -22,7 +22,7 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 | **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM enrichment |
 | **Admin Metadata UI** | ✅ Working | Review & edit metadata, mark as verified |
 | **Settings Wiring** | ✅ Done | Frontend settings sent to backend |
-| **Document Corpus** | ⚠️ Limited | 3 test PDFs indexed (need bulk upload) |
+| **Document Corpus** | ✅ Done | 100 documents ingested |
 
 **Live Demo:** https://dev-chat-frontend.vercel.app/
 
@@ -366,7 +366,7 @@ Frontend runs at: `http://localhost:3000`
 
 #### 4. Environment Variables
 
-Create `.env` file with:
+**Backend** - Create `.env` file in root:
 ```bash
 # LLM Provider (OpenRouter)
 OPENROUTER_API_KEY=sk-or-...
@@ -378,10 +378,28 @@ COHERE_API_KEY=...
 QDRANT_URL=https://...qdrant.io
 QDRANT_API_KEY=...
 
+# PostgreSQL (Railway)
+DATABASE_URL=postgresql://postgres:...@...
+
+# R2 Storage
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=devchat-pdfs
+
 # Observability (Langfuse)
 LANGFUSE_PUBLIC_KEY=pk-...
 LANGFUSE_SECRET_KEY=sk-...
 LANGFUSE_HOST=https://cloud.langfuse.com
+```
+
+**Frontend** - Create `.env.local` in `frontend/`:
+```bash
+# Backend API URL (required)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Production:
+# NEXT_PUBLIC_API_URL=https://3iechat.up.railway.app
 ```
 
 ### Document Processing Workflow
@@ -397,6 +415,21 @@ modal deploy infrastructure/modal_mineru.py
 2. **Automatic Trigger**: Uploading automatically triggers the processing pipeline on Modal.
 3. **Manual Trigger**: You can also click the **"Start Processing"** button in the Processing tab to retry or process pending files.
 4. **Status**: The Processing tab shows the status of queued and completed jobs.
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_retrieval.py -v
+
+# Skip end-to-end tests (require live services)
+pytest tests/ -v -m "not e2e"
+```
+
+**Note:** 2 e2e tests are skipped by default as they require live Qdrant/Cohere connections.
 
 ---
 
