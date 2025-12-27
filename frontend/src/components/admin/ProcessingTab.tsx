@@ -39,6 +39,7 @@ export function ProcessingTab() {
   const [isTriggering, setIsTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
+  const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
   const [queuedCount, setQueuedCount] = useState(0);
   const [processingCount, setProcessingCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
@@ -97,11 +98,6 @@ export function ProcessingTab() {
     await refreshJobs();
   };
 
-  const cancelJob = async (jobId: string) => {
-    // TODO: Implement cancel via specific endpoint when available
-    console.log("Cancelling job:", jobId);
-  };
-
   const startBatchProcessing = async () => {
     setIsTriggering(true);
     setTriggerMessage(null);
@@ -110,6 +106,7 @@ export function ProcessingTab() {
     try {
       const response = await triggerProcessing({ max_documents: 10 });
       setTriggerMessage(response.message);
+      setLastTriggeredAt(new Date());
       // Refresh jobs after triggering
       await refreshJobs();
     } catch (err) {
@@ -241,7 +238,10 @@ export function ProcessingTab() {
                 Processing Queue
               </CardTitle>
               <CardDescription>
-                Real-time status of PDF processing jobs. "Process All Pending" will send all queued PDFs to Modal for batch processing.
+                {lastTriggeredAt ? (
+                  <>Last triggered: {lastTriggeredAt.toLocaleTimeString()}. </>
+                ) : null}
+                Click &quot;Process Pending&quot; to send queued PDFs to Modal for processing.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -250,16 +250,17 @@ export function ProcessingTab() {
                 onClick={startBatchProcessing}
                 disabled={isTriggering || queuedCount === 0}
                 title={queuedCount > 0 ? `Process all ${queuedCount} pending PDFs` : "No pending PDFs to process"}
+                className="min-w-[180px]"
               >
                 {isTriggering ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    Triggering...
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <span>Triggering Modal...</span>
                   </>
                 ) : (
                   <>
-                    <Play className="h-4 w-4 mr-1" />
-                    Process All Pending {queuedCount > 0 && `(${queuedCount})`}
+                    <Play className="h-4 w-4 mr-2" />
+                    <span>Process Pending ({queuedCount})</span>
                   </>
                 )}
               </Button>
@@ -279,7 +280,15 @@ export function ProcessingTab() {
                 {jobs.map((job) => (
                   <div
                     key={job.id}
-                    className="flex items-center gap-4 p-4 rounded-lg border bg-card"
+                    className={`flex items-center gap-4 p-4 rounded-lg border ${
+                      job.status === "queued" 
+                        ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800" 
+                        : job.status === "processing"
+                        ? "bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700"
+                        : job.status === "completed"
+                        ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                        : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+                    }`}
                   >
                     {getStatusIcon(job.status)}
                     
@@ -328,14 +337,10 @@ export function ProcessingTab() {
                           Retry
                         </Button>
                       )}
-                      {(job.status === "queued" || job.status === "processing") && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => cancelJob(job.id)}
-                        >
-                          Cancel
-                        </Button>
+                      {job.status === "queued" && (
+                        <Badge variant="outline" className="text-xs">
+                          Awaiting trigger
+                        </Badge>
                       )}
                     </div>
                   </div>
