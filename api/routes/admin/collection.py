@@ -85,26 +85,24 @@ async def reset_database():
     Use with /collection/reset and /r2/clear for a complete system reset.
     """
     import os
-    import psycopg2
+    from sqlalchemy import text
+    import src.database.connection as db_conn
     
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
+    if not os.getenv("DATABASE_URL"):
         raise HTTPException(status_code=500, detail="DATABASE_URL not configured")
     
+    if db_conn.async_session is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    
     try:
-        conn = psycopg2.connect(database_url)
-        cursor = conn.cursor()
-        
-        # Get count before delete
-        cursor.execute("SELECT COUNT(*) FROM documents")
-        count_before = cursor.fetchone()[0]
-        
-        # Delete all documents
-        cursor.execute("DELETE FROM documents")
-        conn.commit()
-        
-        cursor.close()
-        conn.close()
+        async with db_conn.async_session() as session:
+            # Get count before delete
+            result = await session.execute(text("SELECT COUNT(*) FROM documents"))
+            count_before = result.scalar() or 0
+            
+            # Delete all documents
+            await session.execute(text("DELETE FROM documents"))
+            await session.commit()
         
         logger.warning(f"Database reset: deleted {count_before} documents from PostgreSQL")
         
