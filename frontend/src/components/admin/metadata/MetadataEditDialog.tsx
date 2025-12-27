@@ -19,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Check, Loader2, GripHorizontal } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { DocumentMetadataDetail, MetadataUpdateRequest } from "@/lib/admin-api";
 import {
   ITEM_TYPES,
@@ -50,6 +50,58 @@ export function MetadataEditDialog({
 }: MetadataEditDialogProps) {
   // Local state for authors string (allows spaces while typing)
   const [authorsText, setAuthorsText] = useState("");
+  
+  // Draggable dialog state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+  
+  // Reset position when dialog opens
+  useEffect(() => {
+    if (document) {
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [document?.id]);
+  
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: position.x,
+      initialY: position.y,
+    };
+  }, [position]);
+  
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging || !dragRef.current) return;
+    
+    const deltaX = e.clientX - dragRef.current.startX;
+    const deltaY = e.clientY - dragRef.current.startY;
+    
+    setPosition({
+      x: dragRef.current.initialX + deltaX,
+      y: dragRef.current.initialY + deltaY,
+    });
+  }, [isDragging]);
+  
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    dragRef.current = null;
+  }, []);
+  
+  // Add/remove event listeners for drag
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp]);
   
   // Sync authorsText when document changes
   useEffect(() => {
@@ -94,8 +146,21 @@ export function MetadataEditDialog({
 
   return (
     <Dialog open={!!document} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent 
+        className="sm:max-w-4xl max-h-[90vh] overflow-y-auto"
+        style={{ 
+          transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
+        }}
+      >
+        {/* Drag handle */}
+        <div 
+          className="absolute top-0 left-0 right-0 h-10 cursor-move flex items-center justify-center"
+          onMouseDown={handleMouseDown}
+        >
+          <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+        </div>
+        
+        <DialogHeader className="pt-4">
           <DialogTitle>Edit Document Metadata</DialogTitle>
           <DialogDescription>
             Update metadata fields for: {document.filename}
