@@ -528,7 +528,9 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
     # R2 key format: input-pdfs/{doc_id}.pdf where doc_id = {8-char-uuid}_{sanitized_name}
     # This doc_id is the universal identifier across R2, Qdrant, and admin systems
     doc_id = Path(pdf_key).stem  # e.g., "a1b2c3d4_impact_evaluation_kenya"
-    
+    json_key = f"outputs/json/{doc_id}.json"
+    md_key = None  # Set when we actually upload markdown
+
     try:
         # Check if already indexed in Qdrant (unless forcing)
         if not force_reindex:
@@ -552,7 +554,6 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
         
         # Mode 1: Skip extraction, use existing R2 output
         if skip_extraction:
-            json_key = f"outputs/json/{doc_id}.json"
             try:
                 response = s3.get_object(Bucket=bucket, Key=json_key)
                 output_data = json.loads(response["Body"].read().decode("utf-8"))
