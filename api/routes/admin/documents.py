@@ -14,6 +14,8 @@ from fastapi import APIRouter, HTTPException, Query
 from api.schemas import (
     DocumentMetadata,
     DocumentsResponse,
+    DocumentSyncRequest,
+    DocumentSyncResponse,
 )
 from src.utils.logging import get_logger
 
@@ -384,3 +386,104 @@ async def reprocess_document(document_id: str):
         "job_id": f"job-reprocess-{doc_id}",
         "message": "Document queued for reprocessing"
     }
+
+
+# =============================================================================
+# Document Sync (Modal → Postgres)
+# =============================================================================
+
+@router.post("/documents/sync", response_model=DocumentSyncResponse)
+async def sync_document(request: DocumentSyncRequest):
+    """
+    Sync a document from Modal to PostgreSQL.
+    
+    Called by Modal after successful Qdrant indexing to keep
+    Postgres metadata store in sync.
+    
+    This endpoint is idempotent - can be called multiple times
+    for the same document (will upsert).
+    """
+    from ..dependencies import is_postgres_available, get_db_session
+    
+    if not is_postgres_available():
+        logger.warning("PostgreSQL not available, sync skipped")
+        return DocumentSyncResponse(
+            success=False,
+            doc_id=request.doc_id,
+            action="skipped",
+            message="PostgreSQL not available"
+        )
+    
+    try:
+        db = await get_db_session()
+        if not db:
+            return DocumentSyncResponse(
+                success=False,
+                doc_id=request.doc_id,
+                action="skipped",
+                message="Could not get database session"
+            )
+        
+        async with db:
+            from src.database.repository import DocumentRepository
+            
+            # Check if document exists
+            existing = await DocumentRepository.get_by_id(db, request.doc_id)
+            action = "updated" if existing else "created"
+            
+            # Prepare document data
+            doc_data = {
+                "id": request.doc_id,
+                "title": request.title,
+                "filename": request.filename,
+                "authors": request.authors,
+                "year": request.year,
+                "doi": request.doi,
+                "abstract": request.abstract,
+                "item_type": request.item_type,
+                "journal": request.journal,
+                "publisher": request.publisher,
+                "volume": request.volume,
+                "issue": request.issue,
+                "pages": request.pages,
+                "cited_by_count": request.cited_by_count,
+                "is_open_access": request.is_open_access,
+                "countries": request.countries,
+                "sectors": request.sectors,
+                "study_type": request.study_type,
+                "intervention_type": request.intervention_type,
+                "sdgs": request.sdgs,
+                "keywords": request.keywords,
+                "chunk_count": request.chunk_count,
+                "page_count": request.page_count,
+                "metadata_source": request.metadata_source,
+                "metadata_confidence": request.metadata_confidence,
+                "needs_review": request.needs_review,
+                "status": "indexed",
+            }
+            
+            # Upsert document
+            await DocumentRepository.upsert(db, doc_data)
+            await db.commit()
+            
+            # Invalidate caches
+            invalidate_admin_caches()
+            
+            logger.info(f"Synced document to Postgres: {request.doc_id} ({action})")
+            
+            return DocumentSyncResponse(
+                success=True,
+                doc_id=request.doc_id,
+                action=action,
+                message=f"Document {action} in PostgreSQL"
+            )
+            
+    except Exception as e:
+        logger.error(f"Failed to sync document {request.doc_id}: {e}")
+        return DocumentSyncResponse(
+            success=False,
+            doc_id=request.doc_id,
+            action="error",
+            message=str(e)
+        )
+

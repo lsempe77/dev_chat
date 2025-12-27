@@ -199,6 +199,87 @@ def delete_qdrant_chunks(pdf_name: str) -> int:
         return 0
 
 
+def sync_to_postgres(doc_id: str, metadata: dict, chunk_count: int, page_count: int) -> bool:
+    """
+    Sync document metadata to PostgreSQL via Railway backend API.
+    
+    Called after successful Qdrant indexing to keep Postgres in sync.
+    This is non-blocking - failures are logged but don't stop processing.
+    
+    Args:
+        doc_id: Document identifier
+        metadata: Enriched metadata dict from metadata pipeline
+        chunk_count: Number of chunks indexed
+        page_count: Number of pages in document
+        
+    Returns:
+        True if sync succeeded, False otherwise
+    """
+    import httpx
+    import os
+    
+    # Railway backend URL (production)
+    backend_url = os.environ.get("BACKEND_URL", "https://3iechat.up.railway.app")
+    sync_endpoint = f"{backend_url}/admin/documents/sync"
+    
+    # Handle authors - could be string or list
+    authors = metadata.get("authors", [])
+    if isinstance(authors, str):
+        authors = [a.strip() for a in authors.split(",") if a.strip()]
+    
+    # Handle intervention_type - could be list
+    intervention_type = metadata.get("intervention_type")
+    if isinstance(intervention_type, list):
+        intervention_type = ", ".join(intervention_type)
+    
+    # Build sync payload
+    payload = {
+        "doc_id": doc_id,
+        "title": metadata.get("title", doc_id),
+        "filename": f"{doc_id}.pdf",
+        "authors": authors,
+        "year": metadata.get("year"),
+        "doi": metadata.get("doi"),
+        "abstract": metadata.get("abstract"),
+        "item_type": metadata.get("item_type"),
+        "journal": metadata.get("journal"),
+        "publisher": metadata.get("publisher"),
+        "volume": metadata.get("volume"),
+        "issue": metadata.get("issue"),
+        "pages": metadata.get("pages"),
+        "cited_by_count": metadata.get("cited_by_count"),
+        "is_open_access": metadata.get("is_open_access", False),
+        "countries": metadata.get("countries", []),
+        "sectors": metadata.get("sectors", []),
+        "study_type": metadata.get("study_type"),
+        "intervention_type": intervention_type,
+        "sdgs": metadata.get("sdgs", []),
+        "keywords": metadata.get("keywords", []),
+        "chunk_count": chunk_count,
+        "page_count": page_count,
+        "metadata_source": metadata.get("metadata_source", "extraction"),
+        "metadata_confidence": metadata.get("metadata_confidence", 0.0),
+        "needs_review": metadata.get("needs_review", True),
+    }
+    
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(sync_endpoint, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"  Synced to Postgres: {result.get('action', 'unknown')} (doc_id={doc_id})")
+                return True
+            else:
+                print(f"  Postgres sync failed: HTTP {response.status_code} - {response.text[:200]}")
+                return False
+                
+    except Exception as e:
+        # Non-fatal - log and continue
+        print(f"  Postgres sync error (non-fatal): {e}")
+        return False
+
+
 # ============================================================================
 # Orchestrator (CPU) - Lists PDFs and spawns GPU workers
 # ============================================================================
@@ -500,6 +581,10 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
         )
         
         print(f"  Indexed: {chunk_count} chunks to Qdrant (doc_id={doc_id})")
+        
+        # Sync to PostgreSQL for instant admin queries
+        page_count = result.get("page_count", 0)
+        sync_to_postgres(doc_id, enriched_metadata, chunk_count, page_count)
         
         # Clean up (only if we downloaded a PDF)
         if not skip_extraction and 'pdf_path' in dir():

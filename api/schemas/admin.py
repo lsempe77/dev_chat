@@ -271,3 +271,59 @@ class AdminStatusResponse(BaseModel):
     connections: List[ServiceConnection]
     pending_jobs: int
     active_workers: int
+
+
+# =============================================================================
+# Document Sync Models (Modal → Postgres)
+# =============================================================================
+
+class DocumentSyncRequest(BaseModel):
+    """
+    Request to sync a document from Modal to Postgres.
+    
+    Sent by Modal after successful Qdrant indexing.
+    """
+    doc_id: str
+    title: str
+    filename: str
+    authors: List[str] = []
+    year: Optional[int] = None
+    doi: Optional[str] = None
+    abstract: Optional[str] = None
+    
+    # Zotero item type
+    item_type: Optional[str] = None
+    
+    # Publication info
+    journal: Optional[str] = None
+    publisher: Optional[str] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    
+    # Citation metrics
+    cited_by_count: Optional[int] = None
+    is_open_access: Optional[bool] = False
+    
+    # 3ie Classification
+    countries: List[str] = []
+    sectors: List[str] = []
+    study_type: Optional[str] = None
+    intervention_type: Optional[str] = None
+    sdgs: List[str] = []
+    keywords: List[str] = []
+    
+    # Processing metadata
+    chunk_count: int = 0
+    page_count: int = 0
+    metadata_source: Optional[str] = "extraction"
+    metadata_confidence: float = 0.0
+    needs_review: bool = True
+
+
+class DocumentSyncResponse(BaseModel):
+    """Response after syncing document to Postgres."""
+    success: bool
+    doc_id: str
+    action: str  # "created" or "updated"
+    message: str
