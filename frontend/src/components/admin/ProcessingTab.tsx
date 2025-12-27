@@ -46,10 +46,22 @@ export function ProcessingTab() {
   const [completedCount, setCompletedCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
 
+  const PROCESSING_STALE_MS = 30 * 60 * 1000; // After 30 minutes, allow re-trigger even if queued remains
+
   // Check if processing is likely still running (triggered within last 10 min and jobs still queued)
-  const isProcessingInModal = !!(lastTriggeredAt && 
-    (Date.now() - lastTriggeredAt.getTime() < 10 * 60 * 1000) && 
-    queuedCount > 0);
+  const isProcessingInModal = !!(lastTriggeredAt && queuedCount > 0);
+  const isTriggerStale = !!(lastTriggeredAt && (Date.now() - lastTriggeredAt.getTime() > PROCESSING_STALE_MS));
+
+  // Restore last trigger time from localStorage so refreshes keep the button disabled during processing
+  useEffect(() => {
+    const stored = localStorage.getItem("admin_processing_last_trigger");
+    if (stored) {
+      const parsed = new Date(stored);
+      if (!Number.isNaN(parsed.getTime())) {
+        setLastTriggeredAt(parsed);
+      }
+    }
+  }, []);
 
   // Fetch jobs from API
   const refreshJobs = useCallback(async () => {
@@ -77,6 +89,12 @@ export function ProcessingTab() {
       setProcessingCount(response.processing_count);
       setCompletedCount(response.completed_count);
       setFailedCount(response.failed_count);
+
+      // Clear the persisted trigger flag once everything finishes
+      if (response.queued_count === 0 && response.processing_count === 0) {
+        setLastTriggeredAt(null);
+        localStorage.removeItem("admin_processing_last_trigger");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch jobs");
     } finally {
@@ -112,7 +130,9 @@ export function ProcessingTab() {
     try {
       const response = await triggerProcessing({ max_documents: 10 });
       setTriggerMessage(response.message);
-      setLastTriggeredAt(new Date());
+      const now = new Date();
+      setLastTriggeredAt(now);
+      localStorage.setItem("admin_processing_last_trigger", now.toISOString());
       setTriggeredJobCount(response.queued);
       // Refresh jobs after triggering
       await refreshJobs();
@@ -255,10 +275,12 @@ export function ProcessingTab() {
               <Button
                 size="sm"
                 onClick={startBatchProcessing}
-                disabled={isTriggering || queuedCount === 0 || isProcessingInModal}
+                disabled={isTriggering || queuedCount === 0 || (isProcessingInModal && !isTriggerStale)}
                 title={
-                  isProcessingInModal 
+                  isProcessingInModal && !isTriggerStale
                     ? "Processing in Modal... please wait" 
+                    : isProcessingInModal && isTriggerStale
+                    ? "Processing seems stalled. You can re-trigger."
                     : queuedCount > 0 
                     ? `Process all ${queuedCount} pending PDFs` 
                     : "No pending PDFs to process"
@@ -270,10 +292,15 @@ export function ProcessingTab() {
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     <span>Triggering Modal...</span>
                   </>
-                ) : isProcessingInModal ? (
+                ) : isProcessingInModal && !isTriggerStale ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     <span>Processing ({queuedCount} left)</span>
+                  </>
+                ) : isProcessingInModal && isTriggerStale ? (
+                  <>
+                    <RotateCw className="h-4 w-4 mr-2" />
+                    <span>Re-trigger pending ({queuedCount})</span>
                   </>
                 ) : (
                   <>
@@ -361,7 +388,7 @@ export function ProcessingTab() {
                         isProcessingInModal ? (
                           <Badge className="bg-blue-500 text-xs">
                             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            Processing in Modal
+                            Triggered – awaiting Modal/Qdrant
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs">

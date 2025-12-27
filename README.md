@@ -58,27 +58,27 @@ Smart metadata extraction from multiple sources with fallback chain:
 ┌────────────────────────────────────────────────────────────────────┐
 │                    METADATA RESOLUTION PIPELINE                    │
 ├────────────────────────────────────────────────────────────────────┤
-│                                                                     │
+│                                                                    │
 │  ┌─────────────┐                                                   │
 │  │  PDF Upload │                                                   │
 │  └──────┬──────┘                                                   │
 │         ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │  STEP 1: Extract DOI from PDF                               │  │
-│  │  - Regex scan first pages                                   │  │
-│  │  - Check PDF metadata                                       │  │
-│  └──────────────────────────┬──────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  STEP 1: Extract DOI from PDF                               │   │
+│  │  - Regex scan first pages                                   │   │
+│  │  - Check PDF metadata                                       │   │
+│  └──────────────────────────┬──────────────────────────────────┘   │
 │                              │                                     │
-│         ┌────────────────────┴────────────────────┐               │
+│         ┌────────────────────┴────────────────────┐                │
 │         ▼                                          ▼               │
-│  ┌─────────────┐                           ┌─────────────┐        │
-│  │  DOI Found  │                           │  No DOI     │        │
-│  └──────┬──────┘                           └──────┬──────┘        │
+│  ┌─────────────┐                           ┌─────────────┐         │
+│  │  DOI Found  │                           │  No DOI     │         │
+│  └──────┬──────┘                           └──────┬──────┘         │
 │         ▼                                          ▼               │
-│  ┌─────────────────────┐              ┌─────────────────────────┐ │
-│  │  CrossRef/OpenAlex  │              │  LLM: Extract title,    │ │
-│  │  Lookup by DOI      │              │  authors from first page│ │
-│  └──────────┬──────────┘              └────────────┬────────────┘ │
+│  ┌─────────────────────┐              ┌─────────────────────────┐  │
+│  │  CrossRef/OpenAlex  │              │  LLM: Extract title,    │  │ 
+│  │  Lookup by DOI      │              │  authors from first page│  │
+│  └──────────┬──────────┘              └────────────┬────────────┘  │
 │             │                                       ▼              │
 │             │                          ┌─────────────────────────┐ │
 │             │                          │  OpenAlex Search        │ │
@@ -87,29 +87,29 @@ Smart metadata extraction from multiple sources with fallback chain:
 │             │                                       │              │
 │             │         ┌─────────────────────────────┘              │
 │             ▼         ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │  STEP 2: Merge & Validate Metadata                          │  │
-│  │  - Title, Authors, Year, Journal, DOI, Abstract             │  │
-│  │  - Keywords, Cited-by count, Open Access status             │  │
-│  └──────────────────────────┬──────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  STEP 2: Merge & Validate Metadata                          │   │
+│  │  - Title, Authors, Year, Journal, DOI, Abstract             │   │
+│  │  - Keywords, Cited-by count, Open Access status             │   │
+│  └──────────────────────────┬──────────────────────────────────┘   │
 │                              ▼                                     │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │  STEP 3: LLM Gap Fill (domain-specific fields)              │  │
-│  │  - Country/Region (from abstract/title)                     │  │
-│  │  - Sector/Topic                                             │  │
-│  │  - Study Type (RCT, quasi-experimental, etc.)               │  │
-│  │  - Intervention Type                                        │  │
-│  └──────────────────────────┬──────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  STEP 3: LLM Gap Fill (domain-specific fields)              │   │
+│  │  - Country/Region (from abstract/title)                     │   │
+│  │  - Sector/Topic                                             │   │
+│  │  - Study Type (RCT, quasi-experimental, etc.)               │   │
+│  │  - Intervention Type                                        │   │
+│  └──────────────────────────┬──────────────────────────────────┘   │
 │                              ▼                                     │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │  STEP 4: User Review (if confidence < threshold)            │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  STEP 4: User Review (if confidence < threshold)            │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                    │
 │  ALTERNATIVE INPUTS:                                               │
 │  • RIS/BibTeX Import → Skip to Step 2                              │
 │  • CSV with DOIs → Batch CrossRef/OpenAlex lookup                  │
 │  • Zotero Sync (Future) → Direct metadata import                   │
-│                                                                     │
+│                                                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
