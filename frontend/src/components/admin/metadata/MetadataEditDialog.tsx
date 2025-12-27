@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Check, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
 import type { DocumentMetadataDetail, MetadataUpdateRequest } from "@/lib/admin-api";
 import {
   ITEM_TYPES,
@@ -47,6 +48,25 @@ export function MetadataEditDialog({
   onSave,
   isSaving,
 }: MetadataEditDialogProps) {
+  // Local state for authors string (allows spaces while typing)
+  const [authorsText, setAuthorsText] = useState("");
+  
+  // Sync authorsText when document changes
+  useEffect(() => {
+    if (document) {
+      setAuthorsText(editForm.authors?.join("; ") || "");
+    }
+  }, [document?.id]);
+  
+  // Update editForm.authors when authorsText changes (on blur)
+  const syncAuthorsToForm = () => {
+    const authors = authorsText
+      .split(";")
+      .map(a => a.trim())
+      .filter(Boolean);
+    setEditForm({ ...editForm, authors });
+  };
+  
   if (!document) return null;
 
   const itemType = editForm.item_type || "";
@@ -121,11 +141,9 @@ export function MetadataEditDialog({
             <Label className="text-right">Authors</Label>
             <div className="col-span-3">
               <Input
-                value={editForm.authors?.join("; ") || ""}
-                onChange={(e) => setEditForm({ 
-                  ...editForm, 
-                  authors: e.target.value.split(";").map(a => a.trim()).filter(Boolean) 
-                })}
+                value={authorsText}
+                onChange={(e) => setAuthorsText(e.target.value)}
+                onBlur={syncAuthorsToForm}
                 placeholder="Surname, Name; Surname, Name"
               />
               <p className="text-xs text-muted-foreground mt-1">
