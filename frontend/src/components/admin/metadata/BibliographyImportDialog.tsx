@@ -63,6 +63,8 @@ export function BibliographyImportDialog({
       setSelectedEntries(new Set());
       setImportResult(null);
       setError(null);
+      setIsUploading(false);  // Reset loading state
+      setIsImporting(false);  // Reset loading state
     }
     onOpenChange(newOpen);
   };

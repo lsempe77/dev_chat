@@ -364,17 +364,25 @@ async def preview_import(
     else:
         raise HTTPException(status_code=400, detail="Unknown file format. Supported: .ris, .bib, .csv")
     
-    # Check for duplicates
+    # For large files, skip duplicate checking in preview (will check during confirm)
+    # This prevents 700+ individual DB queries which times out
     duplicates = []
-    if is_postgres_available():
+    if len(entries) <= 100 and is_postgres_available():
         db = await get_db_session()
         if db:
             async with db:
                 from src.database.repository import DocumentRepository
+                # Get all existing titles in one query for comparison
+                existing_docs = await DocumentRepository.list_all(db, limit=10000)
+                existing_titles = {doc.title.lower().strip() for doc in existing_docs if doc.title}
+                
+                # Check each entry against cached titles
                 for entry in entries:
-                    existing = await DocumentRepository.find_by_title_fuzzy(db, entry.title)
-                    if existing:
+                    if entry.title.lower().strip() in existing_titles:
                         duplicates.append(entry.title)
+    elif len(entries) > 100:
+        # Add a note that duplicate check was skipped
+        errors.append(f"Note: Duplicate check skipped for {len(entries)} entries (will check during import)")
     
     return ImportPreviewResponse(
         parsed_count=len(entries),
@@ -529,23 +537,48 @@ def _parse_bibtex(text: str) -> Tuple[List[ImportedEntry], List[str]]:
     entries = []
     errors = []
     
-    # Simple regex-based parser
-    entry_pattern = r'@(\w+)\s*\{([^,]+),\s*(.*?)\n\}'
-    field_pattern = r'(\w+)\s*=\s*\{(.*?)\}'
+    # More robust BibTeX parsing - find entries by @ followed by type and brace
+    # Then find matching closing brace by counting braces
+    entry_starts = []
+    for match in re.finditer(r'@(\w+)\s*\{', text):
+        entry_starts.append((match.start(), match.end(), match.group(1)))
     
-    for match in re.finditer(entry_pattern, text, re.DOTALL):
+    for i, (start, content_start, entry_type) in enumerate(entry_starts):
         try:
-            entry_type = match.group(1).lower()
-            fields_text = match.group(3)
+            # Find the matching closing brace by counting
+            brace_count = 1
+            pos = content_start
+            while pos < len(text) and brace_count > 0:
+                if text[pos] == '{':
+                    brace_count += 1
+                elif text[pos] == '}':
+                    brace_count -= 1
+                pos += 1
             
-            # Extract fields
+            if brace_count != 0:
+                errors.append(f"Unmatched braces in entry at position {start}")
+                continue
+            
+            entry_text = text[content_start:pos-1]
+            
+            # Get cite key (first thing before comma)
+            if ',' not in entry_text:
+                continue
+            cite_key, fields_text = entry_text.split(',', 1)
+            
+            # Parse fields using a more robust approach
+            # Match field = {value} or field = "value" or field = number
+            field_pattern = r'(\w+)\s*=\s*(?:\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}|"([^"]*)"|(\d+))'
             fields = {}
-            for field_match in re.finditer(field_pattern, fields_text, re.DOTALL):
+            for field_match in re.finditer(field_pattern, fields_text):
                 key = field_match.group(1).lower()
-                value = field_match.group(2).strip()
+                # Value could be in group 2 (braces), 3 (quotes), or 4 (number)
+                value = field_match.group(2) or field_match.group(3) or field_match.group(4) or ""
+                value = value.strip()
                 # Unescape BibTeX
                 value = value.replace("\\{", "{").replace("\\}", "}")
                 value = value.replace("\\&", "&").replace("\\_", "_")
+                value = value.replace("\\%", "%").replace("\\$", "$")
                 fields[key] = value
             
             # Parse authors
@@ -553,14 +586,14 @@ def _parse_bibtex(text: str) -> Tuple[List[ImportedEntry], List[str]]:
             if "author" in fields:
                 author_str = fields["author"]
                 # Split on " and "
-                authors = [a.strip() for a in author_str.split(" and ")]
+                authors = [a.strip() for a in re.split(r'\s+and\s+', author_str)]
             
             # Parse year
             year = None
             if "year" in fields:
                 try:
-                    year = int(fields["year"])
-                except ValueError:
+                    year = int(fields["year"][:4])
+                except (ValueError, IndexError):
                     pass
             
             # Parse keywords
@@ -574,7 +607,7 @@ def _parse_bibtex(text: str) -> Tuple[List[ImportedEntry], List[str]]:
                 year=year,
                 doi=fields.get("doi"),
                 abstract=fields.get("abstract"),
-                item_type=_bibtex_to_zotero_type(entry_type),
+                item_type=_bibtex_to_zotero_type(entry_type.lower()),
                 journal=fields.get("journal"),
                 volume=fields.get("volume"),
                 issue=fields.get("number"),
