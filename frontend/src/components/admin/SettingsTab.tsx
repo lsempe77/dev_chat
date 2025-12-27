@@ -17,7 +17,9 @@ import {
   Database,
   Cloud,
   Cpu,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 import { getAdminStatus, checkHealth, getCollectionInfo } from "@/lib/admin-api";
 
@@ -30,6 +32,10 @@ interface ConnectionStatus {
 export function SettingsTab() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isResettingQdrant, setIsResettingQdrant] = useState(false);
+  const [isResettingR2, setIsResettingR2] = useState(false);
+  const [isResettingDB, setIsResettingDB] = useState(false);
+  const [dangerConfirm, setDangerConfirm] = useState<string | null>(null);
   const [connections, setConnections] = useState<ConnectionStatus[]>([
     { name: "Cloudflare R2", status: "checking", details: "Checking..." },
     { name: "Qdrant Cloud", status: "checking", details: "Checking..." },
@@ -143,6 +149,91 @@ export function SettingsTab() {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     setIsSaving(false);
+  };
+
+  // Danger Zone Actions
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  const resetQdrant = async () => {
+    if (dangerConfirm !== "qdrant") {
+      setDangerConfirm("qdrant");
+      return;
+    }
+    setIsResettingQdrant(true);
+    setDangerConfirm(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/collection`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await res.text());
+      alert("Qdrant collection reset successfully!");
+      await fetchStatus();
+    } catch (err) {
+      alert(`Failed to reset Qdrant: ${err}`);
+    } finally {
+      setIsResettingQdrant(false);
+    }
+  };
+
+  const clearR2 = async () => {
+    if (dangerConfirm !== "r2") {
+      setDangerConfirm("r2");
+      return;
+    }
+    setIsResettingR2(true);
+    setDangerConfirm(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/r2/clear`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      alert(`R2 cleared: ${data.deleted_count} files deleted`);
+    } catch (err) {
+      alert(`Failed to clear R2: ${err}`);
+    } finally {
+      setIsResettingR2(false);
+    }
+  };
+
+  const resetDatabase = async () => {
+    if (dangerConfirm !== "database") {
+      setDangerConfirm("database");
+      return;
+    }
+    setIsResettingDB(true);
+    setDangerConfirm(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/database/reset`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      alert(`Database reset: ${data.deleted_count} documents deleted`);
+    } catch (err) {
+      alert(`Failed to reset database: ${err}`);
+    } finally {
+      setIsResettingDB(false);
+    }
+  };
+
+  const resetAll = async () => {
+    if (dangerConfirm !== "all") {
+      setDangerConfirm("all");
+      return;
+    }
+    setDangerConfirm(null);
+    setIsResettingDB(true);
+    setIsResettingQdrant(true);
+    setIsResettingR2(true);
+    try {
+      // Reset in order: DB -> Qdrant -> R2
+      await fetch(`${API_BASE_URL}/admin/database/reset`, { method: "POST" });
+      await fetch(`${API_BASE_URL}/admin/collection`, { method: "DELETE" });
+      await fetch(`${API_BASE_URL}/admin/r2/clear`, { method: "DELETE" });
+      alert("Complete system reset successful!");
+      await fetchStatus();
+    } catch (err) {
+      alert(`Reset failed: ${err}`);
+    } finally {
+      setIsResettingDB(false);
+      setIsResettingQdrant(false);
+      setIsResettingR2(false);
+    }
   };
 
   const getStatusIcon = (status: ConnectionStatus["status"]) => {
@@ -404,6 +495,106 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
+      {/* Danger Zone */}
+      <Card className="md:col-span-2 border-red-500/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-red-600">
+            <AlertTriangle className="h-5 w-5" />
+            Danger Zone
+          </CardTitle>
+          <CardDescription>
+            Destructive actions that cannot be undone. Click once to confirm, click again to execute.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 space-y-3">
+              <div>
+                <h4 className="font-medium text-red-700 dark:text-red-400">Reset Qdrant Vectors</h4>
+                <p className="text-xs text-muted-foreground">Delete all vector embeddings. Documents will need reprocessing.</p>
+              </div>
+              <Button 
+                variant={dangerConfirm === "qdrant" ? "destructive" : "outline"}
+                size="sm"
+                onClick={resetQdrant}
+                disabled={isResettingQdrant}
+                className={dangerConfirm === "qdrant" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}
+              >
+                {isResettingQdrant ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {dangerConfirm === "qdrant" ? "Click to Confirm" : "Reset Qdrant"}
+              </Button>
+            </div>
+
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 space-y-3">
+              <div>
+                <h4 className="font-medium text-red-700 dark:text-red-400">Clear R2 Storage</h4>
+                <p className="text-xs text-muted-foreground">Delete all PDFs and processed outputs from Cloudflare R2.</p>
+              </div>
+              <Button 
+                variant={dangerConfirm === "r2" ? "destructive" : "outline"}
+                size="sm"
+                onClick={clearR2}
+                disabled={isResettingR2}
+                className={dangerConfirm === "r2" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}
+              >
+                {isResettingR2 ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {dangerConfirm === "r2" ? "Click to Confirm" : "Clear R2"}
+              </Button>
+            </div>
+
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 space-y-3">
+              <div>
+                <h4 className="font-medium text-red-700 dark:text-red-400">Reset PostgreSQL</h4>
+                <p className="text-xs text-muted-foreground">Delete all document metadata from the database.</p>
+              </div>
+              <Button 
+                variant={dangerConfirm === "database" ? "destructive" : "outline"}
+                size="sm"
+                onClick={resetDatabase}
+                disabled={isResettingDB}
+                className={dangerConfirm === "database" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}
+              >
+                {isResettingDB ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {dangerConfirm === "database" ? "Click to Confirm" : "Reset Database"}
+              </Button>
+            </div>
+
+            <div className="p-4 rounded-lg border border-red-500 bg-red-100/50 dark:bg-red-950/40 space-y-3">
+              <div>
+                <h4 className="font-medium text-red-700 dark:text-red-400">⚠️ Complete System Reset</h4>
+                <p className="text-xs text-muted-foreground">Delete ALL data: vectors, files, and metadata. Start completely fresh.</p>
+              </div>
+              <Button 
+                variant={dangerConfirm === "all" ? "destructive" : "outline"}
+                size="sm"
+                onClick={resetAll}
+                disabled={isResettingDB || isResettingQdrant || isResettingR2}
+                className={dangerConfirm === "all" ? "" : "border-red-500 text-red-700 hover:bg-red-200"}
+              >
+                {(isResettingDB || isResettingQdrant || isResettingR2) ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {dangerConfirm === "all" ? "Click to Confirm FULL RESET" : "Reset Everything"}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Save Button */}
       <div className="md:col-span-2 flex justify-end gap-2">
         <Button variant="outline">
@@ -422,6 +613,14 @@ export function SettingsTab() {
             </>
           )}
         </Button>
+      </div>
+
+      {/* Settings Note */}
+      <div className="md:col-span-2">
+        <p className="text-xs text-muted-foreground text-center">
+          ⚠️ Note: MinerU and Chunking settings are currently display-only. 
+          Settings are configured via environment variables on the backend.
+        </p>
       </div>
     </div>
   );
