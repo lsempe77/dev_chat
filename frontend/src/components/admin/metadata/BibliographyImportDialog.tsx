@@ -150,8 +150,8 @@ export function BibliographyImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-3xl h-[80vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Book className="h-5 w-5" />
             Import Bibliography
@@ -254,10 +254,10 @@ export function BibliographyImportDialog({
               </div>
             </div>
 
-            <ScrollArea className="flex-1 -mx-6 px-6">
-              <div className="space-y-2 py-2">
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="space-y-2 py-2 pr-4">
                 {/* Select all header */}
-                <div className="flex items-center gap-2 py-2 border-b">
+                <div className="flex items-center gap-2 py-2 border-b sticky top-0 bg-background z-10">
                   <Checkbox
                     checked={selectedEntries.size === preview.entries.length}
                     onCheckedChange={toggleAll}
@@ -310,7 +310,7 @@ export function BibliographyImportDialog({
             </ScrollArea>
 
             {preview.errors.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              <div className="shrink-0 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                 <strong>Parse errors:</strong> {preview.errors.join(", ")}
               </div>
             )}
@@ -318,15 +318,15 @@ export function BibliographyImportDialog({
         )}
 
         {error && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          <div className="shrink-0 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
             <AlertTriangle className="h-4 w-4" />
             {error}
           </div>
         )}
 
-        {/* Footer */}
+        {/* Footer - always visible at bottom */}
         {!importResult && preview && (
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t pt-4 mt-2">
             <Button variant="outline" onClick={() => setPreview(null)}>
               Back
             </Button>
