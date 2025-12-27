@@ -40,10 +40,16 @@ export function ProcessingTab() {
   const [error, setError] = useState<string | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
+  const [triggeredJobCount, setTriggeredJobCount] = useState(0);
   const [queuedCount, setQueuedCount] = useState(0);
   const [processingCount, setProcessingCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
+
+  // Check if processing is likely still running (triggered within last 10 min and jobs still queued)
+  const isProcessingInModal = !!(lastTriggeredAt && 
+    (Date.now() - lastTriggeredAt.getTime() < 10 * 60 * 1000) && 
+    queuedCount > 0);
 
   // Fetch jobs from API
   const refreshJobs = useCallback(async () => {
@@ -107,6 +113,7 @@ export function ProcessingTab() {
       const response = await triggerProcessing({ max_documents: 10 });
       setTriggerMessage(response.message);
       setLastTriggeredAt(new Date());
+      setTriggeredJobCount(response.queued);
       // Refresh jobs after triggering
       await refreshJobs();
     } catch (err) {
@@ -248,14 +255,25 @@ export function ProcessingTab() {
               <Button
                 size="sm"
                 onClick={startBatchProcessing}
-                disabled={isTriggering || queuedCount === 0}
-                title={queuedCount > 0 ? `Process all ${queuedCount} pending PDFs` : "No pending PDFs to process"}
-                className="min-w-[180px]"
+                disabled={isTriggering || queuedCount === 0 || isProcessingInModal}
+                title={
+                  isProcessingInModal 
+                    ? "Processing in Modal... please wait" 
+                    : queuedCount > 0 
+                    ? `Process all ${queuedCount} pending PDFs` 
+                    : "No pending PDFs to process"
+                }
+                className="min-w-[200px]"
               >
                 {isTriggering ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     <span>Triggering Modal...</span>
+                  </>
+                ) : isProcessingInModal ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <span>Processing ({queuedCount} left)</span>
                   </>
                 ) : (
                   <>
@@ -282,7 +300,9 @@ export function ProcessingTab() {
                     key={job.id}
                     className={`flex items-center gap-4 p-4 rounded-lg border ${
                       job.status === "queued" 
-                        ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800" 
+                        ? (isProcessingInModal 
+                          ? "bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700"
+                          : "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800")
                         : job.status === "processing"
                         ? "bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700"
                         : job.status === "completed"
@@ -338,9 +358,16 @@ export function ProcessingTab() {
                         </Button>
                       )}
                       {job.status === "queued" && (
-                        <Badge variant="outline" className="text-xs">
-                          Awaiting trigger
-                        </Badge>
+                        isProcessingInModal ? (
+                          <Badge className="bg-blue-500 text-xs">
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Processing in Modal
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            Awaiting trigger
+                          </Badge>
+                        )
                       )}
                     </div>
                   </div>
