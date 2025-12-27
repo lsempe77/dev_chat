@@ -8,7 +8,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Activity, 
   Play, 
-  RefreshCw,
   CheckCircle,
   AlertCircle,
   Clock,
@@ -245,15 +244,6 @@ export function ProcessingTab() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={refreshJobs}
-                disabled={isRefreshing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
               <Button
                 size="sm"
                 onClick={startBatchProcessing}
