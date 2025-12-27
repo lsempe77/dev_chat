@@ -95,27 +95,61 @@ async def migrate_add_zotero_fields():
         
         db = await get_db_session()
         try:
-            # List of all Zotero-compatible columns to add
+            # List of all Zotero-compatible columns to add (matches src/database/models.py)
             columns = [
+                # Item type
                 ("item_type", "VARCHAR(100)"),
-                ("volume", "VARCHAR(50)"),
-                ("issue", "VARCHAR(50)"),
-                ("pages", "VARCHAR(50)"),
-                ("edition", "VARCHAR(50)"),
+                # Identifiers
+                ("doi", "VARCHAR(255)"),
                 ("isbn", "VARCHAR(50)"),
                 ("issn", "VARCHAR(50)"),
-                ("series", "VARCHAR(255)"),
-                ("series_number", "VARCHAR(50)"),
-                ("place", "VARCHAR(255)"),
                 ("url", "TEXT"),
-                ("accessed_date", "VARCHAR(50)"),
-                ("abstract", "TEXT"),
-                ("short_title", "VARCHAR(500)"),
-                ("report_number", "VARCHAR(100)"),
+                # Publication info
+                ("publication", "VARCHAR(500)"),
+                ("journal", "VARCHAR(500)"),
+                ("volume", "VARCHAR(50)"),
+                ("issue", "VARCHAR(50)"),
+                ("pages", "VARCHAR(100)"),
+                ("edition", "VARCHAR(100)"),
+                # Publisher
+                ("publisher", "VARCHAR(500)"),
+                ("place", "VARCHAR(255)"),
+                # Series
+                ("series", "VARCHAR(500)"),
+                ("series_number", "VARCHAR(50)"),
+                # Book
+                ("book_title", "VARCHAR(500)"),
+                ("num_pages", "INTEGER"),
+                # Report/Thesis
                 ("institution", "VARCHAR(500)"),
+                ("report_number", "VARCHAR(100)"),
+                ("report_type", "VARCHAR(100)"),
                 ("thesis_type", "VARCHAR(100)"),
+                # Conference
                 ("conference_name", "VARCHAR(500)"),
                 ("proceedings_title", "VARCHAR(500)"),
+                # Access
+                ("accessed_date", "VARCHAR(50)"),
+                ("abstract", "TEXT"),
+                # Metrics
+                ("cited_by_count", "INTEGER"),
+                ("is_open_access", "BOOLEAN"),
+                # Classification
+                ("countries", "TEXT[]"),
+                ("sectors", "TEXT[]"),
+                ("study_type", "VARCHAR(255)"),
+                ("intervention_type", "VARCHAR(500)"),
+                ("sdgs", "TEXT[]"),
+                ("keywords", "TEXT[]"),
+                # Processing
+                ("chunk_count", "INTEGER DEFAULT 0"),
+                ("page_count", "INTEGER DEFAULT 0"),
+                ("metadata_source", "VARCHAR(50)"),
+                ("metadata_confidence", "FLOAT DEFAULT 0.0"),
+                ("needs_review", "BOOLEAN DEFAULT TRUE"),
+                ("status", "VARCHAR(50) DEFAULT 'indexed'"),
+                # Extra
+                ("extra", "JSONB"),
             ]
             
             added = []
