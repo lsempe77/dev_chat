@@ -164,6 +164,42 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
         return False, 0, error_msg
 
 
+def ensure_qdrant_indexes():
+    """
+    Ensure payload indexes exist for fast lookups.
+    Safely no-ops if indexes already exist.
+    """
+    import os
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import PayloadSchemaType
+
+    try:
+        qdrant = QdrantClient(
+            url=os.environ["QDRANT_URL"],
+            api_key=os.environ["QDRANT_API_KEY"],
+        )
+
+        indexes = {
+            "doc_id": PayloadSchemaType.KEYWORD,
+            "pdf_name": PayloadSchemaType.KEYWORD,
+        }
+
+        for field, schema in indexes.items():
+            try:
+                qdrant.create_payload_index(
+                    collection_name="devchat_v2",
+                    field_name=field,
+                    field_schema=schema,
+                )
+                print(f"  Created payload index on '{field}'")
+            except Exception as e:
+                # Ignore "already exists", warn on others
+                if "exists" not in str(e).lower():
+                    print(f"  Warning: could not create index {field}: {e}")
+    except Exception as e:
+        print(f"  Warning: failed to ensure Qdrant indexes: {e}")
+
+
 def delete_qdrant_chunks(pdf_name: str) -> int:
     """
     Delete all chunks for a PDF from Qdrant (for re-indexing).
@@ -532,6 +568,9 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
     md_key = None  # Set when we actually upload markdown
 
     try:
+        # Ensure payload indexes exist for faster lookups
+        ensure_qdrant_indexes()
+
         # Check if already indexed in Qdrant (unless forcing)
         if not force_reindex:
             is_indexed, existing_chunks, qdrant_err = check_qdrant_indexed(doc_id)
