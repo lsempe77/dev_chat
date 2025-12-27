@@ -94,7 +94,7 @@ export function MetadataEditDialog({
 
   return (
     <Dialog open={!!document} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Document Metadata</DialogTitle>
           <DialogDescription>
