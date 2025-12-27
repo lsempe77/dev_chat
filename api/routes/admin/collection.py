@@ -22,6 +22,7 @@ from ..dependencies import (
     COLLECTION_CACHE_TTL,
     get_collection_info_cache,
     get_indexer,
+    invalidate_admin_caches,
 )
 
 logger = get_logger(__name__)
