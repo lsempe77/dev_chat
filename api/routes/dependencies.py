@@ -163,10 +163,10 @@ async def trigger_modal_processing(force_reprocess: bool = False, max_documents:
     )
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Fire and forget - short timeout since we don't need to wait for completion
-            # The Modal endpoint returns quickly anyway (it spawns background tasks)
-            await client.post(
+        # Longer timeout (90s) to handle Modal cold starts
+        # Modal functions can take 30-60s to spin up from cold
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(
                 modal_trigger_url,
                 json={
                     "force_reprocess": force_reprocess,
@@ -175,6 +175,8 @@ async def trigger_modal_processing(force_reprocess: bool = False, max_documents:
                 },
                 headers={"Content-Type": "application/json"},
             )
-            logger.info(f"Triggered Modal processing via {modal_trigger_url}")
+            logger.info(f"Triggered Modal processing via {modal_trigger_url}: {response.status_code}")
+            return response.json() if response.status_code == 200 else None
     except Exception as e:
         logger.error(f"Failed to trigger Modal processing: {e}")
+        raise  # Re-raise so caller knows it failed

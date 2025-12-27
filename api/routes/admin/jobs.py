@@ -137,14 +137,30 @@ async def trigger_processing_endpoint(request: TriggerProcessingRequest):
     Calls the Modal web endpoint to process new PDFs.
     This works from Railway (unlike subprocess which needs modal CLI).
     """
-    # Use the helper function
-    await trigger_modal_processing(
-        force_reprocess=request.force_reprocess if hasattr(request, 'force_reprocess') else False,
-        max_documents=request.max_documents or 10
-    )
+    from fastapi import HTTPException
     
-    return TriggerProcessingResponse(
-        queued=1,  # We don't know exact count from async call, but we know it triggered
-        skipped=0,
-        message="Processing triggered successfully",
-    )
+    try:
+        # Use the helper function - now returns result or raises
+        result = await trigger_modal_processing(
+            force_reprocess=request.force_reprocess if hasattr(request, 'force_reprocess') else False,
+            max_documents=request.max_documents or 10
+        )
+        
+        if result:
+            return TriggerProcessingResponse(
+                queued=result.get("queued", 0),
+                skipped=result.get("skipped", 0),
+                message=result.get("message", "Processing triggered successfully"),
+            )
+        else:
+            return TriggerProcessingResponse(
+                queued=0,
+                skipped=0,
+                message="Processing triggered (no response from Modal)",
+            )
+    except Exception as e:
+        logger.error(f"Modal trigger failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to trigger Modal processing: {str(e)}. Modal may be cold starting - try again in 30 seconds."
+        )
