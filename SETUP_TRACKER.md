@@ -193,13 +193,14 @@ Production-grade metadata storage with instant queries:
 │              ┌─────────────────────────┐                                │
 │              │      Admin Routes       │                                │
 │              │ /admin/documents        │                                │
+│              │ /admin/documents/sync   │  ← Modal calls this           │
 │              │ /admin/metadata         │                                │
 │              │ /admin/db-status        │                                │
 │              └─────────────────────────┘                                │
 │                                                                          │
 │   SYNC STRATEGY:                                                        │
 │   • Initial: scripts/sync_qdrant_to_postgres.py (one-time migration)   │
-│   • Ongoing: Update Postgres when documents are ingested/modified       │
+│   • Ongoing: Modal calls /admin/documents/sync after Qdrant indexing   │
 │   • Fallback: If Postgres unavailable, routes fall back to Qdrant      │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
