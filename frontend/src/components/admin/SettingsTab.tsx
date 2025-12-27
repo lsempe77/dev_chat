@@ -455,92 +455,100 @@ export function SettingsTab() {
             Danger Zone
           </CardTitle>
           <CardDescription>
-            Destructive actions that cannot be undone. Click once to confirm, click again to execute.
+            Destructive actions that cannot be undone. Click once to arm, click again to execute.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 space-y-3">
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 flex flex-col justify-between min-h-[120px]">
               <div>
                 <h4 className="font-medium text-red-700 dark:text-red-400">Reset Qdrant Vectors</h4>
-                <p className="text-xs text-muted-foreground">Delete all vector embeddings. Documents will need reprocessing.</p>
+                <p className="text-xs text-muted-foreground mt-1">Delete all vector embeddings. Documents will need reprocessing.</p>
               </div>
               <Button 
                 variant={dangerConfirm === "qdrant" ? "destructive" : "outline"}
                 size="sm"
                 onClick={resetQdrant}
                 disabled={isResettingQdrant}
-                className={dangerConfirm === "qdrant" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}
+                className={`w-full mt-3 ${dangerConfirm === "qdrant" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}`}
               >
                 {isResettingQdrant ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
-                {dangerConfirm === "qdrant" ? "Click to Confirm" : "Reset Qdrant"}
+                <span className="min-w-[100px]">
+                  {dangerConfirm === "qdrant" ? "Confirm Reset" : "Reset Qdrant"}
+                </span>
               </Button>
             </div>
 
-            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 space-y-3">
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 flex flex-col justify-between min-h-[120px]">
               <div>
                 <h4 className="font-medium text-red-700 dark:text-red-400">Clear R2 Storage</h4>
-                <p className="text-xs text-muted-foreground">Delete all PDFs and processed outputs from Cloudflare R2.</p>
+                <p className="text-xs text-muted-foreground mt-1">Delete all PDFs and processed outputs from Cloudflare R2.</p>
               </div>
               <Button 
                 variant={dangerConfirm === "r2" ? "destructive" : "outline"}
                 size="sm"
                 onClick={clearR2}
                 disabled={isResettingR2}
-                className={dangerConfirm === "r2" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}
+                className={`w-full mt-3 ${dangerConfirm === "r2" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}`}
               >
                 {isResettingR2 ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
-                {dangerConfirm === "r2" ? "Click to Confirm" : "Clear R2"}
+                <span className="min-w-[100px]">
+                  {dangerConfirm === "r2" ? "Confirm Clear" : "Clear R2"}
+                </span>
               </Button>
             </div>
 
-            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 space-y-3">
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 flex flex-col justify-between min-h-[120px]">
               <div>
                 <h4 className="font-medium text-red-700 dark:text-red-400">Reset PostgreSQL</h4>
-                <p className="text-xs text-muted-foreground">Delete all document metadata from the database.</p>
+                <p className="text-xs text-muted-foreground mt-1">Delete all document metadata from the database.</p>
               </div>
               <Button 
                 variant={dangerConfirm === "database" ? "destructive" : "outline"}
                 size="sm"
                 onClick={resetDatabase}
                 disabled={isResettingDB}
-                className={dangerConfirm === "database" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}
+                className={`w-full mt-3 ${dangerConfirm === "database" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}`}
               >
                 {isResettingDB ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
-                {dangerConfirm === "database" ? "Click to Confirm" : "Reset Database"}
+                <span className="min-w-[100px]">
+                  {dangerConfirm === "database" ? "Confirm Reset" : "Reset Database"}
+                </span>
               </Button>
             </div>
 
-            <div className="p-4 rounded-lg border border-red-500 bg-red-100/50 dark:bg-red-950/40 space-y-3">
+            <div className="p-4 rounded-lg border border-red-500 bg-red-100/50 dark:bg-red-950/40 flex flex-col justify-between min-h-[120px]">
               <div>
                 <h4 className="font-medium text-red-700 dark:text-red-400">⚠️ Complete System Reset</h4>
-                <p className="text-xs text-muted-foreground">Delete ALL data: vectors, files, and metadata. Start completely fresh.</p>
+                <p className="text-xs text-muted-foreground mt-1">Delete ALL data: vectors, files, and metadata.</p>
               </div>
               <Button 
                 variant={dangerConfirm === "all" ? "destructive" : "outline"}
                 size="sm"
                 onClick={resetAll}
                 disabled={isResettingDB || isResettingQdrant || isResettingR2}
-                className={dangerConfirm === "all" ? "" : "border-red-500 text-red-700 hover:bg-red-200"}
+                className={`w-full mt-3 ${dangerConfirm === "all" ? "" : "border-red-500 text-red-700 hover:bg-red-200"}`}
               >
                 {(isResettingDB || isResettingQdrant || isResettingR2) ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
-                {dangerConfirm === "all" ? "Click to Confirm FULL RESET" : "Reset Everything"}
+                <span className="min-w-[100px]">
+                  {dangerConfirm === "all" ? "Confirm Full Reset" : "Reset Everything"}
+                </span>
               </Button>
             </div>
           </div>
