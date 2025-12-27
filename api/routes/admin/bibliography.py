@@ -420,20 +420,35 @@ async def confirm_import(request: ImportConfirmRequest):
         from src.database.repository import DocumentRepository
         import uuid
         
+        # Batch duplicate check: single query for all existing titles/DOIs
+        existing_titles = set()
+        existing_dois = set()
+        if request.skip_duplicates:
+            existing_docs = await DocumentRepository.list_all(db, limit=50000)
+            existing_titles = {doc.title.lower().strip() for doc in existing_docs if doc.title}
+            existing_dois = {doc.doi.lower().strip() for doc in existing_docs if doc.doi}
+        
+        # Prepare all documents to insert
+        docs_to_insert = []
         for entry in request.entries:
             try:
-                # Check for duplicates
+                # Check for duplicates using in-memory sets (O(1) lookup)
                 if request.skip_duplicates:
-                    existing = await DocumentRepository.find_by_title_fuzzy(db, entry.title)
-                    if existing:
+                    title_normalized = entry.title.lower().strip()
+                    doi_normalized = (entry.doi or "").lower().strip()
+                    
+                    if title_normalized in existing_titles:
+                        skipped += 1
+                        continue
+                    if doi_normalized and doi_normalized in existing_dois:
                         skipped += 1
                         continue
                 
-                # Create document record as dict (repository expects dict)
+                # Create document record as dict
                 doc_data = {
                     "id": str(uuid.uuid4()),
                     "title": entry.title,
-                    "filename": f"imported_{uuid.uuid4().hex[:8]}.bib",  # Placeholder filename
+                    "filename": f"imported_{uuid.uuid4().hex[:8]}.bib",
                     "authors": entry.authors,
                     "year": entry.year,
                     "doi": entry.doi,
@@ -447,18 +462,24 @@ async def confirm_import(request: ImportConfirmRequest):
                     "url": entry.url,
                     "keywords": entry.keywords,
                     "metadata_source": "bibliography_import",
-                    "metadata_confidence": 0.9,  # High confidence since user-provided
-                    "needs_review": False,  # Already reviewed by user
-                    "chunk_count": 0,  # No PDF yet
+                    "metadata_confidence": 0.9,
+                    "needs_review": False,
+                    "chunk_count": 0,
                     "page_count": 0,
-                    "status": "pending",  # No PDF yet
+                    "status": "pending",
                 }
-                
-                await DocumentRepository.create(db, doc_data)
-                imported += 1
+                docs_to_insert.append(doc_data)
                 
             except Exception as e:
-                errors.append(f"Error importing '{entry.title[:50]}...': {str(e)}")
+                errors.append(f"Error preparing '{entry.title[:50]}...': {str(e)}")
+        
+        # Batch insert all documents
+        for doc_data in docs_to_insert:
+            try:
+                await DocumentRepository.create(db, doc_data)
+                imported += 1
+            except Exception as e:
+                errors.append(f"Error inserting '{doc_data['title'][:50]}...': {str(e)}")
     
     return ImportConfirmResponse(
         imported_count=imported,

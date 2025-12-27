@@ -150,7 +150,7 @@ export function BibliographyImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl h-[80vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-5xl w-[90vw] h-[80vh] flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Book className="h-5 w-5" />
