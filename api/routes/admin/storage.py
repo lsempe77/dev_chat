@@ -212,6 +212,72 @@ async def list_r2_files(prefix: str = Query("input-pdfs/", description="Prefix t
         raise HTTPException(status_code=500, detail=f"Failed to list R2: {str(e)}")
 
 
+@router.delete("/r2/clear")
+async def clear_r2_bucket(
+    prefix: str = Query("all", description="Prefix to clear: 'input-pdfs', 'outputs', or 'all'"),
+    confirm: bool = Query(False, description="Must be true to actually delete"),
+):
+    """
+    Clear files from R2 bucket.
+    WARNING: This permanently deletes files!
+    """
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        prefixes_to_clear = []
+        if prefix == "all":
+            prefixes_to_clear = ["input-pdfs/", "outputs/"]
+        elif prefix == "input-pdfs":
+            prefixes_to_clear = ["input-pdfs/"]
+        elif prefix == "outputs":
+            prefixes_to_clear = ["outputs/"]
+        else:
+            prefixes_to_clear = [prefix]
+        
+        # List all files to delete
+        files_to_delete = []
+        for pfx in prefixes_to_clear:
+            paginator = r2_client.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket_name, Prefix=pfx):
+                for obj in page.get("Contents", []):
+                    files_to_delete.append({"Key": obj["Key"]})
+        
+        if not confirm:
+            return {
+                "dry_run": True,
+                "would_delete": len(files_to_delete),
+                "prefixes": prefixes_to_clear,
+                "sample_files": [f["Key"] for f in files_to_delete[:10]],
+            }
+        
+        if not files_to_delete:
+            return {"message": "No files to delete", "deleted": 0}
+        
+        # Delete in batches of 1000 (S3 limit)
+        deleted_count = 0
+        for i in range(0, len(files_to_delete), 1000):
+            batch = files_to_delete[i:i+1000]
+            r2_client.delete_objects(
+                Bucket=bucket_name,
+                Delete={"Objects": batch}
+            )
+            deleted_count += len(batch)
+        
+        logger.info(f"Deleted {deleted_count} files from R2")
+        invalidate_admin_caches()
+        
+        return {
+            "success": True,
+            "deleted": deleted_count,
+            "prefixes": prefixes_to_clear,
+        }
+        
+    except Exception as e:
+        logger.error(f"R2 clear failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/pdf/{document_id:path}")
 async def get_pdf_url(document_id: str):
     """

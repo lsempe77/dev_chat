@@ -33,7 +33,50 @@ router = APIRouter()
 # Collection Management
 # =============================================================================
 
+@router.delete("/collection")
+async def reset_collection():
+    """
+    Delete and recreate the Qdrant collection.
+    WARNING: This deletes ALL indexed documents!
+    """
+    try:
+        indexer = get_indexer()
+        collection_name = indexer.collection_name
+        
+        # Delete the collection
+        try:
+            indexer.client.delete_collection(collection_name)
+            logger.info(f"Deleted collection: {collection_name}")
+        except Exception as e:
+            logger.warning(f"Collection might not exist: {e}")
+        
+        # Recreate it
+        from qdrant_client.models import VectorParams, Distance
+        
+        indexer.client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(
+                size=1024,  # Cohere embed-english-v3.0 dimension
+                distance=Distance.COSINE,
+            ),
+        )
+        logger.info(f"Recreated collection: {collection_name}")
+        
+        # Invalidate cache
+        invalidate_admin_caches()
+        
+        return {
+            "success": True,
+            "message": f"Collection '{collection_name}' reset successfully",
+            "action": "deleted_and_recreated",
+        }
+    except Exception as e:
+        logger.error(f"Failed to reset collection: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/collection")
+async def get_collection_info():
 async def get_collection_info():
     """Get vector collection information. Cached for 30 seconds."""
     cache = get_collection_info_cache()
