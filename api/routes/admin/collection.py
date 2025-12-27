@@ -77,7 +77,6 @@ async def reset_collection():
 
 @router.get("/collection")
 async def get_collection_info():
-async def get_collection_info():
     """Get vector collection information. Cached for 30 seconds."""
     cache = get_collection_info_cache()
     
