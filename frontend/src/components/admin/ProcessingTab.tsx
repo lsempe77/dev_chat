@@ -253,16 +253,17 @@ export function ProcessingTab() {
                 variant="outline"
                 size="sm"
                 onClick={() => setAutoRefresh(!autoRefresh)}
+                title={autoRefresh ? "Stop auto-refreshing the job list" : "Auto-refresh job list every 5 seconds"}
               >
                 {autoRefresh ? (
                   <>
                     <Pause className="h-4 w-4 mr-1" />
-                    Pause
+                    Pause Updates
                   </>
                 ) : (
                   <>
                     <Play className="h-4 w-4 mr-1" />
-                    Resume
+                    Resume Updates
                   </>
                 )}
               </Button>
