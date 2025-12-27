@@ -8,7 +8,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Activity, 
   Play, 
-  Pause, 
   RefreshCw,
   CheckCircle,
   AlertCircle,
@@ -37,7 +36,6 @@ interface ProcessingJob {
 export function ProcessingTab() {
   const [jobs, setJobs] = useState<ProcessingJob[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true);
   const [isTriggering, setIsTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
@@ -86,14 +84,12 @@ export function ProcessingTab() {
 
   // Auto-refresh every 5 seconds
   useEffect(() => {
-    if (!autoRefresh) return;
-    
     const interval = setInterval(() => {
       refreshJobs();
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [autoRefresh, refreshJobs]);
+  }, [refreshJobs]);
 
   const retryJob = async (jobId: string) => {
     // TODO: Implement retry via specific endpoint when available
@@ -249,24 +245,6 @@ export function ProcessingTab() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                title={autoRefresh ? "Stop auto-refreshing the job list" : "Auto-refresh job list every 5 seconds"}
-              >
-                {autoRefresh ? (
-                  <>
-                    <Pause className="h-4 w-4 mr-1" />
-                    Pause Updates
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-1" />
-                    Resume Updates
-                  </>
-                )}
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
