@@ -24,6 +24,7 @@ import {
   getDocuments, 
   deleteDocument, 
   reprocessDocument,
+  getPDFUrl,
   type DocumentMetadata 
 } from "@/lib/admin-api";
 
@@ -356,10 +357,40 @@ export function DocumentsTab() {
                     </td>
                     <td className="p-2">
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8"
+                          title="View PDF"
+                          onClick={async () => {
+                            try {
+                              const response = await getPDFUrl(doc.id);
+                              window.open(response.url, '_blank');
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : "Failed to load PDF");
+                            }
+                          }}
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8"
+                          title="Download PDF"
+                          onClick={async () => {
+                            try {
+                              const response = await getPDFUrl(doc.id);
+                              const a = document.createElement('a');
+                              a.href = response.url;
+                              a.download = doc.filename || `${doc.id}.pdf`;
+                              a.target = '_blank';
+                              a.click();
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : "Failed to download PDF");
+                            }
+                          }}
+                        >
                           <Download className="h-4 w-4" />
                         </Button>
                       </div>
