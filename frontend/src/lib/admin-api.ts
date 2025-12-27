@@ -576,6 +576,8 @@ export async function updateDocumentMetadata(
   documentId: string,
   update: MetadataUpdateRequest
 ): Promise<MetadataUpdateResponse> {
+  console.log("Updating metadata for:", documentId, update);
+  
   const response = await fetch(
     `${API_BASE_URL}/admin/metadata/${encodeURIComponent(documentId)}`,
     {
@@ -588,10 +590,14 @@ export async function updateDocumentMetadata(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to update metadata: ${response.statusText}`);
+    const errorText = await response.text();
+    console.error("Metadata update failed:", response.status, errorText);
+    throw new Error(`Failed to update metadata: ${response.statusText} - ${errorText}`);
   }
 
-  return response.json();
+  const result = await response.json();
+  console.log("Metadata update result:", result);
+  return result;
 }
 
 // =============================================================================
