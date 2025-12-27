@@ -226,8 +226,8 @@ export function BibliographyImportDialog({
 
         {/* Preview state */}
         {!importResult && preview && (
-          <>
-            <div className="flex items-center justify-between py-2 border-b">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between py-2 border-b">
               <div className="flex items-center gap-4">
                 <Badge variant="outline">
                   {preview.parsed_count} entries found
@@ -254,7 +254,7 @@ export function BibliographyImportDialog({
               </div>
             </div>
 
-            <ScrollArea className="flex-1 min-h-0">
+            <ScrollArea className="flex-1 min-h-0 overflow-auto">
               <div className="space-y-2 py-2 pr-4">
                 {/* Select all header */}
                 <div className="flex items-center gap-2 py-2 border-b sticky top-0 bg-background z-10">
@@ -314,7 +314,27 @@ export function BibliographyImportDialog({
                 <strong>Parse errors:</strong> {preview.errors.join(", ")}
               </div>
             )}
-          </>
+
+            {/* Footer - always visible at bottom */}
+            <div className="shrink-0 flex justify-end gap-2 border-t pt-4 mt-2">
+              <Button variant="outline" onClick={() => setPreview(null)}>
+                Back
+              </Button>
+              <Button
+                onClick={handleImport}
+                disabled={isImporting || selectedEntries.size === 0}
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>Import {selectedEntries.size} Entries</>
+                )}
+              </Button>
+            </div>
+          </div>
         )}
 
         {error && (
@@ -322,28 +342,6 @@ export function BibliographyImportDialog({
             <AlertTriangle className="h-4 w-4" />
             {error}
           </div>
-        )}
-
-        {/* Footer - always visible at bottom */}
-        {!importResult && preview && (
-          <DialogFooter className="shrink-0 border-t pt-4 mt-2">
-            <Button variant="outline" onClick={() => setPreview(null)}>
-              Back
-            </Button>
-            <Button
-              onClick={handleImport}
-              disabled={isImporting || selectedEntries.size === 0}
-            >
-              {isImporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                <>Import {selectedEntries.size} Entries</>
-              )}
-            </Button>
-          </DialogFooter>
         )}
       </DialogContent>
     </Dialog>
