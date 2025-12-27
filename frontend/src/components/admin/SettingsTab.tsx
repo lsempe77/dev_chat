@@ -46,6 +46,7 @@ export function SettingsTab() {
   const [isResettingQdrant, setIsResettingQdrant] = useState(false);
   const [isResettingR2, setIsResettingR2] = useState(false);
   const [isResettingDB, setIsResettingDB] = useState(false);
+  const [isResettingAll, setIsResettingAll] = useState(false);
   const [dangerConfirm, setDangerConfirm] = useState<string | null>(null);
   const [storageStats, setStorageStats] = useState<StorageStats>({
     bucket: "devchat-pdfs",
@@ -231,9 +232,7 @@ export function SettingsTab() {
       return;
     }
     setDangerConfirm(null);
-    setIsResettingDB(true);
-    setIsResettingQdrant(true);
-    setIsResettingR2(true);
+    setIsResettingAll(true);
     try {
       // Reset in order: DB -> Qdrant -> R2
       await fetch(`${API_BASE_URL}/admin/database/reset`, { method: "POST" });
@@ -244,9 +243,7 @@ export function SettingsTab() {
     } catch (err) {
       alert(`Reset failed: ${err}`);
     } finally {
-      setIsResettingDB(false);
-      setIsResettingQdrant(false);
-      setIsResettingR2(false);
+      setIsResettingAll(false);
     }
   };
 
@@ -540,10 +537,10 @@ export function SettingsTab() {
                 variant={dangerConfirm === "all" ? "destructive" : "outline"}
                 size="sm"
                 onClick={resetAll}
-                disabled={isResettingDB || isResettingQdrant || isResettingR2}
+                disabled={isResettingAll || isResettingDB || isResettingQdrant || isResettingR2}
                 className={`w-full mt-3 ${dangerConfirm === "all" ? "" : "border-red-500 text-red-700 hover:bg-red-200"}`}
               >
-                {(isResettingDB || isResettingQdrant || isResettingR2) ? (
+                {isResettingAll ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
