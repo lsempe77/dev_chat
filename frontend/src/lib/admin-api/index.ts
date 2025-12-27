@@ -5,9 +5,29 @@
  * processing jobs, and system status.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import type {
+  AdminStatusResponse,
+  DocumentMetadataDetail,
+  DocumentsResponse,
+  MetadataReviewResponse,
+  MetadataUpdateRequest,
+  MetadataUpdateResponse,
+  PDFUrlResponse,
+  ProcessingJobsResponse,
+  R2ListResponse,
+  TriggerProcessingRequest,
+  TriggerProcessingResponse,
+  UploadResponse,
+} from "./types";
 
-// Timeout for admin API calls (shorter than query timeout)
+// Re-export all types
+export * from "./types";
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ADMIN_TIMEOUT_MS = 60_000; // 60 seconds
 
 /**
@@ -38,105 +58,7 @@ async function fetchWithTimeout(
 }
 
 // =============================================================================
-// Types
-// =============================================================================
-
-export interface UploadResponse {
-  success: boolean;
-  filename: string;
-  r2_key: string;
-  size_bytes: number;
-  queued_for_processing: boolean;
-}
-
-export interface ProcessingJob {
-  id: string;
-  filename: string;
-  status: "queued" | "processing" | "completed" | "failed";
-  progress: number;
-  started_at?: string;
-  completed_at?: string;
-  error?: string;
-  pages?: number;
-  chunks?: number;
-}
-
-export interface ProcessingJobsResponse {
-  jobs: ProcessingJob[];
-  queued_count: number;
-  processing_count: number;
-  completed_count: number;
-  failed_count: number;
-}
-
-export interface DocumentMetadata {
-  id: string;
-  title: string;
-  filename: string;
-  authors: string[];
-  year?: number;
-  status: "indexed" | "pending" | "error";
-  page_count: number;
-  chunk_count: number;
-  uploaded_at: string;
-  processed_at?: string;
-}
-
-export interface DocumentsResponse {
-  documents: DocumentMetadata[];
-  total_count: number;
-  total_chunks: number;
-  total_pages: number;
-}
-
-export interface R2File {
-  key: string;
-  size_bytes: number;
-  last_modified: string;
-}
-
-export interface R2ListResponse {
-  prefix: string;
-  file_count: number;
-  files: R2File[];
-}
-
-export interface ServiceConnection {
-  name: string;
-  status: "connected" | "disconnected" | "error";
-  details?: string;
-  latency_ms?: number;
-}
-
-export interface StorageStatus {
-  bucket: string;
-  input_path: string;
-  output_path: string;
-  storage_used_bytes: number;
-  file_count: number;
-}
-
-export interface AdminStatusResponse {
-  storage: StorageStatus;
-  connections: ServiceConnection[];
-  pending_jobs: number;
-  active_workers: number;
-}
-
-export interface TriggerProcessingRequest {
-  force_reprocess?: boolean;
-  specific_files?: string[];
-  max_documents?: number;
-}
-
-export interface TriggerProcessingResponse {
-  queued: number;
-  skipped: number;
-  message: string;
-}
-
-// =============================================================================
-// API Functions
+// Document Upload & Processing
 // =============================================================================
 
 /**
@@ -193,6 +115,10 @@ export async function triggerProcessing(
 
   return response.json();
 }
+
+// =============================================================================
+// Document Management
+// =============================================================================
 
 /**
  * Get list of indexed documents
@@ -254,6 +180,10 @@ export async function reprocessDocument(documentId: string): Promise<{
   return response.json();
 }
 
+// =============================================================================
+// Storage & Status
+// =============================================================================
+
 /**
  * List files in R2 bucket
  */
@@ -271,7 +201,7 @@ export async function listR2Files(prefix: string = "input-pdfs/"): Promise<R2Lis
  * Get admin status (connections, storage, workers)
  */
 export async function getAdminStatus(): Promise<AdminStatusResponse> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/status`, {}, 15000); // 15s timeout
+  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/status`, {}, 15000);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch admin status: ${response.statusText}`);
@@ -289,7 +219,7 @@ export async function getCollectionInfo(): Promise<{
   vectors_count: number;
   status: string;
 }> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/collection`, {}, 15000); // 15s timeout
+  const response = await fetchWithTimeout(`${API_BASE_URL}/admin/collection`, {}, 15000);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch collection info: ${response.statusText}`);
@@ -307,7 +237,7 @@ export async function checkHealth(): Promise<{
   timestamp: string;
   components: Record<string, boolean>;
 }> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/health`, {}, 8000); // 8s timeout for health (backend has 2s Qdrant timeout)
+  const response = await fetchWithTimeout(`${API_BASE_URL}/health`, {}, 8000);
 
   if (!response.ok) {
     throw new Error(`Health check failed: ${response.statusText}`);
@@ -317,163 +247,8 @@ export async function checkHealth(): Promise<{
 }
 
 // =============================================================================
-// Metadata Review Types & Functions
+// Metadata Review
 // =============================================================================
-
-/**
- * Zotero-compatible document metadata structure
- */
-export interface DocumentMetadataDetail {
-  id: string;
-  title: string;
-  filename: string;
-  authors: string[];
-  year?: number;
-  abstract?: string;
-  
-  // Zotero item type
-  item_type?: string;  // journalArticle, book, bookSection, report, thesis, conferencePaper, etc.
-  
-  // Identifiers
-  doi?: string;
-  isbn?: string;
-  issn?: string;
-  url?: string;
-  
-  // Publication info (journal articles, magazines)
-  publication?: string;  // Journal/Magazine name
-  journal?: string;  // Alias for backward compatibility
-  volume?: string;
-  issue?: string;
-  pages?: string;
-  edition?: string;
-  
-  // Publisher info
-  publisher?: string;
-  place?: string;  // Publication place
-  
-  // Series info
-  series?: string;
-  series_number?: string;
-  
-  // Book-specific
-  book_title?: string;  // For book sections
-  num_pages?: number;  // Total pages
-  
-  // Report/Thesis specific
-  institution?: string;  // Report institution or thesis university
-  report_number?: string;
-  report_type?: string;  // "Technical Report", "Working Paper"
-  thesis_type?: string;  // "PhD Dissertation", "Master's Thesis"
-  
-  // Conference-specific
-  conference_name?: string;
-  proceedings_title?: string;
-  
-  // Access info
-  accessed_date?: string;
-  
-  // Citation metrics
-  cited_by_count?: number;
-  is_open_access: boolean;
-  
-  // 3ie Classification
-  countries: string[];
-  sectors: string[];
-  study_type?: string;  // RCT, Quasi-experimental, etc.
-  intervention_type?: string;
-  sdgs: string[];
-  keywords: string[];
-  
-  // Processing metadata
-  metadata_source: string;
-  metadata_confidence: number;
-  needs_review: boolean;
-  chunk_count: number;
-  page_count?: number;
-  
-  // Extra fields (JSON)
-  extra?: Record<string, unknown>;
-}
-
-export interface MetadataReviewResponse {
-  documents: DocumentMetadataDetail[];
-  total_count: number;
-  needs_review_count: number;
-  low_confidence_count: number;
-}
-
-/**
- * Zotero-compatible metadata update request
- */
-export interface MetadataUpdateRequest {
-  // Core
-  title?: string;
-  authors?: string[];
-  year?: number;
-  abstract?: string;
-  
-  // Item type
-  item_type?: string;
-  
-  // Identifiers
-  doi?: string;
-  isbn?: string;
-  issn?: string;
-  url?: string;
-  
-  // Publication
-  publication?: string;
-  journal?: string;
-  volume?: string;
-  issue?: string;
-  pages?: string;
-  edition?: string;
-  
-  // Publisher
-  publisher?: string;
-  place?: string;
-  
-  // Series
-  series?: string;
-  series_number?: string;
-  
-  // Book
-  book_title?: string;
-  num_pages?: number;
-  
-  // Report/Thesis
-  institution?: string;
-  report_number?: string;
-  report_type?: string;
-  thesis_type?: string;
-  
-  // Conference
-  conference_name?: string;
-  proceedings_title?: string;
-  
-  // Access
-  accessed_date?: string;
-  
-  // Classification
-  countries?: string[];
-  sectors?: string[];
-  study_type?: string;
-  intervention_type?: string;
-  
-  // Review status
-  needs_review?: boolean;
-  
-  // Extra fields
-  extra?: Record<string, unknown>;
-}
-
-export interface MetadataUpdateResponse {
-  success: boolean;
-  document_id: string;
-  updated_chunks: number;
-  message: string;
-}
 
 /**
  * Get documents needing metadata review
@@ -544,13 +319,6 @@ export async function updateDocumentMetadata(
 // =============================================================================
 // PDF Viewer
 // =============================================================================
-
-export interface PDFUrlResponse {
-  document_id: string;
-  url: string;
-  expires_in: number;
-  r2_key: string;
-}
 
 /**
  * Get a presigned URL to view a PDF document

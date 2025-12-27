@@ -490,8 +490,12 @@ devchat_v2_sota/
 ├── api/
 │   ├── __init__.py
 │   ├── server.py                # FastAPI application
-│   ├── schemas.py               # Pydantic models
 │   ├── qdrant_status.py         # Qdrant health monitoring
+│   ├── schemas/                 # Pydantic models (package)
+│   │   ├── __init__.py          # Re-exports all schemas
+│   │   ├── common.py            # Health, errors, timing, connections
+│   │   ├── chat.py              # Query/chat models (frontend & legacy)
+│   │   └── admin.py             # Admin panel models (docs, metadata, jobs)
 │   └── routes/                  # Modular API routes
 │       ├── __init__.py          # Auto-discovery & aggregation
 │       ├── dependencies.py      # Shared singletons (agent, indexer, caches)
@@ -535,7 +539,10 @@ devchat_v2_sota/
 │   │   │       ├── CompareModal.tsx     # Study comparison
 │   │   │       └── SearchInput.tsx      # Query input
 │   │   ├── lib/
-│   │   │   ├── api.ts               # FastAPI client
+│   │   │   ├── api.ts               # FastAPI client (main workbench)
+│   │   │   ├── admin-api/           # Admin API client (package)
+│   │   │   │   ├── index.ts             # API functions + re-exports
+│   │   │   │   └── types.ts             # TypeScript interfaces
 │   │   │   └── utils.ts             # Utilities
 │   │   └── types/
 │   │       └── index.ts             # TypeScript interfaces
