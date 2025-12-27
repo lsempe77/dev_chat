@@ -3,8 +3,8 @@ DevChat v2.0 SOTA - Model Router
 
 Adaptive routing to select the appropriate LLM based on query complexity.
 Uses OpenRouter for unified access to multiple LLM providers.
-- Simple queries → Fast model (Claude 3.5 Haiku)
-- Complex synthesis → Reasoning model (Claude Sonnet 4)
+- Simple queries -> Fast model (Claude 3.5 Haiku)
+- Complex synthesis -> Reasoning model (Claude Sonnet 4)
 
 OpenRouter model format: provider/model-name
 Examples:
@@ -78,7 +78,7 @@ class ModelRouter:
         Returns:
             RoutingDecision with model selection
         """
-        # Simple queries → fast model
+        # Simple queries -> fast model
         if query_type == QueryType.SIMPLE:
             return RoutingDecision(
                 tier=ModelTier.FAST,
@@ -87,7 +87,16 @@ class ModelRouter:
                 estimated_cost_factor=1.0,
             )
         
-        # Lookup queries → fast model (unless many results)
+        # Large context -> reasoning model
+        if context_length > 6000:
+            return RoutingDecision(
+                tier=ModelTier.REASONING,
+                model_name=self.reasoning_model,
+                reason="Large context requires stronger model",
+                estimated_cost_factor=10.0,
+            )
+        
+        # Lookup queries -> fast model (unless many results)
         if query_type == QueryType.LOOKUP and num_studies <= 5:
             return RoutingDecision(
                 tier=ModelTier.FAST,
@@ -96,7 +105,7 @@ class ModelRouter:
                 estimated_cost_factor=1.0,
             )
         
-        # Comparison queries → always reasoning model
+        # Comparison queries -> always reasoning model
         if query_type == QueryType.COMPARISON:
             return RoutingDecision(
                 tier=ModelTier.REASONING,
@@ -105,21 +114,12 @@ class ModelRouter:
                 estimated_cost_factor=10.0,
             )
         
-        # Synthesis with many studies → reasoning model
+        # Synthesis with many studies -> reasoning model
         if query_type == QueryType.SYNTHESIS and num_studies > 3:
             return RoutingDecision(
                 tier=ModelTier.REASONING,
                 model_name=self.reasoning_model,
                 reason=f"Synthesis across {num_studies} studies",
-                estimated_cost_factor=10.0,
-            )
-        
-        # Large context → reasoning model
-        if context_length > 6000:
-            return RoutingDecision(
-                tier=ModelTier.REASONING,
-                model_name=self.reasoning_model,
-                reason="Large context requires stronger model",
                 estimated_cost_factor=10.0,
             )
         

@@ -72,16 +72,14 @@ class ExtractedFilters:
             )
             conditions.append(FieldCondition(key="year", range=year_range))
         
-        # NOTE: Disabled sector/country/study_type filters because Modal-indexed
-        # documents don't have these fields in their payload. Uncomment when
-        # all documents have consistent metadata.
-        #
-        # if self.sectors:
-        #     conditions.append(FieldCondition(
-        #         key="sector",
-        #         match=MatchAny(any=self.sectors),
-        #     ))
-        #
+        # Sector filter (enabled now that metadata is populated)
+        if self.sectors:
+            conditions.append(FieldCondition(
+                key="sector",
+                match=MatchAny(any=self.sectors),
+            ))
+        
+        # Enable these when the corpus is fully populated with consistent metadata
         # if self.countries:
         #     conditions.append(FieldCondition(
         #         key="country",

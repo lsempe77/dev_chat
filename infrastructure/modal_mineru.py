@@ -145,12 +145,14 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
             if "index required" in str(filter_error).lower():
                 print(f"  Note: No index on pdf_name, using scroll fallback")
                 # Scroll through all points to check (slower but works)
-                results, _ = qdrant.scroll(
+                scroll_result = qdrant.scroll(
                     collection_name="devchat_v2",
                     scroll_filter=None,
                     limit=100,
                     with_payload=["pdf_name"],
                 )
+                # Handle both tuple formats: (records, next_offset) or (records, next_offset, ...)
+                results = scroll_result[0] if isinstance(scroll_result, tuple) else scroll_result
                 count = sum(1 for r in results if r.payload.get("pdf_name") == pdf_name)
                 return count > 0, count, None
             raise
@@ -530,8 +532,10 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
     try:
         # Check if already indexed in Qdrant (unless forcing)
         if not force_reindex:
-            is_indexed, existing_chunks = check_qdrant_indexed(doc_id)
-            if is_indexed and not skip_extraction:
+            is_indexed, existing_chunks, qdrant_err = check_qdrant_indexed(doc_id)
+            if qdrant_err:
+                print(f"  Warning: Qdrant check failed: {qdrant_err}, proceeding with processing")
+            elif is_indexed and not skip_extraction:
                 print(f"  ✓ Already indexed ({existing_chunks} chunks), skipping")
                 return {
                     "success": True,
