@@ -625,3 +625,150 @@ export async function getPDFUrl(documentId: string): Promise<PDFUrlResponse> {
 
   return response.json();
 }
+
+// =============================================================================
+// Bibliography Import/Export
+// =============================================================================
+
+export type ExportFormat = "bibtex" | "ris";
+
+/**
+ * Export documents as BibTeX or RIS format
+ * @param format - "bibtex" or "ris"
+ * @param docIds - Optional list of document IDs to export (all if omitted)
+ */
+export async function exportBibliography(
+  format: ExportFormat = "bibtex",
+  docIds?: string[]
+): Promise<Blob> {
+  const params = new URLSearchParams({ format });
+  if (docIds && docIds.length > 0) {
+    params.set("doc_ids", docIds.join(","));
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/bibliography/export?${params}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Export failed: ${response.statusText}`);
+  }
+
+  return response.blob();
+}
+
+/**
+ * Download exported bibliography as file
+ */
+export async function downloadBibliography(
+  format: ExportFormat = "bibtex",
+  docIds?: string[]
+): Promise<void> {
+  const blob = await exportBibliography(format, docIds);
+  
+  // Get filename from format
+  const extension = format === "bibtex" ? "bib" : "ris";
+  const filename = `devchat_export_${new Date().toISOString().split("T")[0]}.${extension}`;
+  
+  // Create download link
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Parsed bibliography entry from import preview
+ */
+export interface ImportedEntry {
+  title: string;
+  authors: string[];
+  year?: number;
+  doi?: string;
+  abstract?: string;
+  item_type?: string;
+  journal?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  publisher?: string;
+  url?: string;
+  keywords: string[];
+}
+
+/**
+ * Response from import preview
+ */
+export interface ImportPreviewResponse {
+  parsed_count: number;
+  entries: ImportedEntry[];
+  errors: string[];
+  duplicates: string[];  // Titles that already exist in the database
+}
+
+/**
+ * Preview a bibliography file before importing
+ */
+export async function previewBibliographyImport(
+  file: File
+): Promise<ImportPreviewResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/bibliography/import/preview`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || `Preview failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Response from confirmed import
+ */
+export interface ImportConfirmResponse {
+  imported_count: number;
+  skipped_count: number;
+  errors: string[];
+}
+
+/**
+ * Confirm and execute import of bibliography entries
+ */
+export async function confirmBibliographyImport(
+  entries: ImportedEntry[],
+  skipDuplicates: boolean = true
+): Promise<ImportConfirmResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/bibliography/import/confirm`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        entries,
+        skip_duplicates: skipDuplicates,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || `Import failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}

@@ -302,3 +302,57 @@ class DocumentRepository:
         }
         
         return await DocumentRepository.upsert(db, doc_data)
+
+    # =========================================================================
+    # Search Operations
+    # =========================================================================
+
+    @staticmethod
+    async def find_by_title_fuzzy(
+        db: AsyncSession,
+        title: str,
+        threshold: float = 0.8,
+    ) -> Optional[Document]:
+        """
+        Find a document with a similar title (fuzzy match).
+        
+        Uses case-insensitive LIKE for now.
+        For better fuzzy matching, could use pg_trgm extension.
+        """
+        if not title:
+            return None
+        
+        # Normalize title for comparison
+        normalized = title.lower().strip()
+        
+        # First try exact match
+        result = await db.execute(
+            select(Document).where(
+                func.lower(Document.title) == normalized
+            )
+        )
+        doc = result.scalar_one_or_none()
+        if doc:
+            return doc
+        
+        # Try LIKE with first 50 chars (handles slight variations)
+        prefix = normalized[:50]
+        result = await db.execute(
+            select(Document).where(
+                func.lower(Document.title).like(f"{prefix}%")
+            ).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def find_by_doi(db: AsyncSession, doi: str) -> Optional[Document]:
+        """Find a document by DOI."""
+        if not doi:
+            return None
+        
+        result = await db.execute(
+            select(Document).where(
+                func.lower(Document.doi) == doi.lower().strip()
+            )
+        )
+        return result.scalar_one_or_none()

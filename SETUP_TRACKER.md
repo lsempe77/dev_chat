@@ -84,6 +84,10 @@ Branch: main
 | **Bibliography Import** | RIS/BibTeX/CSV parser with fuzzy matching | ⬜ TODO |
 | **Export Citations** | BibTeX/RIS format export | ⬜ TODO |
 | **Usage Analytics** | Track queries, latency, user engagement | ⬜ TODO |
+| **Zotero Integration** | Allow user to add Zotero API for integrating library -> then triggers **Bibliography Import**| ⬜ TODO |
+| **Multi-tenant architecture** | Frontend and backend |⬜ TODO |
+| *Teams infrastructure** | Frontend and backend |⬜ TODO |
+
 
 ### P2 - Future (Citation Quality Improvements)
 
@@ -93,9 +97,9 @@ Branch: main
 | **Structured Answer Sections** | Force sections like "Consensus", "Disagreements", "Methods caveats" - gives LLM places to cite more sources |
 | **Diversity Boosting Retrieval** | Cluster/dedup + rank by "novel contribution" not just similarity. Fewer, more distinct items → higher usage |
 | **PDF Text Highlighting** | Currently uses browser's #search= (Chrome/Edge only). Could implement custom PDF viewer with highlight overlay |
-| **Zotero Integration** | OAuth sync with Zotero libraries |
 | **Config-driven Branding** | Logo, colors, name via env vars |
 | **Collection Isolation** | Per-team Qdrant collections |
+
 
 ### 🐛 Known Test Failures (For Review)
 

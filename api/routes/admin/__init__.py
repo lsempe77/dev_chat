@@ -15,6 +15,7 @@ from .storage import router as storage_router
 from .jobs import router as jobs_router
 from .documents import router as documents_router
 from .metadata import router as metadata_router
+from .bibliography import router as bibliography_router
 
 # Combined router that includes all admin sub-routers
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -26,5 +27,6 @@ router.include_router(storage_router)
 router.include_router(jobs_router)
 router.include_router(documents_router)
 router.include_router(metadata_router)
+router.include_router(bibliography_router)
 
 __all__ = ["router"]

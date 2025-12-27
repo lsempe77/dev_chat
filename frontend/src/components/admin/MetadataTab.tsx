@@ -22,16 +22,21 @@ import {
   Eye,
   ExternalLink,
   X,
+  Download,
+  Upload,
 } from "lucide-react";
 import { 
   getMetadataForReview, 
   updateDocumentMetadata,
   getPDFUrl,
+  downloadBibliography,
   type DocumentMetadataDetail,
   type MetadataUpdateRequest,
+  type ExportFormat,
 } from "@/lib/admin-api";
 import { PDFViewer } from "@/components/pdf";
 import { MetadataEditPanel } from "./metadata/MetadataEditPanel";
+import { BibliographyImportDialog } from "./metadata/BibliographyImportDialog";
 import { ITEM_TYPES } from "./metadata";
 
 export function MetadataTab() {
@@ -52,6 +57,10 @@ export function MetadataTab() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
 
+  // Import dialog state
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
   // Open PDF viewer for a document
   const openPdfViewer = async (doc: DocumentMetadataDetail) => {
     setIsLoadingPdf(true);
@@ -71,6 +80,18 @@ export function MetadataTab() {
   const closePdfViewer = () => {
     setViewingPdfDoc(null);
     setPdfUrl(null);
+  };
+
+  // Export bibliography
+  const handleExport = async (format: ExportFormat) => {
+    setIsExporting(true);
+    try {
+      await downloadBibliography(format);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Fetch documents
@@ -263,10 +284,33 @@ export function MetadataTab() {
                   Review and correct document metadata for better search results
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={fetchDocuments}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowImportDialog(true)}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport("bibtex")}
+                  disabled={isExporting}
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Export
+                </Button>
+                <Button variant="outline" size="sm" onClick={fetchDocuments}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="flex-1 overflow-hidden">
@@ -467,6 +511,13 @@ export function MetadataTab() {
           </div>
         )}
       </div>
+
+      {/* Import Dialog */}
+      <BibliographyImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        onImportComplete={fetchDocuments}
+      />
     </div>
   );
 }
