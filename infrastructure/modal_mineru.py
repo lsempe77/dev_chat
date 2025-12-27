@@ -528,7 +528,7 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
     timeout=1800,  # 30 min max per PDF
     secrets=[r2_secret, qdrant_secret, cohere_secret, openrouter_secret],
     volumes={"/cache": model_cache},
-    retries=2,
+    retries=0,  # Disable retries to prevent duplicate processing
 )
 def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool = False) -> dict:
     """
@@ -566,6 +566,30 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
     doc_id = Path(pdf_key).stem  # e.g., "a1b2c3d4_impact_evaluation_kenya"
     json_key = f"outputs/json/{doc_id}.json"
     md_key = None  # Set when we actually upload markdown
+    lock_key = f"locks/{doc_id}.lock"
+    
+    # Check for processing lock (prevents duplicate processing)
+    try:
+        s3.head_object(Bucket=bucket, Key=lock_key)
+        print(f"  ⏸ Lock exists - already being processed by another worker, skipping")
+        return {
+            "success": True,
+            "pdf_key": pdf_key,
+            "doc_id": doc_id,
+            "skipped": True,
+            "reason": "locked_by_another_worker",
+        }
+    except Exception:
+        # No lock exists, create one
+        try:
+            s3.put_object(
+                Bucket=bucket,
+                Key=lock_key,
+                Body=f"Processing started at {start_time.isoformat()}".encode(),
+                ContentType="text/plain",
+            )
+        except Exception as e:
+            print(f"  Warning: Could not create lock: {e}")
 
     try:
         # Ensure payload indexes exist for faster lookups
@@ -731,6 +755,12 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
         if not skip_extraction and 'pdf_path' in dir():
             pdf_path.unlink(missing_ok=True)
         
+        # Delete lock on success
+        try:
+            s3.delete_object(Bucket=bucket, Key=lock_key)
+        except Exception:
+            pass
+        
         elapsed = (datetime.now() - start_time).total_seconds()
         
         return {
@@ -745,6 +775,11 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
         }
         
     except Exception as e:
+        # Delete lock on failure so it can be retried later
+        try:
+            s3.delete_object(Bucket=bucket, Key=lock_key)
+        except Exception:
+            pass
         print(f"  ERROR: {e}")
         return {
             "success": False,

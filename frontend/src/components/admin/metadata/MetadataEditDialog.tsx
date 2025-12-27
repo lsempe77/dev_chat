@@ -147,9 +147,11 @@ export function MetadataEditDialog({
   return (
     <Dialog open={!!document} onOpenChange={(open) => !open && onClose()}>
       <DialogContent 
-        className="sm:max-w-4xl max-h-[90vh] overflow-y-auto"
+        className="sm:max-w-4xl max-h-[90vh] overflow-y-auto !translate-x-0 !translate-y-0"
         style={{ 
-          transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
+          left: `calc(50% + ${position.x}px)`,
+          top: `calc(50% + ${position.y}px)`,
+          transform: 'translate(-50%, -50%)',
         }}
       >
         {/* Drag handle */}
