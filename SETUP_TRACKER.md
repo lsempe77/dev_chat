@@ -81,8 +81,8 @@ Branch: main
 | **Page-Aware Chunking** | Store page numbers in Qdrant for PDF navigation | ✅ Done |
 | **Unified CLI** | Single `devchat` command for all operations | ✅ Done |
 | **Modular Routes** | Split routes.py into domain files | ✅ Done |
-| **Bibliography Import** | RIS/BibTeX/CSV parser with fuzzy matching | ⬜ TODO |
-| **Export Citations** | BibTeX/RIS format export | ⬜ TODO |
+| **Bibliography Import** | RIS/BibTeX/CSV parser with fuzzy matching | ✅ Done |
+| **Export Citations** | BibTeX/RIS format export | ✅ Done |
 | **Usage Analytics** | Track queries, latency, user engagement | ⬜ TODO |
 | **Zotero Integration** | Allow user to add Zotero API for integrating library -> then triggers **Bibliography Import**| ⬜ TODO |
 | **Multi-tenant architecture** | Frontend and backend |⬜ TODO |
