@@ -63,12 +63,16 @@ class ImportConfirmRequest(BaseModel):
     """Confirm import of specific entries."""
     entries: List[ImportedEntry]
     skip_duplicates: bool = True
+    merge_duplicates: bool = False  # Update existing records with richer metadata
+    enrich_from_doi: bool = True    # Fetch metadata from CrossRef/OpenAlex if DOI present
 
 
 class ImportConfirmResponse(BaseModel):
     """Result of confirmed import."""
     imported_count: int
     skipped_count: int
+    updated_count: int = 0  # Records updated via merge
+    enriched_count: int = 0  # Records enriched via DOI lookup
     errors: List[str]
 
 
@@ -397,13 +401,86 @@ async def preview_import(
     )
 
 
+async def _enrich_from_doi(entry: ImportedEntry) -> ImportedEntry:
+    """Enrich entry metadata using DOI lookup from CrossRef."""
+    if not entry.doi:
+        return entry
+    
+    try:
+        from src.ingestion.metadata.crossref_client import CrossRefClient
+        
+        client = CrossRefClient()
+        work = await client.get_by_doi(entry.doi)
+        
+        if work:
+            # Fill in missing fields from CrossRef
+            if not entry.abstract and work.abstract:
+                entry.abstract = work.abstract
+            if not entry.year and work.year:
+                entry.year = work.year
+            if not entry.journal and work.journal:
+                entry.journal = work.journal
+            if not entry.publisher and work.publisher:
+                entry.publisher = work.publisher
+            if not entry.authors and work.authors:
+                entry.authors = work.authors
+            if not entry.url and work.url:
+                entry.url = work.url
+            # Add subjects as keywords if we don't have any
+            if not entry.keywords and work.subject:
+                entry.keywords = work.subject[:10]  # Limit to 10
+            
+            return entry
+    except Exception as e:
+        logger.warning(f"DOI enrichment failed for {entry.doi}: {e}")
+    
+    return entry
+
+
+def _merge_metadata(existing_doc, entry: ImportedEntry) -> dict:
+    """
+    Merge metadata from import entry into existing document.
+    Only updates fields that are empty/missing in existing doc.
+    Returns dict of fields to update.
+    """
+    updates = {}
+    
+    # Only update if existing is empty and import has value
+    if not existing_doc.doi and entry.doi:
+        updates["doi"] = entry.doi
+    if not existing_doc.abstract and entry.abstract:
+        updates["abstract"] = entry.abstract
+    if not existing_doc.year and entry.year:
+        updates["year"] = entry.year
+    if not existing_doc.journal and entry.journal:
+        updates["journal"] = entry.journal
+    if not existing_doc.publisher and entry.publisher:
+        updates["publisher"] = entry.publisher
+    if not existing_doc.volume and entry.volume:
+        updates["volume"] = entry.volume
+    if not existing_doc.issue and entry.issue:
+        updates["issue"] = entry.issue
+    if not existing_doc.pages and entry.pages:
+        updates["pages"] = entry.pages
+    if not existing_doc.url and entry.url:
+        updates["url"] = entry.url
+    if (not existing_doc.authors or len(existing_doc.authors) == 0) and entry.authors:
+        updates["authors"] = entry.authors
+    if (not existing_doc.keywords or len(existing_doc.keywords) == 0) and entry.keywords:
+        updates["keywords"] = entry.keywords
+    
+    return updates
+
+
 @router.post("/bibliography/import/confirm", response_model=ImportConfirmResponse)
 async def confirm_import(request: ImportConfirmRequest):
     """
     Confirm and execute import of bibliography entries.
     
-    Creates document records in PostgreSQL (without PDFs).
-    These can later be matched to uploaded PDFs.
+    Options:
+    - skip_duplicates: Skip entries that match existing titles/DOIs
+    - merge_duplicates: Update existing records with richer metadata from import
+    - enrich_from_doi: Fetch metadata from CrossRef for entries with DOI
     """
     if not is_postgres_available():
         raise HTTPException(status_code=503, detail="Database not available")
@@ -414,37 +491,54 @@ async def confirm_import(request: ImportConfirmRequest):
     
     imported = 0
     skipped = 0
+    updated = 0
+    enriched = 0
     errors = []
     
     async with db:
         from src.database.repository import DocumentRepository
         import uuid
         
-        # Batch duplicate check: single query for all existing titles/DOIs
-        existing_titles = set()
-        existing_dois = set()
-        if request.skip_duplicates:
-            existing_docs = await DocumentRepository.list_all(db, limit=50000)
-            existing_titles = {doc.title.lower().strip() for doc in existing_docs if doc.title}
-            existing_dois = {doc.doi.lower().strip() for doc in existing_docs if doc.doi}
+        # Get all existing docs for duplicate check and merge
+        existing_docs = await DocumentRepository.list_all(db, limit=50000)
+        existing_by_title = {doc.title.lower().strip(): doc for doc in existing_docs if doc.title}
+        existing_by_doi = {doc.doi.lower().strip(): doc for doc in existing_docs if doc.doi}
         
-        # Prepare all documents to insert
-        docs_to_insert = []
         for entry in request.entries:
             try:
-                # Check for duplicates using in-memory sets (O(1) lookup)
-                if request.skip_duplicates:
-                    title_normalized = entry.title.lower().strip()
-                    doi_normalized = (entry.doi or "").lower().strip()
-                    
-                    if title_normalized in existing_titles:
-                        skipped += 1
-                        continue
-                    if doi_normalized and doi_normalized in existing_dois:
-                        skipped += 1
-                        continue
+                title_normalized = entry.title.lower().strip()
+                doi_normalized = (entry.doi or "").lower().strip()
                 
-                # Create document record as dict
+                # Find existing duplicate
+                existing_doc = existing_by_title.get(title_normalized)
+                if not existing_doc and doi_normalized:
+                    existing_doc = existing_by_doi.get(doi_normalized)
+                
+                if existing_doc:
+                    # Handle duplicate
+                    if request.merge_duplicates:
+                        # Enrich entry from DOI first if enabled
+                        if request.enrich_from_doi and entry.doi:
+                            entry = await _enrich_from_doi(entry)
+                            enriched += 1
+                        
+                        # Merge metadata into existing doc
+                        updates = _merge_metadata(existing_doc, entry)
+                        if updates:
+                            await DocumentRepository.update(db, existing_doc.id, updates)
+                            updated += 1
+                        else:
+                            skipped += 1  # No new data to merge
+                    else:
+                        skipped += 1
+                    continue
+                
+                # New entry - enrich from DOI if enabled
+                if request.enrich_from_doi and entry.doi:
+                    entry = await _enrich_from_doi(entry)
+                    enriched += 1
+                
+                # Create new document record
                 doc_data = {
                     "id": str(uuid.uuid4()),
                     "title": entry.title,
@@ -462,28 +556,24 @@ async def confirm_import(request: ImportConfirmRequest):
                     "url": entry.url,
                     "keywords": entry.keywords,
                     "metadata_source": "bibliography_import",
-                    "metadata_confidence": 0.9,
+                    "metadata_confidence": 0.95 if entry.doi else 0.9,
                     "needs_review": False,
                     "chunk_count": 0,
                     "page_count": 0,
                     "status": "pending",
                 }
-                docs_to_insert.append(doc_data)
                 
-            except Exception as e:
-                errors.append(f"Error preparing '{entry.title[:50]}...': {str(e)}")
-        
-        # Batch insert all documents
-        for doc_data in docs_to_insert:
-            try:
                 await DocumentRepository.create(db, doc_data)
                 imported += 1
+                
             except Exception as e:
-                errors.append(f"Error inserting '{doc_data['title'][:50]}...': {str(e)}")
+                errors.append(f"Error processing '{entry.title[:50]}...': {str(e)}")
     
     return ImportConfirmResponse(
         imported_count=imported,
         skipped_count=skipped,
+        updated_count=updated,
+        enriched_count=enriched,
         errors=errors,
     )
 

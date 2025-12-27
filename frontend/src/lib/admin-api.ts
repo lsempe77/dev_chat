@@ -741,7 +741,18 @@ export async function previewBibliographyImport(
 export interface ImportConfirmResponse {
   imported_count: number;
   skipped_count: number;
+  updated_count: number;
+  enriched_count: number;
   errors: string[];
+}
+
+/**
+ * Options for bibliography import
+ */
+export interface ImportOptions {
+  skipDuplicates?: boolean;
+  mergeDuplicates?: boolean;
+  enrichFromDoi?: boolean;
 }
 
 /**
@@ -749,8 +760,14 @@ export interface ImportConfirmResponse {
  */
 export async function confirmBibliographyImport(
   entries: ImportedEntry[],
-  skipDuplicates: boolean = true
+  options: ImportOptions = {}
 ): Promise<ImportConfirmResponse> {
+  const {
+    skipDuplicates = true,
+    mergeDuplicates = false,
+    enrichFromDoi = true,
+  } = options;
+
   const response = await fetch(
     `${API_BASE_URL}/admin/bibliography/import/confirm`,
     {
@@ -761,6 +778,8 @@ export async function confirmBibliographyImport(
       body: JSON.stringify({
         entries,
         skip_duplicates: skipDuplicates,
+        merge_duplicates: mergeDuplicates,
+        enrich_from_doi: enrichFromDoi,
       }),
     }
   );

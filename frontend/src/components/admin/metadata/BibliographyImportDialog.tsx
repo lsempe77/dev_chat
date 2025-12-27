@@ -48,9 +48,13 @@ export function BibliographyImportDialog({
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
   const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [mergeDuplicates, setMergeDuplicates] = useState(false);
+  const [enrichFromDoi, setEnrichFromDoi] = useState(true);
   const [importResult, setImportResult] = useState<{
     imported: number;
     skipped: number;
+    updated: number;
+    enriched: number;
     errors: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,14 +135,20 @@ export function BibliographyImportDialog({
     setError(null);
 
     try {
-      const result = await confirmBibliographyImport(entriesToImport, skipDuplicates);
+      const result = await confirmBibliographyImport(entriesToImport, {
+        skipDuplicates,
+        mergeDuplicates,
+        enrichFromDoi,
+      });
       setImportResult({
         imported: result.imported_count,
         skipped: result.skipped_count,
+        updated: result.updated_count,
+        enriched: result.enriched_count,
         errors: result.errors,
       });
       
-      if (result.imported_count > 0) {
+      if (result.imported_count > 0 || result.updated_count > 0) {
         onImportComplete();
       }
     } catch (err) {
@@ -166,10 +176,22 @@ export function BibliographyImportDialog({
           <div className="flex-1 flex flex-col items-center justify-center py-8">
             <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
             <h3 className="text-xl font-semibold mb-2">Import Complete</h3>
-            <p className="text-muted-foreground mb-4">
-              {importResult.imported} entries imported
-              {importResult.skipped > 0 && `, ${importResult.skipped} skipped`}
-            </p>
+            <div className="text-muted-foreground mb-4 text-center space-y-1">
+              <p>
+                <span className="font-semibold text-green-600">{importResult.imported}</span> entries imported
+                {importResult.updated > 0 && (
+                  <>, <span className="font-semibold text-blue-600">{importResult.updated}</span> updated</>
+                )}
+                {importResult.skipped > 0 && (
+                  <>, <span className="text-muted-foreground">{importResult.skipped}</span> skipped</>
+                )}
+              </p>
+              {importResult.enriched > 0 && (
+                <p className="text-sm text-blue-600">
+                  ✓ {importResult.enriched} entries enriched with DOI metadata
+                </p>
+              )}
+            </div>
             {importResult.errors.length > 0 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md">
                 <h4 className="font-medium text-yellow-800 mb-2">Warnings:</h4>
@@ -227,6 +249,7 @@ export function BibliographyImportDialog({
         {/* Preview state */}
         {!importResult && preview && (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            {/* Header with stats */}
             <div className="shrink-0 flex items-center justify-between py-2 border-b">
               <div className="flex items-center gap-4">
                 <Badge variant="outline">
@@ -242,14 +265,42 @@ export function BibliographyImportDialog({
                   {selectedEntries.size} selected
                 </span>
               </div>
+            </div>
+
+            {/* Import options */}
+            <div className="shrink-0 flex flex-wrap items-center gap-4 py-3 px-1 border-b bg-muted/30">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="skip-duplicates"
-                  checked={skipDuplicates}
+                  checked={skipDuplicates && !mergeDuplicates}
+                  disabled={mergeDuplicates}
                   onCheckedChange={(checked: boolean | "indeterminate") => setSkipDuplicates(checked === true)}
                 />
                 <Label htmlFor="skip-duplicates" className="text-sm">
                   Skip duplicates
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="merge-duplicates"
+                  checked={mergeDuplicates}
+                  onCheckedChange={(checked: boolean | "indeterminate") => {
+                    setMergeDuplicates(checked === true);
+                    if (checked) setSkipDuplicates(false);
+                  }}
+                />
+                <Label htmlFor="merge-duplicates" className="text-sm">
+                  Update existing with richer metadata
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="enrich-doi"
+                  checked={enrichFromDoi}
+                  onCheckedChange={(checked: boolean | "indeterminate") => setEnrichFromDoi(checked === true)}
+                />
+                <Label htmlFor="enrich-doi" className="text-sm">
+                  Enrich from DOI (CrossRef)
                 </Label>
               </div>
             </div>

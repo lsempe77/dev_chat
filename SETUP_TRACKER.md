@@ -86,7 +86,7 @@ Branch: main
 | **Usage Analytics** | Track queries, latency, user engagement | ⬜ TODO |
 | **Zotero Integration** | Allow user to add Zotero API for integrating library -> then triggers **Bibliography Import**| ⬜ TODO |
 | **Multi-tenant architecture** | Frontend and backend |⬜ TODO |
-| *Teams infrastructure** | Frontend and backend |⬜ TODO |
+| *Teams architecture** | Owner and others; Frontend and backend |⬜ TODO |
 
 
 ### P2 - Future (Citation Quality Improvements)
