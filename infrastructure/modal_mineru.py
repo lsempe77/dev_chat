@@ -1532,18 +1532,43 @@ def main(
 
 
 # ============================================================================
-# Scheduled Processing (Optional)
+# Scheduled Processing
 # ============================================================================
 
 @app.function(
     image=base_image,
-    secrets=[r2_secret],
+    secrets=[r2_secret, qdrant_secret],
     schedule=modal.Cron("0 * * * *"),  # Every hour
 )
 def scheduled_processing():
-    """Run orchestrator on schedule to pick up new PDFs."""
+    """
+    Run orchestrator on schedule to pick up new PDFs.
+    
+    Checks Qdrant for a 'processing_paused' flag before running.
+    This allows admins to pause automatic processing without redeploying.
+    """
+    from datetime import datetime
+    
     print(f"Scheduled run at {datetime.now().isoformat()}")
-    result = orchestrate.remote()
+    
+    # Check if processing is paused (stored in R2 as a simple flag file)
+    try:
+        import boto3
+        s3 = get_r2_client()
+        bucket = get_bucket_name()
+        
+        try:
+            s3.head_object(Bucket=bucket, Key="system/processing_paused")
+            print("⏸ Processing is PAUSED. Skipping scheduled run.")
+            return {"status": "paused", "queued": 0}
+        except Exception:
+            # Flag doesn't exist = not paused, proceed
+            pass
+    except Exception as e:
+        print(f"Warning: Could not check pause flag: {e}")
+    
+    # Run the orchestrator with default settings
+    result = orchestrate.remote(max_documents=20)  # Limit per scheduled run
     print(f"Queued {result['queued']} new PDFs")
     return result
 

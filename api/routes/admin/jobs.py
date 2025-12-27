@@ -6,7 +6,7 @@ Endpoints for processing job management.
 
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from api.schemas import (
     ProcessingJob,
@@ -137,8 +137,6 @@ async def trigger_processing_endpoint(request: TriggerProcessingRequest):
     Calls the Modal web endpoint to process new PDFs.
     This works from Railway (unlike subprocess which needs modal CLI).
     """
-    from fastapi import HTTPException
-    
     try:
         # Use the helper function - now returns result or raises
         result = await trigger_modal_processing(
@@ -164,3 +162,77 @@ async def trigger_processing_endpoint(request: TriggerProcessingRequest):
             status_code=503,
             detail=f"Failed to trigger Modal processing: {str(e)}. Modal may be cold starting - try again in 30 seconds."
         )
+
+
+# =============================================================================
+# Processing Control (Pause/Resume)
+# =============================================================================
+
+@router.get("/jobs/status")
+async def get_processing_status():
+    """
+    Get the current processing status (paused or active).
+    """
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        try:
+            r2_client.head_object(Bucket=bucket_name, Key="system/processing_paused")
+            return {"status": "paused", "message": "Automatic processing is paused"}
+        except Exception:
+            return {"status": "active", "message": "Automatic processing is active"}
+    except Exception as e:
+        logger.error(f"Failed to get processing status: {e}")
+        return {"status": "unknown", "error": str(e)}
+
+
+@router.post("/jobs/pause")
+async def pause_processing():
+    """
+    Pause automatic scheduled processing.
+    
+    Creates a flag file in R2 that the scheduled job checks.
+    Manual triggers still work - this only pauses the hourly scheduled runs.
+    """
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # Create the pause flag
+        r2_client.put_object(
+            Bucket=bucket_name,
+            Key="system/processing_paused",
+            Body=b"paused",
+            ContentType="text/plain",
+        )
+        
+        logger.info("Processing paused")
+        return {"success": True, "status": "paused", "message": "Automatic processing paused. Manual triggers still work."}
+    except Exception as e:
+        logger.error(f"Failed to pause processing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/jobs/resume")
+async def resume_processing():
+    """
+    Resume automatic scheduled processing.
+    
+    Removes the pause flag from R2.
+    """
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # Remove the pause flag
+        try:
+            r2_client.delete_object(Bucket=bucket_name, Key="system/processing_paused")
+        except Exception:
+            pass  # Already not paused
+        
+        logger.info("Processing resumed")
+        return {"success": True, "status": "active", "message": "Automatic processing resumed."}
+    except Exception as e:
+        logger.error(f"Failed to resume processing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
