@@ -119,15 +119,19 @@ export function MetadataEditDialog({
 
           <div className="grid grid-cols-4 items-center gap-4">
             <Label className="text-right">Authors</Label>
-            <Input
-              className="col-span-3"
-              value={editForm.authors?.join(", ") || ""}
-              onChange={(e) => setEditForm({ 
-                ...editForm, 
-                authors: e.target.value.split(",").map(a => a.trim()).filter(Boolean) 
-              })}
-              placeholder="Comma-separated names"
-            />
+            <div className="col-span-3">
+              <Input
+                value={editForm.authors?.join("; ") || ""}
+                onChange={(e) => setEditForm({ 
+                  ...editForm, 
+                  authors: e.target.value.split(";").map(a => a.trim()).filter(Boolean) 
+                })}
+                placeholder="Surname, Name; Surname, Name"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Separate authors with semicolon (;). Format: Surname, Name
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-4 items-center gap-4">
