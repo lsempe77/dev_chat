@@ -139,7 +139,7 @@ export function UploadTab() {
             Upload Documents
           </CardTitle>
           <CardDescription>
-            Drag and drop PDF files or select from your computer
+            Drag and drop PDF files or select from your computer. After uploading, go to the Processing tab to process all pending documents.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

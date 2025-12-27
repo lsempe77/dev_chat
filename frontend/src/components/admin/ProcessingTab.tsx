@@ -245,7 +245,7 @@ export function ProcessingTab() {
                 Processing Queue
               </CardTitle>
               <CardDescription>
-                Real-time status of PDF processing jobs
+                Real-time status of PDF processing jobs. "Process All Pending" will send all queued PDFs to Modal for batch processing.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -278,7 +278,8 @@ export function ProcessingTab() {
               <Button
                 size="sm"
                 onClick={startBatchProcessing}
-                disabled={isTriggering}
+                disabled={isTriggering || queuedCount === 0}
+                title={queuedCount > 0 ? `Process all ${queuedCount} pending PDFs` : "No pending PDFs to process"}
               >
                 {isTriggering ? (
                   <>
@@ -288,7 +289,7 @@ export function ProcessingTab() {
                 ) : (
                   <>
                     <Play className="h-4 w-4 mr-1" />
-                    Start Processing
+                    Process All Pending {queuedCount > 0 && `(${queuedCount})`}
                   </>
                 )}
               </Button>
