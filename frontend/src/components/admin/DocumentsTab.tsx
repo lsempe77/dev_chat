@@ -303,7 +303,6 @@ export function DocumentsTab() {
                   <th className="p-2">Document</th>
                   <th className="p-2 w-24">Year</th>
                   <th className="p-2 w-24">Status</th>
-                  <th className="p-2 w-24 text-right">Pages</th>
                   <th className="p-2 w-24 text-right">Chunks</th>
                   <th className="p-2 w-32">Uploaded</th>
                   <th className="p-2 w-20"></th>
@@ -351,7 +350,6 @@ export function DocumentsTab() {
                         <Badge variant="destructive">Error</Badge>
                       )}
                     </td>
-                    <td className="p-2 text-right text-sm">{doc.pageCount}</td>
                     <td className="p-2 text-right text-sm">{doc.chunkCount}</td>
                     <td className="p-2 text-sm text-muted-foreground">
                       {formatDate(doc.uploadedAt)}
