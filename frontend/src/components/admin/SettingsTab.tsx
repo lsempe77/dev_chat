@@ -193,10 +193,11 @@ export function SettingsTab() {
     setIsResettingR2(true);
     setDangerConfirm(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/r2/clear`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE_URL}/admin/r2/clear?confirm=true`, { method: "DELETE" });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      alert(`R2 cleared: ${data.deleted_count} files deleted`);
+      alert(`R2 cleared: ${data.deleted} files deleted`);
+      await fetchStatus();
     } catch (err) {
       alert(`Failed to clear R2: ${err}`);
     } finally {
@@ -216,6 +217,7 @@ export function SettingsTab() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       alert(`Database reset: ${data.deleted_count} documents deleted`);
+      await fetchStatus();
     } catch (err) {
       alert(`Failed to reset database: ${err}`);
     } finally {
@@ -236,7 +238,7 @@ export function SettingsTab() {
       // Reset in order: DB -> Qdrant -> R2
       await fetch(`${API_BASE_URL}/admin/database/reset`, { method: "POST" });
       await fetch(`${API_BASE_URL}/admin/collection`, { method: "DELETE" });
-      await fetch(`${API_BASE_URL}/admin/r2/clear`, { method: "DELETE" });
+      await fetch(`${API_BASE_URL}/admin/r2/clear?confirm=true`, { method: "DELETE" });
       alert("Complete system reset successful!");
       await fetchStatus();
     } catch (err) {
