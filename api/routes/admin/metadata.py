@@ -558,6 +558,7 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
                         # Update in PostgreSQL
                         doc = await DocumentRepository.update(db, doc_id, update_data)
                         if doc:
+                            await db.commit()  # Commit the changes!
                             updated_chunks = doc.chunk_count or 0
                             logger.info(f"Updated PostgreSQL metadata for {doc_id}")
                         else:
