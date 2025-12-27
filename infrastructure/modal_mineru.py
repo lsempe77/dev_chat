@@ -1229,7 +1229,11 @@ def resolve_metadata(
         "authors": authors or [],
         "year": year,
         "doi": None,
+        "item_type": None,  # Will be set from CrossRef/OpenAlex
         "journal": None,
+        "volume": None,
+        "issue": None,
+        "pages": None,
         "publisher": None,
         "abstract": None,
         "cited_by_count": None,
@@ -1329,6 +1333,31 @@ def resolve_metadata(
             metadata["publisher"] = crossref_data.get("publisher")
             metadata["cited_by_count"] = crossref_data.get("is-referenced-by-count")
             metadata["doi"] = crossref_data.get("DOI") or metadata["doi"]
+            
+            # Extract volume, issue, pages
+            metadata["volume"] = crossref_data.get("volume")
+            metadata["issue"] = crossref_data.get("issue")
+            metadata["pages"] = crossref_data.get("page")
+            
+            # Map CrossRef type to our item_type
+            # CrossRef types: journal-article, book-chapter, proceedings-article, report, etc.
+            crossref_type = crossref_data.get("type", "")
+            item_type_map = {
+                "journal-article": "journalArticle",
+                "book-chapter": "bookSection",
+                "book": "book",
+                "proceedings-article": "conferencePaper",
+                "report": "report",
+                "report-series": "report",
+                "dissertation": "thesis",
+                "posted-content": "preprint",  # preprints
+                "dataset": "dataset",
+                "monograph": "book",
+                "reference-book": "book",
+                "edited-book": "book",
+            }
+            metadata["item_type"] = item_type_map.get(crossref_type, "document")
+            
             metadata["metadata_source"] = "crossref"
             metadata["metadata_confidence"] = 0.8
             metadata["needs_review"] = False
@@ -1356,6 +1385,34 @@ def resolve_metadata(
                 
                 metadata["doi"] = openalex_data.get("doi", "").replace("https://doi.org/", "") if openalex_data.get("doi") else metadata["doi"]
                 metadata["cited_by_count"] = openalex_data.get("cited_by_count") or metadata["cited_by_count"]
+                
+                # Extract biblio info (volume, issue, pages) from OpenAlex
+                biblio = openalex_data.get("biblio", {}) or {}
+                metadata["volume"] = biblio.get("volume") or metadata.get("volume")
+                metadata["issue"] = biblio.get("issue") or metadata.get("issue")
+                first_page = biblio.get("first_page")
+                last_page = biblio.get("last_page")
+                if first_page and last_page:
+                    metadata["pages"] = f"{first_page}-{last_page}"
+                elif first_page:
+                    metadata["pages"] = first_page
+                
+                # Map OpenAlex type to our item_type
+                # OpenAlex types: article, book, book-chapter, dataset, dissertation, etc.
+                openalex_type = openalex_data.get("type", "")
+                oa_type_map = {
+                    "article": "journalArticle",
+                    "book": "book",
+                    "book-chapter": "bookSection",
+                    "dissertation": "thesis",
+                    "dataset": "dataset",
+                    "preprint": "preprint",
+                    "report": "report",
+                    "review": "journalArticle",
+                    "paratext": "document",
+                }
+                metadata["item_type"] = oa_type_map.get(openalex_type, "journalArticle")  # Default to journalArticle
+                
                 metadata["metadata_source"] = "openalex"
                 metadata["metadata_confidence"] = 0.7
                 metadata["needs_review"] = False
