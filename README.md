@@ -35,7 +35,6 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 - [x] **Settings Wiring** - Connect frontend settings panel to backend parameters ✅
 - [x] **Admin Metadata Review UI** - Edit & verify document metadata ✅
 - [x] **PostgreSQL Dual-Store** - Instant admin queries via dedicated metadata DB ✅
-- [ ] **Bulk PDF Upload** - Process 3ie's full corpus (~5000 PDFs)
 
 ### Medium Priority  
 - [ ] **Admin Authentication** - Protect `/admin` routes with API key or OAuth
@@ -301,7 +300,7 @@ Page-aware chunking enables clicking citations to jump directly to source pages 
 | **MinerU** | `modal_mineru.py` | Extracts text with `page_idx` per block |
 | **Chunking** | `chunk_content_with_pages()` | Creates chunks preserving page numbers |
 | **Qdrant** | Cloud | Stores chunks with `page_start`, `page_end`, `pages[]` |
-| **Presigned URL API** | `api/routes/admin.py` | Generates secure R2 URLs (1hr expiry) |
+| **Presigned URL API** | `api/routes/admin/storage.py` | Generates secure R2 URLs (1hr expiry) |
 | **PDFViewer** | `frontend/components/pdf/` | Renders PDF with page navigation |
 | **MetadataTab** | `frontend/components/admin/` | "View PDF" button opens viewer |
 
@@ -493,13 +492,20 @@ devchat_v2_sota/
 │   ├── server.py                # FastAPI application
 │   ├── schemas.py               # Pydantic models
 │   ├── qdrant_status.py         # Qdrant health monitoring
-│   └── routes/                  # Modular API routes (NEW)
+│   └── routes/                  # Modular API routes
 │       ├── __init__.py          # Auto-discovery & aggregation
 │       ├── dependencies.py      # Shared singletons (agent, indexer, caches)
 │       ├── health.py            # Health check endpoints (/health/*)
 │       ├── chat.py              # Chat & streaming (/chat/*)
 │       ├── api.py               # Frontend API (/api/query, /api/compare)
-│       └── admin.py             # Admin dashboard (/admin/*)
+│       └── admin/               # Admin dashboard package (/admin/*)
+│           ├── __init__.py      # Router combiner
+│           ├── status.py        # DB status, metrics, admin status
+│           ├── collection.py    # Collection management, migrations
+│           ├── storage.py       # File upload, R2 management
+│           ├── jobs.py          # Processing job management
+│           ├── documents.py     # Document CRUD operations
+│           └── metadata.py      # Metadata review & updates
 │
 ├── frontend/                        # Next.js Research Workbench UI ✅
 │   ├── src/
@@ -509,7 +515,16 @@ devchat_v2_sota/
 │   │   │   └── globals.css          # Tailwind styles
 │   │   ├── components/
 │   │   │   ├── ui/                  # shadcn/ui (16 components)
-│   │   │   └── workbench/           # Custom components:
+│   │   │   ├── admin/               # Admin panel components
+│   │   │   │   ├── MetadataTab.tsx      # Metadata review UI
+│   │   │   │   ├── DocumentsTab.tsx     # Document management
+│   │   │   │   ├── ProcessingTab.tsx    # Processing jobs
+│   │   │   │   ├── SettingsTab.tsx      # Admin settings
+│   │   │   │   └── metadata/            # Metadata sub-components
+│   │   │   │       ├── constants.ts         # Item types, fields
+│   │   │   │       ├── MetadataEditDialog.tsx  # Edit dialog
+│   │   │   │       └── index.ts             # Exports
+│   │   │   └── workbench/           # Research workbench components:
 │   │   │       ├── SplitLayout.tsx      # Resizable panels
 │   │   │       ├── AnswerPanel.tsx      # Answer + citations + evidence health
 │   │   │       ├── EvidencePanel.tsx    # Study cards + export
