@@ -75,6 +75,48 @@ async def reset_collection():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/database/reset")
+async def reset_database():
+    """
+    Reset PostgreSQL documents table - deletes ALL document metadata.
+    
+    WARNING: This deletes all document records from PostgreSQL!
+    Use with /collection/reset and /r2/clear for a complete system reset.
+    """
+    import os
+    import psycopg2
+    
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise HTTPException(status_code=500, detail="DATABASE_URL not configured")
+    
+    try:
+        conn = psycopg2.connect(database_url)
+        cursor = conn.cursor()
+        
+        # Get count before delete
+        cursor.execute("SELECT COUNT(*) FROM documents")
+        count_before = cursor.fetchone()[0]
+        
+        # Delete all documents
+        cursor.execute("DELETE FROM documents")
+        conn.commit()
+        
+        cursor.close()
+        conn.close()
+        
+        logger.warning(f"Database reset: deleted {count_before} documents from PostgreSQL")
+        
+        return {
+            "success": True,
+            "message": f"Deleted {count_before} documents from PostgreSQL",
+            "deleted_count": count_before,
+        }
+    except Exception as e:
+        logger.error(f"Failed to reset database: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/collection")
 async def get_collection_info():
     """Get vector collection information. Cached for 30 seconds."""
