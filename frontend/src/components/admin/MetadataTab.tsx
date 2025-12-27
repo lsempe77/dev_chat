@@ -31,7 +31,8 @@ import {
   type MetadataUpdateRequest,
 } from "@/lib/admin-api";
 import { PDFViewer } from "@/components/pdf";
-import { MetadataEditDialog, ITEM_TYPES } from "./metadata";
+import { MetadataEditPanel } from "./metadata/MetadataEditPanel";
+import { ITEM_TYPES } from "./metadata";
 
 export function MetadataTab() {
   const [documents, setDocuments] = useState<DocumentMetadataDetail[]>([]);
@@ -251,10 +252,10 @@ export function MetadataTab() {
       </div>
 
       {/* Main Content: Side-by-side layout */}
-      <div className="flex gap-4">
+      <div className="flex gap-4" style={{ height: 'calc(100vh - 280px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={viewingPdfDoc ? "w-1/2" : "w-full"}>
-          <CardHeader>
+        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col" : "w-full"}>
+          <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Metadata Review</CardTitle>
@@ -268,7 +269,7 @@ export function MetadataTab() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 overflow-hidden">
             <div className="flex gap-4 mb-4">
               <div className="flex-1">
                 <div className="relative">
@@ -302,13 +303,12 @@ export function MetadataTab() {
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <ScrollArea className={viewingPdfDoc ? "h-[600px]" : "h-[500px]"}>
-                <div className="space-y-3">
+              <ScrollArea className="h-full">
+                <div className="space-y-3 pr-2">
                   {filteredDocs.map((doc) => (
                     <Card 
                       key={doc.id} 
-                      className={`hover:bg-muted/50 cursor-pointer ${viewingPdfDoc?.id === doc.id ? 'ring-2 ring-primary' : ''}`}
-                      onClick={() => openEditModal(doc)}
+                      className={`hover:bg-muted/50 ${editingDoc?.id === doc.id ? 'ring-2 ring-primary' : ''} ${viewingPdfDoc?.id === doc.id ? 'ring-2 ring-blue-400' : ''}`}
                     >
                     <CardContent className="p-4">
                       <div className="space-y-3">
@@ -415,21 +415,28 @@ export function MetadataTab() {
         </CardContent>
       </Card>
 
+        {/* Center Panel: Metadata Edit (side panel) */}
+        {editingDoc && (
+          <div className="w-1/3 h-full">
+            <MetadataEditPanel
+              document={editingDoc}
+              editForm={editForm}
+              setEditForm={setEditForm}
+              onClose={() => setEditingDoc(null)}
+              onSave={handleSave}
+              onViewPdf={() => openPdfViewer(editingDoc)}
+              isSaving={isSaving}
+              isPdfOpen={viewingPdfDoc?.id === editingDoc.id}
+            />
+          </div>
+        )}
+
         {/* Right Panel: PDF Viewer (Side Panel) */}
         {viewingPdfDoc && (
-          <div className="w-1/2 flex flex-col border rounded-lg overflow-hidden bg-white">
+          <div className="w-1/3 flex flex-col border rounded-lg overflow-hidden bg-white h-full">
             {/* Minimal header with just close button */}
             <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => openEditModal(viewingPdfDoc)}
-                  title="Edit metadata"
-                >
-                  <Edit2 className="h-4 w-4" />
-                </Button>
-              </div>
+              <span className="text-sm font-medium truncate">{viewingPdfDoc.filename}</span>
               <Button 
                 variant="ghost" 
                 size="sm"
@@ -440,7 +447,7 @@ export function MetadataTab() {
               </Button>
             </div>
             {/* PDF takes full remaining height */}
-            <div className="flex-1 min-h-0" style={{ height: 'calc(100vh - 280px)' }}>
+            <div className="flex-1 min-h-0">
               {isLoadingPdf ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -460,16 +467,6 @@ export function MetadataTab() {
           </div>
         )}
       </div>
-
-      {/* Edit Modal */}
-      <MetadataEditDialog
-        document={editingDoc}
-        editForm={editForm}
-        setEditForm={setEditForm}
-        isSaving={isSaving}
-        onClose={() => setEditingDoc(null)}
-        onSave={handleSave}
-      />
     </div>
   );
 }
