@@ -162,10 +162,14 @@ class QueryProcessor:
         Returns:
             Classified and expanded query with filters
         """
-        # Run all processing steps
-        query_type = await self._classify_query(query)
-        expanded_query = await self._expand_query(query)
-        filters = await self._extract_filters(query)
+        import asyncio
+        
+        # Run all processing steps IN PARALLEL (they're independent)
+        query_type, expanded_query, filters = await asyncio.gather(
+            self._classify_query(query),
+            self._expand_query(query),
+            self._extract_filters(query),
+        )
         
         result = QueryClassification(
             original_query=query,
