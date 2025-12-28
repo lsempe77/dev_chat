@@ -25,32 +25,6 @@ import { useAdminContext, ProcessingJob } from "./AdminContext";
 export function ProcessingTab() {
   const { processingState, setProcessingState } = useAdminContext();
   const { jobs, triggerMessage, lastTriggeredAt, triggeredJobCount, queuedCount, processingCount, completedCount, failedCount } = processingState;
-  
-  // Helper functions to update state
-  const setJobs = (newJobs: ProcessingJob[]) => {
-    setProcessingState(prev => ({ ...prev, jobs: newJobs }));
-  };
-  const setTriggerMessage = (msg: string | null) => {
-    setProcessingState(prev => ({ ...prev, triggerMessage: msg }));
-  };
-  const setLastTriggeredAt = (date: Date | null) => {
-    setProcessingState(prev => ({ ...prev, lastTriggeredAt: date }));
-  };
-  const setTriggeredJobCount = (count: number) => {
-    setProcessingState(prev => ({ ...prev, triggeredJobCount: count }));
-  };
-  const setQueuedCount = (count: number) => {
-    setProcessingState(prev => ({ ...prev, queuedCount: count }));
-  };
-  const setProcessingCount = (count: number) => {
-    setProcessingState(prev => ({ ...prev, processingCount: count }));
-  };
-  const setCompletedCount = (count: number) => {
-    setProcessingState(prev => ({ ...prev, completedCount: count }));
-  };
-  const setFailedCount = (count: number) => {
-    setProcessingState(prev => ({ ...prev, failedCount: count }));
-  };
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
@@ -65,10 +39,10 @@ export function ProcessingTab() {
   // Restore last trigger time from localStorage so refreshes keep the button disabled during processing
   useEffect(() => {
     const stored = localStorage.getItem("admin_processing_last_trigger");
-    if (stored) {
+    if (stored && !lastTriggeredAt) {
       const parsed = new Date(stored);
       if (!Number.isNaN(parsed.getTime())) {
-        setLastTriggeredAt(parsed);
+        setProcessingState(prev => ({ ...prev, lastTriggeredAt: parsed }));
       }
     }
   }, []);
@@ -94,15 +68,20 @@ export function ProcessingTab() {
         chunks: j.chunks,
       }));
       
-      setJobs(mappedJobs);
-      setQueuedCount(response.queued_count);
-      setProcessingCount(response.processing_count);
-      setCompletedCount(response.completed_count);
-      setFailedCount(response.failed_count);
+      // Update all state in a single call to context
+      setProcessingState(prev => ({
+        ...prev,
+        jobs: mappedJobs,
+        queuedCount: response.queued_count,
+        processingCount: response.processing_count,
+        completedCount: response.completed_count,
+        failedCount: response.failed_count,
+        // Clear the persisted trigger flag once everything finishes
+        lastTriggeredAt: (response.queued_count === 0 && response.processing_count === 0) ? null : prev.lastTriggeredAt,
+      }));
 
-      // Clear the persisted trigger flag once everything finishes
+      // Clear localStorage if processing finished
       if (response.queued_count === 0 && response.processing_count === 0) {
-        setLastTriggeredAt(null);
         localStorage.removeItem("admin_processing_last_trigger");
       }
     } catch (err) {
@@ -110,12 +89,14 @@ export function ProcessingTab() {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [setProcessingState]);
 
-  // Initial load
+  // Initial load only if jobs are empty
   useEffect(() => {
-    refreshJobs();
-  }, [refreshJobs]);
+    if (jobs.length === 0) {
+      refreshJobs();
+    }
+  }, []);
 
   // Auto-refresh every 5 seconds
   useEffect(() => {
@@ -134,16 +115,21 @@ export function ProcessingTab() {
 
   const startBatchProcessing = async () => {
     setIsTriggering(true);
-    setTriggerMessage(null);
     setError(null);
     
     try {
       const response = await triggerProcessing({ max_documents: 10 });
-      setTriggerMessage(response.message);
       const now = new Date();
-      setLastTriggeredAt(now);
       localStorage.setItem("admin_processing_last_trigger", now.toISOString());
-      setTriggeredJobCount(response.queued);
+      
+      // Update context state
+      setProcessingState(prev => ({
+        ...prev,
+        triggerMessage: response.message,
+        lastTriggeredAt: now,
+        triggeredJobCount: response.queued,
+      }));
+      
       // Refresh jobs after triggering
       await refreshJobs();
     } catch (err) {
@@ -207,7 +193,7 @@ export function ProcessingTab() {
         <div className="bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg flex items-center gap-2">
           <CheckCircle className="h-4 w-4" />
           <span>{triggerMessage}</span>
-          <Button variant="ghost" size="sm" onClick={() => setTriggerMessage(null)} className="ml-auto">
+          <Button variant="ghost" size="sm" onClick={() => setProcessingState(prev => ({ ...prev, triggerMessage: null }))} className="ml-auto">
             Dismiss
           </Button>
         </div>
