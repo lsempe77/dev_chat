@@ -22,6 +22,7 @@ from src.retrieval.context_builder import ContextBuilder, FormattedContext
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.query_processor import QueryClassification, QueryProcessor
 from src.retrieval.reranker import CohereReranker, Reranker, get_reranker
+from src.utils.cache import get_response_cache
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -149,6 +150,24 @@ class DevChatAgent:
         user_settings = search_settings or SearchSettings()
         
         total_start = time.time()
+        
+        # Check cache first (skip for streaming)
+        cache = get_response_cache()
+        if not stream:
+            settings_dict = {
+                "relevance_threshold": user_settings.relevance_threshold,
+                "max_studies": user_settings.max_studies,
+                "answer_style": user_settings.answer_style,
+                "use_reranking": user_settings.use_reranking,
+                "use_structured_citations": user_settings.use_structured_citations,
+            }
+            cached_response = await cache.get(query, settings_dict=settings_dict)
+            if cached_response:
+                cache_time = (time.time() - total_start) * 1000
+                logger.info(f"Cache hit for query: '{query[:50]}...' ({cache_time:.0f}ms)")
+                # Update timing to reflect cache retrieval
+                cached_response.total_time_ms = cache_time
+                return cached_response
         
         # Step 1: Query Processing
         query_start = time.time()
@@ -349,6 +368,11 @@ class DevChatAgent:
             f"(query:{query_time:.0f}, retrieval:{retrieval_time:.0f}, "
             f"rerank:{rerank_time:.0f}, synthesis:{synthesis_time:.0f})"
         )
+        
+        # Store in cache for future identical queries
+        if not stream:
+            await cache.set(query, response, settings_dict=settings_dict)
+            logger.debug(f"Cached response for query: '{query[:50]}...'")
         
         return response
     
