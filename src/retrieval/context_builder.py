@@ -274,7 +274,12 @@ class ContextBuilder:
         self,
         results: List[RetrievalResult],
     ) -> tuple[str, List[Dict]]:
-        """Build context grouped by study."""
+        """
+        Build context grouped by study with proportional space allocation.
+        
+        SOTA approach: Each study gets a fair share of the context budget,
+        ensuring all retrieved studies are represented even with many sources.
+        """
         # Group by study
         by_study: Dict[str, List[RetrievalResult]] = {}
         for result in results:
@@ -283,7 +288,21 @@ class ContextBuilder:
                 by_study[study_id] = []
             by_study[study_id].append(result)
         
-        # Build formatted text
+        num_studies = len(by_study)
+        
+        # Calculate per-study budget (reserve space for headers and separators)
+        # Each study header is ~100-150 chars, separator is ~10 chars
+        overhead_per_study = 200
+        separator_chars = 10 * (num_studies - 1) if num_studies > 1 else 0
+        available_for_content = self.max_context_length - (overhead_per_study * num_studies) - separator_chars
+        chars_per_study = max(500, available_for_content // num_studies)  # Minimum 500 chars per study
+        
+        logger.debug(
+            f"Context budget: {self.max_context_length} chars for {num_studies} studies, "
+            f"~{chars_per_study} chars/study"
+        )
+        
+        # Build formatted text with per-study truncation
         sections = []
         citations = []
         
@@ -318,6 +337,9 @@ class ContextBuilder:
             # Combine chunk texts - ensure each is a string
             chunk_texts = [c.text if isinstance(c.text, str) else str(c.text) for c in chunks]
             combined_text = "\n\n".join(chunk_texts)
+            
+            # Truncate this study's content to its fair share
+            combined_text = self._truncate_study_content(combined_text, chars_per_study)
             
             # Add to sections
             sections.append(f"{header}\n\n{combined_text}")
@@ -424,6 +446,36 @@ class ContextBuilder:
         
         context_text = "\n\n".join(chunks)
         return context_text, citations
+    
+    def _truncate_study_content(self, text: str, max_chars: int) -> str:
+        """
+        Truncate a single study's content to fit within its allocated budget.
+        
+        Attempts to break at sentence boundaries for cleaner output.
+        """
+        if len(text) <= max_chars:
+            return text
+        
+        # Find a good break point at sentence boundary
+        truncate_at = max_chars - 30  # Leave room for ellipsis indicator
+        
+        # Try to break at sentence
+        for punct in [". ", ".\n", "! ", "? "]:
+            last_sent = text.rfind(punct, 0, truncate_at)
+            if last_sent > truncate_at * 0.6:
+                return text[:last_sent + 1].strip() + " [...]"
+        
+        # Fall back to paragraph break
+        last_para = text.rfind("\n\n", 0, truncate_at)
+        if last_para > truncate_at * 0.5:
+            return text[:last_para].strip() + " [...]"
+        
+        # Last resort: hard truncate at word boundary
+        last_space = text.rfind(" ", 0, truncate_at)
+        if last_space > 0:
+            return text[:last_space].strip() + " [...]"
+        
+        return text[:truncate_at] + "..."
     
     def _smart_truncate(self, text: str) -> str:
         """
