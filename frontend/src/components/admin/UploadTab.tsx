@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { uploadDocument } from "@/lib/admin-api";
 
-interface FileToUpload {
+export interface FileToUpload {
   file: File;
   status: "pending" | "uploading" | "completed" | "error" | "duplicate";
   progress: number;
@@ -27,10 +27,15 @@ interface FileToUpload {
   message?: string;
 }
 
-export function UploadTab() {
-  const [files, setFiles] = useState<FileToUpload[]>([]);
+interface UploadTabProps {
+  files: FileToUpload[];
+  setFiles: React.Dispatch<React.SetStateAction<FileToUpload[]>>;
+  isUploading: boolean;
+  setIsUploading: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export function UploadTab({ files, setFiles, isUploading, setIsUploading }: UploadTabProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();

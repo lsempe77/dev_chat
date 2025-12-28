@@ -14,7 +14,7 @@ import {
   Tag
 } from "lucide-react";
 import Link from "next/link";
-import { UploadTab } from "./UploadTab";
+import { UploadTab, FileToUpload } from "./UploadTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { ProcessingTab } from "./ProcessingTab";
 import { SettingsTab } from "./SettingsTab";
@@ -28,6 +28,10 @@ export function AdminLayout() {
     qdrant: boolean;
     loading: boolean;
   }>({ modal: false, qdrant: false, loading: true });
+
+  // Lift upload state to persist across tab switches
+  const [uploadFiles, setUploadFiles] = useState<FileToUpload[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Check connections on mount
   useEffect(() => {
@@ -121,7 +125,12 @@ export function AdminLayout() {
           </TabsList>
 
           <TabsContent value="upload" className="space-y-4">
-            <UploadTab />
+            <UploadTab 
+              files={uploadFiles}
+              setFiles={setUploadFiles}
+              isUploading={isUploading}
+              setIsUploading={setIsUploading}
+            />
           </TabsContent>
 
           <TabsContent value="processing" className="space-y-4">
