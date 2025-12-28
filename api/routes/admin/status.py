@@ -147,17 +147,35 @@ async def get_admin_status():
                 )
                 
                 bucket = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
-                # List objects to get count and size (limit to first 100 for speed)
-                response = client.list_objects_v2(Bucket=bucket, Prefix="input-pdfs/", MaxKeys=100)
                 
-                file_count = response.get("KeyCount", 0)
-                total_size = sum(obj.get("Size", 0) for obj in response.get("Contents", []))
+                # List ALL objects with pagination to get accurate count
+                file_count = 0
+                total_size = 0
+                continuation_token = None
+                
+                while True:
+                    if continuation_token:
+                        response = client.list_objects_v2(
+                            Bucket=bucket, Prefix="input-pdfs/", ContinuationToken=continuation_token
+                        )
+                    else:
+                        response = client.list_objects_v2(Bucket=bucket, Prefix="input-pdfs/")
+                    
+                    for obj in response.get("Contents", []):
+                        if obj["Key"].lower().endswith(".pdf"):
+                            file_count += 1
+                            total_size += obj.get("Size", 0)
+                    
+                    if response.get("IsTruncated"):
+                        continuation_token = response.get("NextContinuationToken")
+                    else:
+                        break
                 
                 return "connected", bucket, file_count, total_size
             
             status, details, count, size = await asyncio.wait_for(
                 loop.run_in_executor(None, _check),
-                timeout=5.0
+                timeout=10.0  # Increased timeout for pagination
             )
             return status, details, count, size
         except asyncio.TimeoutError:

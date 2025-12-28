@@ -118,7 +118,7 @@ export function ProcessingTab() {
     setError(null);
     
     try {
-      const response = await triggerProcessing({ max_documents: 10 });
+      const response = await triggerProcessing({ max_documents: 100 });
       const now = new Date();
       localStorage.setItem("admin_processing_last_trigger", now.toISOString());
       
