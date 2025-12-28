@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy.pool import NullPool
 
 from src.utils.logging import get_logger
 
@@ -61,9 +60,15 @@ def init_database(database_url: str = None) -> tuple[AsyncEngine, async_sessionm
     
     logger.info(f"Initializing database connection to: {url.split('@')[-1] if '@' in url else 'local'}")
     
+    # Use connection pooling for persistent containers (Railway)
+    # Pool recycles connections every 30 min to avoid stale connections
     engine = create_async_engine(
         url,
-        poolclass=NullPool,  # Best for serverless
+        pool_size=5,           # Keep 5 connections ready
+        max_overflow=10,       # Allow up to 15 total under load
+        pool_timeout=30,       # Wait up to 30s for a connection
+        pool_recycle=1800,     # Recycle connections every 30 min
+        pool_pre_ping=True,    # Verify connections before use
         echo=os.getenv("DB_ECHO", "false").lower() == "true",
     )
     
@@ -73,7 +78,7 @@ def init_database(database_url: str = None) -> tuple[AsyncEngine, async_sessionm
         expire_on_commit=False,
     )
     
-    logger.info("✅ Database engine and session factory created")
+    logger.info("✅ Database engine and session factory created (with connection pooling)")
     
     return engine, async_session
 
