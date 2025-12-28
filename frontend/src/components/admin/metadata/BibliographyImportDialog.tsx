@@ -49,7 +49,7 @@ export function BibliographyImportDialog({
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [mergeDuplicates, setMergeDuplicates] = useState(false);
-  const [enrichFromDoi, setEnrichFromDoi] = useState(true);
+  const [enrichFromDoi, setEnrichFromDoi] = useState(false);  // Off by default - slow for large imports
   const [importResult, setImportResult] = useState<{
     imported: number;
     skipped: number;
@@ -160,7 +160,7 @@ export function BibliographyImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-5xl w-[90vw] h-[80vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-[95vw] w-[1400px] h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Book className="h-5 w-5" />
