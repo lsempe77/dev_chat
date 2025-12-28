@@ -568,6 +568,9 @@ async def confirm_import(request: ImportConfirmRequest):
                 
             except Exception as e:
                 errors.append(f"Error processing '{entry.title[:50]}...': {str(e)}")
+        
+        # CRITICAL: Commit the transaction to persist changes
+        await db.commit()
     
     return ImportConfirmResponse(
         imported_count=imported,
