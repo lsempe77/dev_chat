@@ -99,6 +99,7 @@ Branch: main
 | **PDF Text Highlighting** | Currently uses browser's #search= (Chrome/Edge only). Could implement custom PDF viewer with highlight overlay |
 | **Config-driven Branding** | Logo, colors, name via env vars |
 | **Collection Isolation** | Per-team Qdrant collections |
+| **OAuth** | Smart signin |
 
 
 ### 🐛 Known Test Failures (For Review)

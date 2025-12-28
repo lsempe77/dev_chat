@@ -16,25 +16,26 @@ import {
   Loader2
 } from "lucide-react";
 import { uploadDocument } from "@/lib/admin-api";
+import { useAdminContext } from "./AdminContext";
+import type { FileToUpload } from "./AdminContext";
 
-export interface FileToUpload {
-  file: File;
-  status: "pending" | "uploading" | "completed" | "error" | "duplicate";
-  progress: number;
-  error?: string;
-  r2Key?: string;
-  isDuplicate?: boolean;
-  message?: string;
-}
+export type { FileToUpload };
 
-interface UploadTabProps {
-  files: FileToUpload[];
-  setFiles: React.Dispatch<React.SetStateAction<FileToUpload[]>>;
-  isUploading: boolean;
-  setIsUploading: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
-export function UploadTab({ files, setFiles, isUploading, setIsUploading }: UploadTabProps) {
+export function UploadTab() {
+  const { uploadState, setUploadState } = useAdminContext();
+  const { files, isUploading } = uploadState;
+  
+  const setFiles = (updater: FileToUpload[] | ((prev: FileToUpload[]) => FileToUpload[])) => {
+    setUploadState(prev => ({
+      ...prev,
+      files: typeof updater === 'function' ? updater(prev.files) : updater
+    }));
+  };
+  
+  const setIsUploading = (value: boolean) => {
+    setUploadState(prev => ({ ...prev, isUploading: value }));
+  };
+  
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

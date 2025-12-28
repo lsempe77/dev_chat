@@ -38,26 +38,42 @@ import { PDFViewer } from "@/components/pdf";
 import { MetadataEditPanel } from "./metadata/MetadataEditPanel";
 import { BibliographyImportDialog } from "./metadata/BibliographyImportDialog";
 import { ITEM_TYPES } from "./metadata";
+import { useAdminContext } from "./AdminContext";
 
 export function MetadataTab() {
-  const [documents, setDocuments] = useState<DocumentMetadataDetail[]>([]);
-  const [filterType, setFilterType] = useState<"all" | "needs_review" | "low_confidence">("needs_review");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState({ needsReview: 0, lowConfidence: 0, total: 0 });
+  const { metadataState, setMetadataState } = useAdminContext();
+  const { documents, filterType, searchQuery, stats, editingDoc, editForm, viewingPdfDoc, pdfUrl } = metadataState;
   
-  // Edit modal state
-  const [editingDoc, setEditingDoc] = useState<DocumentMetadataDetail | null>(null);
-  const [editForm, setEditForm] = useState<MetadataUpdateRequest>({});
+  // Helper functions to update state
+  const setDocuments = (docs: DocumentMetadataDetail[]) => {
+    setMetadataState(prev => ({ ...prev, documents: docs }));
+  };
+  const setFilterType = (type: "all" | "needs_review" | "low_confidence") => {
+    setMetadataState(prev => ({ ...prev, filterType: type }));
+  };
+  const setSearchQuery = (query: string) => {
+    setMetadataState(prev => ({ ...prev, searchQuery: query }));
+  };
+  const setStats = (newStats: typeof stats) => {
+    setMetadataState(prev => ({ ...prev, stats: newStats }));
+  };
+  const setEditingDoc = (doc: DocumentMetadataDetail | null) => {
+    setMetadataState(prev => ({ ...prev, editingDoc: doc }));
+  };
+  const setEditForm = (form: MetadataUpdateRequest) => {
+    setMetadataState(prev => ({ ...prev, editForm: form }));
+  };
+  const setViewingPdfDoc = (doc: DocumentMetadataDetail | null) => {
+    setMetadataState(prev => ({ ...prev, viewingPdfDoc: doc }));
+  };
+  const setPdfUrl = (url: string | null) => {
+    setMetadataState(prev => ({ ...prev, pdfUrl: url }));
+  };
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // PDF viewer state
-  const [viewingPdfDoc, setViewingPdfDoc] = useState<DocumentMetadataDetail | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
-
-  // Import dialog state
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -115,9 +131,17 @@ export function MetadataTab() {
     }
   }, [filterType]);
 
+  // Initial load only if documents are empty
+  useEffect(() => {
+    if (documents.length === 0) {
+      fetchDocuments();
+    }
+  }, []);
+
+  // Re-fetch when filter type changes
   useEffect(() => {
     fetchDocuments();
-  }, [fetchDocuments]);
+  }, [filterType]);
 
   // Filter by search
   const filteredDocs = documents.filter(doc => 

@@ -106,11 +106,13 @@ class RAGASEvaluator:
         """Initialize LLM for evaluation."""
         if self.llm is None:
             try:
-                from llama_index.llms.openrouter import OpenRouter
-                self.llm = OpenRouter(
+                from llama_index.llms.openai_like import OpenAILike
+                self.llm = OpenAILike(
                     model="openai/gpt-4o-mini",
+                    api_base="https://openrouter.ai/api/v1",
                     api_key=settings.openrouter_api_key,
                     max_tokens=2000,
+                    is_chat_model=True,
                 )
             except Exception as e:
                 logger.error(f"Failed to initialize LLM: {e}")

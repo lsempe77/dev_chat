@@ -14,24 +14,21 @@ import {
   Tag
 } from "lucide-react";
 import Link from "next/link";
-import { UploadTab, FileToUpload } from "./UploadTab";
+import { AdminProvider } from "./AdminContext";
+import { UploadTab } from "./UploadTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { ProcessingTab } from "./ProcessingTab";
 import { SettingsTab } from "./SettingsTab";
 import { MetadataTab } from "./MetadataTab";
 import { checkHealth, getCollectionInfo } from "@/lib/admin-api";
 
-export function AdminLayout() {
+function AdminLayoutInner() {
   const [activeTab, setActiveTab] = useState("upload");
   const [connectionStatus, setConnectionStatus] = useState<{
     modal: boolean;
     qdrant: boolean;
     loading: boolean;
   }>({ modal: false, qdrant: false, loading: true });
-
-  // Lift upload state to persist across tab switches
-  const [uploadFiles, setUploadFiles] = useState<FileToUpload[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
 
   // Check connections on mount
   useEffect(() => {
@@ -125,12 +122,7 @@ export function AdminLayout() {
           </TabsList>
 
           <TabsContent value="upload" className="space-y-4">
-            <UploadTab 
-              files={uploadFiles}
-              setFiles={setUploadFiles}
-              isUploading={isUploading}
-              setIsUploading={setIsUploading}
-            />
+            <UploadTab />
           </TabsContent>
 
           <TabsContent value="processing" className="space-y-4">
@@ -151,5 +143,13 @@ export function AdminLayout() {
         </Tabs>
       </main>
     </div>
+  );
+}
+
+export function AdminLayout() {
+  return (
+    <AdminProvider>
+      <AdminLayoutInner />
+    </AdminProvider>
   );
 }

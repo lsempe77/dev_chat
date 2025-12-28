@@ -20,31 +20,41 @@ import {
   triggerProcessing,
   type ProcessingJob as APIProcessingJob 
 } from "@/lib/admin-api";
-
-interface ProcessingJob {
-  id: string;
-  filename: string;
-  status: "queued" | "processing" | "completed" | "failed";
-  progress: number;
-  startedAt?: string;
-  completedAt?: string;
-  error?: string;
-  pages?: number;
-  chunks?: number;
-}
+import { useAdminContext, ProcessingJob } from "./AdminContext";
 
 export function ProcessingTab() {
-  const [jobs, setJobs] = useState<ProcessingJob[]>([]);
+  const { processingState, setProcessingState } = useAdminContext();
+  const { jobs, triggerMessage, lastTriggeredAt, triggeredJobCount, queuedCount, processingCount, completedCount, failedCount } = processingState;
+  
+  // Helper functions to update state
+  const setJobs = (newJobs: ProcessingJob[]) => {
+    setProcessingState(prev => ({ ...prev, jobs: newJobs }));
+  };
+  const setTriggerMessage = (msg: string | null) => {
+    setProcessingState(prev => ({ ...prev, triggerMessage: msg }));
+  };
+  const setLastTriggeredAt = (date: Date | null) => {
+    setProcessingState(prev => ({ ...prev, lastTriggeredAt: date }));
+  };
+  const setTriggeredJobCount = (count: number) => {
+    setProcessingState(prev => ({ ...prev, triggeredJobCount: count }));
+  };
+  const setQueuedCount = (count: number) => {
+    setProcessingState(prev => ({ ...prev, queuedCount: count }));
+  };
+  const setProcessingCount = (count: number) => {
+    setProcessingState(prev => ({ ...prev, processingCount: count }));
+  };
+  const setCompletedCount = (count: number) => {
+    setProcessingState(prev => ({ ...prev, completedCount: count }));
+  };
+  const setFailedCount = (count: number) => {
+    setProcessingState(prev => ({ ...prev, failedCount: count }));
+  };
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
-  const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
-  const [triggeredJobCount, setTriggeredJobCount] = useState(0);
-  const [queuedCount, setQueuedCount] = useState(0);
-  const [processingCount, setProcessingCount] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
-  const [failedCount, setFailedCount] = useState(0);
 
   const PROCESSING_STALE_MS = 30 * 60 * 1000; // After 30 minutes, allow re-trigger even if queued remains
 

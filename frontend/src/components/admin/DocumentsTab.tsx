@@ -29,29 +29,33 @@ import {
   getPDFUrl,
   type DocumentMetadata 
 } from "@/lib/admin-api";
-
-interface Document {
-  id: string;
-  title: string;
-  filename: string;
-  authors: string[];
-  year?: number;
-  status: "indexed" | "pending" | "error";
-  pageCount: number;
-  chunkCount: number;
-  uploadedAt: string;
-  processedAt?: string;
-}
+import { useAdminContext, Document } from "./AdminContext";
 
 export function DocumentsTab() {
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(true);
+  const { documentsState, setDocumentsState } = useAdminContext();
+  const { documents, searchQuery, selectedDocs, totalChunks } = documentsState;
+  
+  // Helper functions to update state
+  const setDocuments = (docs: Document[]) => {
+    setDocumentsState(prev => ({ ...prev, documents: docs }));
+  };
+  const setSearchQuery = (query: string) => {
+    setDocumentsState(prev => ({ ...prev, searchQuery: query }));
+  };
+  const setSelectedDocs = (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setDocumentsState(prev => ({
+      ...prev,
+      selectedDocs: typeof updater === 'function' ? updater(prev.selectedDocs) : updater
+    }));
+  };
+  const setTotalChunks = (count: number) => {
+    setDocumentsState(prev => ({ ...prev, totalChunks: count }));
+  };
+
+  const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalChunks, setTotalChunks] = useState(0);
 
   // Fetch documents from API
   const fetchDocuments = useCallback(async () => {
@@ -81,10 +85,17 @@ export function DocumentsTab() {
     }
   }, [searchQuery]);
 
-  // Initial load
+  // Initial load only if documents are empty
+  useEffect(() => {
+    if (documents.length === 0) {
+      fetchDocuments();
+    }
+  }, []);
+
+  // Re-fetch when search query changes
   useEffect(() => {
     fetchDocuments();
-  }, [fetchDocuments]);
+  }, [searchQuery]);
 
   const filteredDocs = documents.filter(doc => 
     doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
