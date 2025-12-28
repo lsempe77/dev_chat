@@ -157,7 +157,7 @@ class ContextBuilder:
     
     def __init__(
         self,
-        max_context_length: int = 8000,
+        max_context_length: int = 16000,  # Increased from 8000 to allow more studies
         use_parent_expansion: bool = True,
         group_by_study: bool = True,
     ):
@@ -196,16 +196,47 @@ class ContextBuilder:
         # Truncate if needed
         if len(context_text) > self.max_context_length:
             context_text = self._smart_truncate(context_text)
+            # Filter citations to only include studies still present in truncated text
+            citations = self._filter_citations_by_context(citations, context_text)
         
-        # Count unique studies
-        unique_studies = set(r.study_id for r in results if r.study_id)
+        # Count unique studies (based on what's actually in the context after truncation)
+        num_studies = len(citations)
         
         return FormattedContext(
             text=context_text,
             num_chunks=len(results),
-            num_studies=len(unique_studies),
+            num_studies=num_studies,
             citations=citations,
         )
+    
+    def _filter_citations_by_context(
+        self,
+        citations: List[Dict],
+        context_text: str,
+    ) -> List[Dict]:
+        """
+        Filter citations to only include those whose [N] marker is in the context.
+        
+        This ensures citations match what's actually in the text after truncation.
+        """
+        import re
+        
+        # Find all [N] markers in the context
+        present_markers = set(re.findall(r'\[(\d+)\]', context_text))
+        
+        # Filter and re-number citations
+        filtered = []
+        for i, citation in enumerate(citations, start=1):
+            if str(i) in present_markers:
+                filtered.append(citation)
+        
+        if len(filtered) < len(citations):
+            logger.debug(
+                f"Truncation removed {len(citations) - len(filtered)} citations "
+                f"(kept {len(filtered)}/{len(citations)})"
+            )
+        
+        return filtered
     
     def _expand_to_parents(
         self,
