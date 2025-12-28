@@ -18,7 +18,9 @@ import {
   User,
   Hash,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  BookOpen,
+  FileQuestion
 } from "lucide-react";
 import { 
   getDocuments, 
@@ -325,7 +327,21 @@ export function DocumentsTab() {
                     </td>
                     <td className="p-2">
                       <div>
-                        <p className="font-medium line-clamp-1">{doc.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium line-clamp-1">{doc.title}</p>
+                          {doc.filename.startsWith("imported_") && doc.chunkCount === 0 && (
+                            <Badge variant="outline" className="shrink-0 text-xs text-blue-600 border-blue-300 bg-blue-50">
+                              <BookOpen className="h-3 w-3 mr-1" />
+                              Metadata Only
+                            </Badge>
+                          )}
+                          {!doc.filename.startsWith("imported_") && doc.chunkCount === 0 && doc.status === "pending" && (
+                            <Badge variant="outline" className="shrink-0 text-xs text-orange-600 border-orange-300 bg-orange-50">
+                              <FileQuestion className="h-3 w-3 mr-1" />
+                              Processing
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                           <User className="h-3 w-3" />
                           <span className="line-clamp-1">
@@ -357,42 +373,49 @@ export function DocumentsTab() {
                     </td>
                     <td className="p-2">
                       <div className="flex items-center gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8"
-                          title="View PDF"
-                          onClick={async () => {
-                            try {
-                              const response = await getPDFUrl(doc.id);
-                              window.open(response.url, '_blank');
-                            } catch (err) {
-                              setError(err instanceof Error ? err.message : "Failed to load PDF");
-                            }
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8"
-                          title="Download PDF"
-                          onClick={async () => {
-                            try {
-                              const response = await getPDFUrl(doc.id);
-                              const a = document.createElement('a');
-                              a.href = response.url;
-                              a.download = doc.filename || `${doc.id}.pdf`;
-                              a.target = '_blank';
-                              a.click();
-                            } catch (err) {
-                              setError(err instanceof Error ? err.message : "Failed to download PDF");
-                            }
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        {/* Only show PDF buttons if there's a real PDF (not imported metadata) */}
+                        {!doc.filename.startsWith("imported_") ? (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              title="View PDF"
+                              onClick={async () => {
+                                try {
+                                  const response = await getPDFUrl(doc.id);
+                                  window.open(response.url, '_blank');
+                                } catch (err) {
+                                  setError(err instanceof Error ? err.message : "Failed to load PDF");
+                                }
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              title="Download PDF"
+                              onClick={async () => {
+                                try {
+                                  const response = await getPDFUrl(doc.id);
+                                  const a = document.createElement('a');
+                                  a.href = response.url;
+                                  a.download = doc.filename || `${doc.id}.pdf`;
+                                  a.target = '_blank';
+                                  a.click();
+                                } catch (err) {
+                                  setError(err instanceof Error ? err.message : "Failed to download PDF");
+                                }
+                              }}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic px-2">No PDF</span>
+                        )}
                       </div>
                     </td>
                   </tr>
