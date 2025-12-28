@@ -54,11 +54,7 @@ Branch: main
 
 ---
 
-## 🔧 Configuration Reference
-
----
-
-## 📋 TODO List (Priority Order)
+##  TODO List (Priority Order)
 
 ### P0 - Critical (This Week)
 
@@ -89,8 +85,8 @@ Branch: main
 | **Export Citations** | BibTeX/RIS format export | ✅ Done |
 | **Usage Analytics** | Track queries, latency, user engagement | ⬜ TODO |
 | **Zotero Integration** | Allow user to add Zotero API for integrating library -> then triggers **Bibliography Import**| ⬜ TODO |
-| **Multi-tenant architecture** | Frontend and backend |⬜ TODO |
-| *Teams architecture** | Role-based team access; Frontend and backend |⬜ TODO |
+| **Multi-tenant architecture** | Frontend and backend | ⬜ TODO |
+| **Teams architecture** | Role-based team access; Frontend and backend | ⬜ TODO |
 
 
 ### P2 - Future (Citation Quality Improvements)
@@ -116,7 +112,7 @@ Branch: main
 
 ---
 
-## 📚 Metadata Resolution Pipeline (NEW)
+## 📚 Metadata Resolution Pipeline
 
 Smart metadata extraction from multiple authoritative sources:
 
@@ -655,29 +651,32 @@ for r in results.points:
 
 ## 🔮 Roadmap
 
-### Near-Term (This Week)
+### Completed (December 2025)
 
-| Priority | Task | Status |
-|----------|------|--------|
-| 🟢 | Deploy Backend (Railway) | ✅ Done |
-| 🟢 | Deploy Frontend (Vercel) | ✅ Done |
-| 🟢 | Frontend ↔ Backend wiring | ✅ Done |
-| 🟢 | Wire Settings to backend | ✅ Done |
-| 🟢 | LLM-based suggestions | ✅ Done |
-| 🟡 P1 | Bulk document ingestion | ✅ Done  |
-| 🟡 P1 | Match document ingestions (pdfs, etc) with metadata file (uploaded, generated from files, and later searching/completing in crossref) | ⬜ TODO |
-| 🟢 | Admin UI → R2 upload | ✅ Done |
+| Task | Status |
+|------|--------|
+| Deploy Backend (Railway) | ✅ Done |
+| Deploy Frontend (Vercel) | ✅ Done |
+| Frontend ↔ Backend wiring | ✅ Done |
+| Wire Settings to backend | ✅ Done |
+| LLM-based suggestions | ✅ Done |
+| Bulk document ingestion | ✅ Done |
+| Admin UI → R2 upload | ✅ Done |
+| PostgreSQL metadata store | ✅ Done |
+| Performance optimizations | ✅ Done |
+| Proportional context allocation | ✅ Done |
 
-| 🟡 P1 | Run RAGAS evaluation | ⬜ TODO |
-
-
-### Medium-Term (Month 2)
+### Next Up
 
 | Priority | Task | Effort |
 |----------|------|--------|
+| 🟡 P1 | Run RAGAS evaluation | 1-2 days |
+| 🟡 P1 | Usage Analytics (queries, latency, engagement) | 2-3 days |
+| 🟡 P1 | Zotero Integration | 2-3 days |
 | 🟡 P2 | Authentication (Clerk) | 2-3 days |
 | 🟡 P2 | Contextual Retrieval | 3-5 days |
 | 🟡 P2 | HyDE embeddings | 2-3 days |
+| 🟡 P2 | Multi-tenant architecture | 3-5 days |
 | 🟢 P3 | Docker containerization | 2-3 days |
 | 🟢 P3 | PDF retention policy | 1 day |
 
@@ -708,7 +707,7 @@ Query → Query Processor → Hybrid Retriever → Reranker → Context Builder 
 
 ```
 R2 input-pdfs/ → Modal GPU → MinerU → R2 outputs/ → Chunking → Cohere → Qdrant
-                  (T4)       (extract)   (md/json)    (512 tok)  (embed)  (index)
+                  (T4)       (extract)   (md/json)   (256 words) (embed)  (index)
 ```
 
 ### Frontend Architecture
@@ -814,4 +813,4 @@ Options for user isolation:
 
 ---
 
-*Last verified: December 19, 2025*
+*Last verified: December 28, 2025*
