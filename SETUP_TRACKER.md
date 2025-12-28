@@ -24,6 +24,7 @@
 | **Connection Pooling** | ✅ Done | PostgreSQL pool (5 connections, 10 overflow) |
 | **Query Caching** | ✅ Done | LRU cache with 1hr TTL for identical queries |
 | **Parallel Query Processing** | ✅ Done | Classify+expand+filters run concurrently |
+| **Proportional Context** | ✅ Done | SOTA per-study allocation (all studies cited) |
 
 ---
 
@@ -389,6 +390,35 @@ curl https://3iechat.up.railway.app/health/production
   }
 }
 ```
+
+### 4. Proportional Context Allocation (SOTA)
+
+**Problem:** When retrieving many studies, earlier studies consumed all context budget, causing later studies to be completely dropped from both context and citations.
+
+**Solution:** Each study gets a proportional share of the context budget.
+
+```python
+# src/retrieval/context_builder.py
+num_studies = len(by_study)
+overhead_per_study = 200  # Headers, separators
+available_for_content = max_context_length - (overhead_per_study * num_studies)
+chars_per_study = max(500, available_for_content // num_studies)
+
+# Each study's content is truncated at sentence boundaries
+combined_text = self._truncate_study_content(combined_text, chars_per_study)
+```
+
+**Configuration:**
+- `max_context_length`: 16,000 chars (increased from 8,000)
+- Minimum 500 chars per study
+- Intelligent truncation at sentence boundaries
+
+**Impact:** All retrieved studies are represented and cited, even with `max_studies=20`.
+
+**Example:**
+- With 10 studies: each gets ~1,400 chars
+- With 20 studies: each gets ~700 chars
+- Studies are never completely dropped
 
 ---
 
