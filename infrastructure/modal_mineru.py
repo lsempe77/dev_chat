@@ -111,13 +111,17 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
     """
     Check if a PDF is already indexed in Qdrant.
     
+    IMPORTANT: Handles both formats:
+    - pdf_name WITHOUT extension (from Path.stem): "033d4e4c_121058373"
+    - pdf_name WITH extension (as stored in Qdrant): "033d4e4c_121058373.pdf"
+    
     Returns:
         (is_indexed, chunk_count, error_message)
         - error_message is None if check succeeded, otherwise contains error details
     """
     import os
     from qdrant_client import QdrantClient
-    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
     
     try:
         qdrant = QdrantClient(
@@ -131,14 +135,26 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
         except Exception:
             return False, 0, None  # Collection doesn't exist, not an error
         
-        # Try to count with filter - this requires payload index
+        # Build list of names to check (with and without .pdf extension)
+        names_to_check = [pdf_name]
+        if pdf_name.endswith(".pdf"):
+            names_to_check.append(pdf_name[:-4])  # Also check without extension
+        else:
+            names_to_check.append(pdf_name + ".pdf")  # Also check with extension
+        
+        # Try to count with filter - check BOTH formats
         try:
             result = qdrant.count(
                 collection_name="devchat_v2",
                 count_filter=Filter(
-                    must=[FieldCondition(key="pdf_name", match=MatchValue(value=pdf_name))]
+                    should=[
+                        FieldCondition(key="pdf_name", match=MatchValue(value=name))
+                        for name in names_to_check
+                    ]
                 ),
             )
+            if result.count > 0:
+                print(f"    ✓ Found {result.count} chunks for {pdf_name}")
             return result.count > 0, result.count, None
         except Exception as filter_error:
             # If filter fails (no index), fall back to scroll search
@@ -151,9 +167,9 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
                     limit=100,
                     with_payload=["pdf_name"],
                 )
-                # Handle both tuple formats: (records, next_offset) or (records, next_offset, ...)
                 results = scroll_result[0] if isinstance(scroll_result, tuple) else scroll_result
-                count = sum(1 for r in results if r.payload.get("pdf_name") == pdf_name)
+                # Check against all name variants
+                count = sum(1 for r in results if r.payload.get("pdf_name") in names_to_check)
                 return count > 0, count, None
             raise
             
@@ -348,6 +364,46 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
         dict with counts of queued, skipped, and failed PDFs
     """
     import boto3
+    from collections import Counter
+    
+    # ==========================================================================
+    # SAFETY CHECK: Detect if Qdrant already has excessive duplicates
+    # ==========================================================================
+    print("Running Qdrant duplication safety check...")
+    try:
+        from qdrant_client import QdrantClient
+        import os
+        qdrant = QdrantClient(
+            url=os.environ["QDRANT_URL"],
+            api_key=os.environ["QDRANT_API_KEY"],
+        )
+        
+        # Sample 2000 points and check for duplicates
+        doc_counts = Counter()
+        offset = None
+        sample_count = 0
+        while sample_count < 2000:
+            pts, offset = qdrant.scroll(
+                "devchat_v2", limit=500, offset=offset, with_payload=["doc_id"]
+            )
+            for p in pts:
+                doc_counts[p.payload.get("doc_id")] += 1
+            sample_count += len(pts)
+            if offset is None:
+                break
+        
+        if doc_counts:
+            max_dup = max(doc_counts.values())
+            worst_doc = max(doc_counts, key=doc_counts.get)
+            if max_dup > 10:
+                print(f"⚠️ WARNING: Detected high duplication! {worst_doc} has {max_dup} copies")
+                print("  Run deduplication before processing more documents!")
+                # Don't abort - just warn. User may want to add new docs.
+            else:
+                print(f"  ✓ Duplication check passed (max {max_dup}x)")
+    except Exception as e:
+        print(f"  Note: Could not run duplication check: {e}")
+    # ==========================================================================
     
     s3 = get_r2_client()
     bucket = get_bucket_name()
@@ -1031,6 +1087,20 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
     if not chunks:
         return 0
     
+    # Delete existing chunks for this document before adding new ones
+    # This prevents duplicates if re-processing with different chunking
+    try:
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        qdrant.delete(
+            collection_name=collection_name,
+            points_selector=Filter(
+                must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
+            ),
+        )
+        print(f"  Cleared existing chunks for doc_id={doc_id}")
+    except Exception as e:
+        print(f"  Note: Could not clear existing chunks: {e}")
+    
     # Generate embeddings in batches
     batch_size = 96
     points = []
@@ -1048,8 +1118,10 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
         embeddings = response.embeddings.float_
         
         for j, (chunk, embedding) in enumerate(zip(batch, embeddings)):
-            point_id = str(uuid.uuid4())
             chunk_idx = i + j
+            # Use deterministic point ID based on doc_id and chunk_index
+            # This ensures upsert properly deduplicates on re-runs
+            point_id = hashlib.md5(f"{doc_id}:{chunk_idx}".encode()).hexdigest()
             
             # Get page info if available
             page_info = {}
@@ -1758,6 +1830,16 @@ def trigger_processing(request: dict = None) -> dict:
     force_reprocess = request.get("force_reprocess", False)
     check_qdrant = request.get("check_qdrant", True)
     max_documents = request.get("max_documents", 10)
+    dry_run = request.get("dry_run", False)  # Safety: preview what would be processed
+    
+    # SAFETY: force_reprocess requires explicit confirmation
+    if force_reprocess and not request.get("confirm_force", False):
+        return {
+            "success": False,
+            "error": "force_reprocess=true requires confirm_force=true to prevent accidental reprocessing",
+            "queued": 0,
+            "hint": "Add 'confirm_force': true to your request if you really want to reprocess everything"
+        }
     
     # Optional API key validation
     expected_key = os.environ.get("TRIGGER_API_KEY")

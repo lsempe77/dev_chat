@@ -366,7 +366,7 @@ class ContextBuilder:
                     page_start = min(all_pages)
                     page_end = max(all_pages)
             
-            # Add citation
+            # Add citation with full text for evaluation
             citations.append({
                 "study_id": study_id,
                 "title": title,
@@ -377,6 +377,7 @@ class ContextBuilder:
                 "url": meta.get("url"),
                 "doi": meta.get("doi"),
                 "snippet": best_snippet,
+                "full_text": combined_text,  # Full text for NLI evaluation
                 "score": chunks[0].score if chunks else 0.0,
                 "page_start": page_start,
                 "page_end": page_end,

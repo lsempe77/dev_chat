@@ -52,20 +52,32 @@ export function UploadTab() {
     e.preventDefault();
     setIsDragging(false);
     
+    // ONLY accept PDFs - the processing pipeline (MinerU) only handles PDFs
     const droppedFiles = Array.from(e.dataTransfer.files).filter(
-      file => file.type === "application/pdf" || 
-              file.name.endsWith(".pdf") ||
-              file.name.endsWith(".docx") ||
-              file.name.endsWith(".txt") ||
-              file.name.endsWith(".md")
+      file => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
     );
+    
+    // Warn about rejected files
+    const rejectedCount = e.dataTransfer.files.length - droppedFiles.length;
+    if (rejectedCount > 0) {
+      alert(`${rejectedCount} file(s) rejected. Only PDF files are supported. Please convert other formats to PDF first.`);
+    }
     
     addFiles(droppedFiles);
   }, []);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      addFiles(Array.from(e.target.files));
+      const allFiles = Array.from(e.target.files);
+      // Filter to only PDFs (for folder upload which may include non-PDFs)
+      const pdfFiles = allFiles.filter(
+        file => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+      );
+      const skippedCount = allFiles.length - pdfFiles.length;
+      if (skippedCount > 0) {
+        alert(`${skippedCount} non-PDF file(s) were skipped. Only PDF files are supported.`);
+      }
+      addFiles(pdfFiles);
     }
   }, []);
 
@@ -181,7 +193,7 @@ export function UploadTab() {
           >
             <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
             <p className="text-sm text-muted-foreground mb-2">
-              Drop PDF, DOCX, TXT, or MD files here
+              Drop PDF files here (only PDFs accepted)
             </p>
             <p className="text-xs text-muted-foreground mb-4">
               or
@@ -190,7 +202,7 @@ export function UploadTab() {
               type="file"
               id="file-upload"
               multiple
-              accept=".pdf,.docx,.txt,.md"
+              accept=".pdf,application/pdf"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -206,10 +218,24 @@ export function UploadTab() {
 
           {/* Quick Actions */}
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="flex-1" disabled>
-              <Folder className="h-4 w-4 mr-2" />
-              Select Folder
-            </Button>
+            <input
+              type="file"
+              id="folder-upload"
+              // @ts-expect-error webkitdirectory is not in React types but widely supported
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <label htmlFor="folder-upload" className="flex-1">
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <span className="cursor-pointer">
+                  <Folder className="h-4 w-4 mr-2" />
+                  Select Folder
+                </span>
+              </Button>
+            </label>
             <Button variant="outline" size="sm" className="flex-1" disabled>
               <Cloud className="h-4 w-4 mr-2" />
               From SharePoint

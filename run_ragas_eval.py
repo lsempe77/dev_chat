@@ -10,11 +10,15 @@ async def run_full_eval():
     # Load test cases
     with open('evaluation/test_cases.json', 'r') as f:
         data = json.load(f)
-    test_cases = data['test_cases'][:5]  # First 5 for now
+    test_cases = data['test_cases']  # All 8 graduation-focused cases
     
     agent = DevChatAgent()
     
-    print('Running RAGAS evaluation on 5 test cases...\n')
+    print(f'Running RAGAS evaluation on {len(test_cases)} test cases...\n')
+    for i, tc in enumerate(test_cases):
+        print(f"  [{i+1}] {tc['id']}: {tc['question'][:50]}...")
+    print()
+    
     results = await run_evaluation_batch(test_cases, agent)
     
     report = generate_report(results)

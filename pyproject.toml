@@ -29,6 +29,12 @@ devchat = "cli:main"
 cli = [
     "typer[all]>=0.9.0",
 ]
+eval = [
+    "minicheck @ git+https://github.com/Liyan06/MiniCheck.git@main",
+]
+eval-gpu = [
+    "minicheck[llm] @ git+https://github.com/Liyan06/MiniCheck.git@main",
+]
 
 [build-system]
 requires = ["setuptools>=75.0", "wheel"]

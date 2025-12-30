@@ -18,6 +18,7 @@ from src.generation.citations import add_citations_to_answer, ensure_citation_co
 from src.generation.router import ModelRouter
 from src.generation.synthesizer import StreamingSynthesizer, Synthesizer, SynthesisResult
 from src.generation.structured_synthesizer import StructuredSynthesizer
+from src.generation.claim_ledger import ClaimLedgerSynthesizer
 from src.retrieval.context_builder import ContextBuilder, FormattedContext
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.query_processor import QueryClassification, QueryProcessor
@@ -38,6 +39,7 @@ class SearchSettings:
     min_confidence: str = "all"
     year_cutoff: int = 2010
     use_structured_citations: bool = True  # Use two-pass structured synthesizer for better citations
+    use_claim_ledger: bool = True  # Use claim ledger (ALCE-style) for verified citations
     
     @classmethod
     def from_dict(cls, data: Optional[Dict[str, Any]]) -> "SearchSettings":
@@ -52,6 +54,7 @@ class SearchSettings:
             min_confidence=data.get("minConfidence", "all"),
             year_cutoff=data.get("yearCutoff", 2010),
             use_structured_citations=data.get("useStructuredCitations", True),
+            use_claim_ledger=data.get("useClaimLedger", True),
         )
 
 
@@ -160,6 +163,7 @@ class DevChatAgent:
                 "answer_style": user_settings.answer_style,
                 "use_reranking": user_settings.use_reranking,
                 "use_structured_citations": user_settings.use_structured_citations,
+                "use_claim_ledger": user_settings.use_claim_ledger,
             }
             cached_response = await cache.get(query, settings_dict=settings_dict)
             if cached_response:
@@ -278,10 +282,24 @@ class DevChatAgent:
             f"{context.num_studies} studies, {len(context.text)} chars"
         )
         
-        # Step 5: Synthesis - choose between structured or standard
+        # Step 5: Synthesis - choose between claim ledger, structured, or standard
         synthesis_start = time.time()
         
-        if user_settings.use_structured_citations:
+        if user_settings.use_claim_ledger and user_settings.use_structured_citations:
+            # ALCE-style claim ledger for highest citation accuracy
+            logger.info("Using claim ledger synthesizer (ALCE-style verified citations)")
+            claim_ledger_synth = ClaimLedgerSynthesizer()
+            answer, claim_ledger = await claim_ledger_synth.synthesize(
+                query=processed_query,
+                context=context,
+            )
+            sources_with_claims = claim_ledger.get_sources_with_claims()
+            logger.info(
+                f"Claim ledger: {len(claim_ledger.claims)} claims from "
+                f"{len(sources_with_claims)}/{context.num_studies} sources"
+            )
+            model_used = "claim-ledger/gpt-4o-mini"
+        elif user_settings.use_structured_citations:
             # Two-pass structured synthesis for better citation accuracy
             logger.info("Using structured synthesizer (two-pass citation mapping)")
             structured_synth = StructuredSynthesizer()

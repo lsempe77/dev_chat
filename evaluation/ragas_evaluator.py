@@ -388,25 +388,30 @@ async def run_evaluation_batch(
     
     for i, case in enumerate(test_cases):
         query = case.get('question', case.get('query', ''))
-        logger.info(f"Evaluating {i+1}/{len(test_cases)}: {query[:50]}...")
+        print(f"\n[{i+1}/{len(test_cases)}] Processing: {query[:60]}...")
         
         try:
             # Get agent response
+            print("  → Calling agent.chat()...")
             response = await agent.chat(query)
+            print(f"  → Got response with {len(response.citations)} citations")
             
             # Extract contexts from citations
             contexts = [c.get('snippet', c.get('text', '')) for c in response.citations]
             
             # Run evaluation
+            print("  → Running RAGAS metrics...")
             result = await evaluator.evaluate(
                 query=query,
                 answer=response.answer,
                 contexts=contexts,
                 citations=response.citations,
             )
+            print(f"  ✓ Overall score: {result.overall_score():.3f}")
             results.append(result)
             
         except Exception as e:
+            print(f"  ✗ Error: {e}")
             logger.error(f"Test case {i+1} failed: {e}")
             results.append(EvaluationResult(
                 query=query,

@@ -92,12 +92,15 @@ async def upload_document(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     
-    allowed_extensions = {".pdf", ".docx", ".doc", ".txt", ".md"}
+    # STRICT: Only PDFs are processed by the Modal pipeline
+    # Non-PDF files would be uploaded but never processed, causing confusion
     file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in allowed_extensions:
+    if file_ext != ".pdf":
         raise HTTPException(
             status_code=400,
-            detail=f"File type {file_ext} not allowed. Allowed: {allowed_extensions}"
+            detail=f"Only PDF files are supported. Got: {file_ext}. "
+                   f"The processing pipeline (MinerU) only handles PDFs. "
+                   f"Convert your document to PDF first."
         )
     
     try:

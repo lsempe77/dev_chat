@@ -1,66 +1,54 @@
 {
-  "description": "Golden test cases for DevChat evaluation",
-  "version": "1.0",
+  "description": "Golden test cases for DevChat evaluation - Graduation Programs focus",
+  "version": "1.1",
   "test_cases": [
     {
-      "id": "simple_1",
-      "question": "What is a conditional cash transfer?",
+      "id": "graduation_1",
+      "question": "What is the graduation approach to poverty reduction?",
       "category": "simple",
-      "expected_answer": "A conditional cash transfer (CCT) is a social welfare program that provides cash payments to recipients contingent on them meeting certain conditions, typically related to education (school attendance) or health (vaccination, medical checkups)."
+      "expected_answer": "The graduation approach is a comprehensive poverty reduction program that combines multiple interventions - including asset transfers, skills training, savings support, and coaching - to help ultra-poor households build sustainable livelihoods and 'graduate' out of extreme poverty."
     },
     {
-      "id": "simple_2",
-      "question": "What is an RCT?",
+      "id": "graduation_2",
+      "question": "What are the key components of a graduation program?",
       "category": "simple",
-      "expected_answer": "A randomized controlled trial (RCT) is a research design where participants are randomly assigned to treatment or control groups to evaluate the causal effect of an intervention."
+      "expected_answer": "Key components typically include: asset transfer (livestock, equipment), skills training, consumption support or stipend, savings facilitation, health support, and regular coaching or mentoring visits."
     },
     {
-      "id": "lookup_1",
-      "question": "Find studies on school meals programs in Africa",
+      "id": "evidence_1",
+      "question": "What is the evidence on graduation programs from Bangladesh?",
       "category": "lookup",
-      "expected_topics": ["school feeding", "education outcomes", "nutrition", "attendance"]
+      "expected_topics": ["BRAC", "TUP", "ultra-poor", "asset transfer", "Bangladesh"]
     },
     {
-      "id": "lookup_2",
-      "question": "List systematic reviews on microfinance",
+      "id": "evidence_2",
+      "question": "Find studies on graduation programs in Africa",
       "category": "lookup",
-      "expected_topics": ["microfinance", "microcredit", "poverty", "income"]
+      "expected_topics": ["Africa", "graduation", "poverty", "ultra-poor", "livelihoods"]
     },
     {
       "id": "synthesis_1",
-      "question": "What do studies say about the effects of cash transfers on education outcomes?",
+      "question": "What do studies say about the long-term effects of graduation programs?",
       "category": "synthesis",
-      "expected_topics": ["enrollment", "attendance", "learning outcomes", "dropout rates"]
+      "expected_topics": ["sustainability", "long-term", "income", "assets", "consumption"]
     },
     {
       "id": "synthesis_2",
-      "question": "Summarize the evidence on deworming programs",
+      "question": "Summarize the evidence on targeting the ultra-poor",
       "category": "synthesis",
-      "expected_topics": ["health", "education", "cognition", "school attendance", "worm infections"]
+      "expected_topics": ["targeting", "ultra-poor", "extreme poverty", "selection", "eligibility"]
     },
     {
       "id": "comparison_1",
-      "question": "Compare conditional vs unconditional cash transfers for education",
+      "question": "How do graduation programs compare to cash transfers alone?",
       "category": "comparison",
-      "expected_topics": ["CCT", "UCT", "conditions", "enrollment", "cost-effectiveness"]
+      "expected_topics": ["graduation", "cash transfer", "multi-faceted", "cost-effectiveness"]
     },
     {
       "id": "comparison_2",
-      "question": "How do the effects of education interventions differ between boys and girls?",
+      "question": "What are the effects of graduation programs on women vs men?",
       "category": "comparison",
-      "expected_topics": ["gender", "girls education", "enrollment", "heterogeneous effects"]
-    },
-    {
-      "id": "methodology_1",
-      "question": "What methods are commonly used to evaluate education programs?",
-      "category": "methodology",
-      "expected_topics": ["RCT", "quasi-experimental", "difference-in-differences", "regression discontinuity"]
-    },
-    {
-      "id": "complex_1",
-      "question": "What is the evidence on long-term effects of early childhood interventions in low-income countries?",
-      "category": "synthesis",
-      "expected_topics": ["early childhood", "long-term", "cognitive development", "economic returns"]
+      "expected_topics": ["gender", "women", "empowerment", "outcomes", "differential effects"]
     }
   ]
 }

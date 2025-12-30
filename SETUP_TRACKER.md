@@ -91,15 +91,15 @@ Branch: main
 
 ### P2 - Future (Citation Quality Improvements)
 
-| Task | Description |
-|------|-------------|
-| **Source-to-Claim Ledger** | Two-step LLM: first create claim→source map, then write answer. Dramatically improves citation recall. |
-| **Structured Answer Sections** | Force sections like "Consensus", "Disagreements", "Methods caveats" - gives LLM places to cite more sources |
-| **Diversity Boosting Retrieval** | Cluster/dedup + rank by "novel contribution" not just similarity. Fewer, more distinct items → higher usage |
-| **PDF Text Highlighting** | Currently uses browser's #search= (Chrome/Edge only). Could implement custom PDF viewer with highlight overlay |
-| **Config-driven Branding** | Logo, colors, name via env vars |
-| **Collection Isolation** | Per-team Qdrant collections |
-| **OAuth** | Smart signin |
+| Task | Description | Status |
+|------|-------------|--------|
+| **Source-to-Claim Ledger** | Two-step LLM: first create claim→source map with exact quotes, then write answer using ONLY verified claims. ALCE-style. | ✅ Done |
+| **Structured Answer Sections** | Force sections like "Consensus", "Disagreements", "Methods caveats" - gives LLM places to cite more sources | ⬜ TODO |
+| **Diversity Boosting Retrieval** | Cluster/dedup + rank by "novel contribution" not just similarity. Fewer, more distinct items → higher usage | ⬜ TODO |
+| **PDF Text Highlighting** | Currently uses browser's #search= (Chrome/Edge only). Could implement custom PDF viewer with highlight overlay | ⬜ TODO |
+| **Config-driven Branding** | Logo, colors, name via env vars | ⬜ TODO |
+| **Collection Isolation** | Per-team Qdrant collections | ⬜ TODO |
+| **Google OAuth authentication with tier sync** | see other folder where i've developed already evidence_synthesis_LLM_newsletter | ⬜ TODO |
 
 
 ### 🐛 Known Test Failures (For Review)
@@ -647,6 +647,10 @@ for r in results.points:
 | Dec 18 | Citations showing "Unknown Author" | Fixed metadata extraction pipeline |
 | Dec 18 | Qdrant named vector error | Updated to `vectors={"dense": ...}` |
 | Dec 18 | Payload index missing | Created index on `pdf_name` field |
+| Dec 30 | **Qdrant massive duplication** | 9,959 duplicates removed; Modal now uses deterministic point IDs |
+| Dec 30 | Search returning 1 doc only | Root cause: duplicates inflated single doc; fixed by deduplication |
+| Dec 30 | Evaluation snippet vs full_text | Fixed `_build_passage_lookup()` to prioritize full_text |
+| Dec 30 | **Process Missing button re-indexed ALL** | 🚨 **CRITICAL** - `check_qdrant_indexed()` searched for `pdf_name` WITHOUT `.pdf` extension but Qdrant stores WITH `.pdf`. Fixed to check BOTH formats. Added duplication detection safeguard. |
 
 ---
 
@@ -764,10 +768,21 @@ Options for user isolation:
 - Payload filtering by tenant_id
 - Separate collections (enterprise)
 
-### Evaluation Metrics (RAGAS)
-- **Faithfulness:** Answer uses only retrieved context
-- **Answer Relevancy:** Answer addresses the question
-- **Context Precision:** Retrieved chunks are relevant
+### Evaluation Metrics (MiniCheck Dual-Lane - Dec 30, 2025)
+
+**Current Performance (after Qdrant deduplication fix):**
+
+| Metric | Score | Benchmark | Status |
+|--------|-------|-----------|--------|
+| **Faithfulness** | 0.455 | 0.70-0.80 | 🟡 Gap |
+| **Citation Recall** | 0.868 | 0.45-0.55 | ✅ **+58% above SOTA** |
+| **Citation Precision** | 0.869 | 0.55-0.65 | ✅ **+34% above SOTA** |
+| **Citation Coverage** | 1.000 | - | ✅ Perfect |
+
+**Key Fixes Applied:**
+1. **Qdrant Deduplication** - Removed 9,959 duplicate chunks (15,489 → 5,530)
+2. **Deterministic Point IDs** - Modal now uses MD5(doc_id:chunk_idx) instead of random UUIDs
+3. **Full-text Evaluation** - Evaluator uses 8K+ char full_text instead of 300 char snippets
 
 ---
 
