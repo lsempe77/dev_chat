@@ -61,7 +61,10 @@ while True:
     total_chunks += len(points)
     for p in points:
         study_ids.add(p.payload.get("study_id", "unknown"))
-        pdf_names_in_qdrant.add(p.payload.get("pdf_name", "unknown"))
+        name = p.payload.get("pdf_name", "unknown")
+        if name.endswith(".pdf"):
+            name = name[:-4]
+        pdf_names_in_qdrant.add(name)
     if offset is None:
         break
 

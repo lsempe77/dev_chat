@@ -102,6 +102,33 @@ def get_bucket_name():
     return os.environ.get("R2_BUCKET_NAME", "devchat-pdfs")
 
 
+def sanitize_text(text: str) -> str:
+    """
+    Remove invalid UTF-8 characters (surrogates) from text.
+    
+    Some PDFs contain malformed Unicode that causes:
+    'utf-8' codec can't encode characters: surrogates not allowed
+    
+    This function removes those problematic characters.
+    """
+    if not isinstance(text, str):
+        return text
+    # Encode to UTF-8, replacing errors, then decode back
+    return text.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace")
+
+
+def sanitize_dict(obj):
+    """Recursively sanitize all strings in a dict/list structure."""
+    if isinstance(obj, str):
+        return sanitize_text(obj)
+    elif isinstance(obj, dict):
+        return {k: sanitize_dict(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_dict(item) for item in obj]
+    else:
+        return obj
+
+
 def compute_content_hash(content: bytes) -> str:
     """Compute MD5 hash of content for change detection."""
     return hashlib.md5(content).hexdigest()[:16]
@@ -708,6 +735,16 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             
             print(f"  Extracted: {len(result['content'])} chars, {len(result['tables'])} tables")
             
+            # Sanitize content to remove invalid Unicode characters (surrogates)
+            # that can cause UTF-8 encoding errors
+            result["content"] = sanitize_text(result["content"])
+            result["tables"] = sanitize_dict(result["tables"])
+            result["formulas"] = sanitize_dict(result["formulas"])
+            if result.get("title"):
+                result["title"] = sanitize_text(result["title"])
+            if result.get("abstract"):
+                result["abstract"] = sanitize_text(result["abstract"])
+            
             # Upload outputs to R2 (only for new extractions)
             # Use doc_id consistently for output paths
             md_key = f"outputs/md/{doc_id}.md"
@@ -1086,6 +1123,10 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
     
     if not chunks:
         return 0
+    
+    # Sanitize chunks to remove invalid Unicode characters (surrogates)
+    # that can cause UTF-8 encoding errors with Cohere API
+    chunks = [sanitize_text(chunk) for chunk in chunks]
     
     # Delete existing chunks for this document before adding new ones
     # This prevents duplicates if re-processing with different chunking

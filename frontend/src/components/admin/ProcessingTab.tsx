@@ -13,11 +13,13 @@ import {
   Clock,
   Loader2,
   FileText,
-  RotateCw
+  RotateCw,
+  Unlock
 } from "lucide-react";
 import { 
   getProcessingJobs, 
   triggerProcessing,
+  clearProcessingLocks,
   type ProcessingJob as APIProcessingJob 
 } from "@/lib/admin-api";
 import { useAdminContext, ProcessingJob } from "./AdminContext";
@@ -28,9 +30,10 @@ export function ProcessingTab() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
+  const [isClearingLocks, setIsClearingLocks] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const PROCESSING_STALE_MS = 30 * 60 * 1000; // After 30 minutes, allow re-trigger even if queued remains
+  const PROCESSING_STALE_MS = 10 * 60 * 1000; // After 10 minutes, allow re-trigger even if queued remains
 
   // Check if processing is likely still running (triggered within last 10 min and jobs still queued)
   const isProcessingInModal = !!(lastTriggeredAt && queuedCount > 0);
@@ -136,6 +139,25 @@ export function ProcessingTab() {
       setError(err instanceof Error ? err.message : "Failed to trigger processing");
     } finally {
       setIsTriggering(false);
+    }
+  };
+
+  const handleClearLocks = async () => {
+    setIsClearingLocks(true);
+    setError(null);
+    
+    try {
+      const response = await clearProcessingLocks();
+      setProcessingState(prev => ({
+        ...prev,
+        triggerMessage: response.message,
+      }));
+      // Refresh jobs after clearing locks
+      await refreshJobs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear locks");
+    } finally {
+      setIsClearingLocks(false);
     }
   };
 
@@ -268,6 +290,25 @@ export function ProcessingTab() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleClearLocks}
+                disabled={isClearingLocks}
+                title="Clear stale processing locks. Use this if PDFs are stuck and won't process."
+              >
+                {isClearingLocks ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <span>Clearing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Unlock className="h-4 w-4 mr-2" />
+                    <span>Clear Locks</span>
+                  </>
+                )}
+              </Button>
               <Button
                 size="sm"
                 onClick={startBatchProcessing}

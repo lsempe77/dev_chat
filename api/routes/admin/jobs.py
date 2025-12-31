@@ -23,6 +23,7 @@ from ..dependencies import (
     trigger_modal_processing,
     is_postgres_available,
     get_db_session,
+    invalidate_admin_caches,
 )
 
 logger = get_logger(__name__)
@@ -253,3 +254,75 @@ async def resume_processing():
     except Exception as e:
         logger.error(f"Failed to resume processing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/jobs/clear-locks")
+async def clear_processing_locks():
+    """
+    Clear all stale processing locks from R2.
+    
+    Lock files are created when Modal starts processing a PDF and should be
+    deleted when processing completes or fails. If Modal times out or crashes,
+    locks can become stale and block future retries.
+    
+    Returns:
+        {
+            "success": true,
+            "cleared": 5,
+            "message": "Cleared 5 stale locks"
+        }
+    """
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # List all locks
+        locks = []
+        continuation_token = None
+        
+        while True:
+            kwargs = {"Bucket": bucket_name, "Prefix": "locks/"}
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+            
+            resp = r2_client.list_objects_v2(**kwargs)
+            
+            if "Contents" in resp:
+                locks.extend([obj["Key"] for obj in resp["Contents"]])
+            
+            if resp.get("IsTruncated"):
+                continuation_token = resp.get("NextContinuationToken")
+            else:
+                break
+        
+        # Delete all locks
+        for lock_key in locks:
+            try:
+                r2_client.delete_object(Bucket=bucket_name, Key=lock_key)
+            except Exception as e:
+                logger.warning(f"Failed to delete lock {lock_key}: {e}")
+        
+        logger.info(f"Cleared {len(locks)} processing locks")
+        return {
+            "success": True,
+            "cleared": len(locks),
+            "message": f"Cleared {len(locks)} stale locks" if locks else "No locks to clear",
+        }
+    except Exception as e:
+        logger.error(f"Failed to clear locks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/jobs/refresh-cache")
+async def refresh_admin_cache():
+    """
+    Invalidate all admin caches to force fresh data on next request.
+    
+    Use this after Modal processing completes to see updated document counts.
+    """
+    invalidate_admin_caches()
+    logger.info("Admin caches invalidated")
+    return {
+        "success": True,
+        "message": "Caches invalidated. Refresh to see updated data.",
+    }

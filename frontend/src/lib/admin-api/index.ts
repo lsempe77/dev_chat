@@ -116,6 +116,27 @@ export async function triggerProcessing(
   return response.json();
 }
 
+/**
+ * Clear stale processing locks from R2
+ * Locks can become stale if Modal times out or crashes
+ */
+export async function clearProcessingLocks(): Promise<{
+  success: boolean;
+  cleared: number;
+  message: string;
+}> {
+  const response = await fetch(`${API_BASE_URL}/admin/jobs/clear-locks`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || `Clear locks failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 // =============================================================================
 // Document Management
 // =============================================================================

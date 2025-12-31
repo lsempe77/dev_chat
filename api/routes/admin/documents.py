@@ -487,3 +487,93 @@ async def sync_document(request: DocumentSyncRequest):
             message=str(e)
         )
 
+
+@router.post("/documents/cleanup-orphans")
+async def cleanup_orphan_documents():
+    """
+    Remove documents from PostgreSQL that don't exist in Qdrant.
+    
+    This fixes discrepancies where documents were deleted from Qdrant
+    but not from PostgreSQL.
+    """
+    from ..dependencies import is_postgres_available, get_db_session
+    
+    if not is_postgres_available():
+        return {"success": False, "message": "PostgreSQL not available", "deleted": 0}
+    
+    try:
+        # Get all doc_ids from Qdrant
+        indexer = get_indexer()
+        qdrant_doc_ids = set()
+        offset = None
+        
+        while True:
+            results, offset = indexer.client.scroll(
+                collection_name=indexer.collection_name,
+                limit=500,
+                offset=offset,
+                with_payload=["doc_id"],
+                with_vectors=False,
+            )
+            for point in results:
+                doc_id = point.payload.get("doc_id")
+                if doc_id:
+                    qdrant_doc_ids.add(doc_id)
+            if offset is None or len(results) == 0:
+                break
+        
+        logger.info(f"Found {len(qdrant_doc_ids)} documents in Qdrant")
+        
+        # Get all doc_ids from PostgreSQL
+        db = await get_db_session()
+        if not db:
+            return {"success": False, "message": "Could not get DB session", "deleted": 0}
+        
+        async with db:
+            from src.database.repository import DocumentRepository
+            from sqlalchemy import text
+            
+            # Get all IDs from Postgres
+            result = await db.execute(text("SELECT id FROM documents"))
+            postgres_ids = set(row[0] for row in result.fetchall())
+            
+            logger.info(f"Found {len(postgres_ids)} documents in PostgreSQL")
+            
+            # Find orphans (in Postgres but not in Qdrant)
+            orphans = postgres_ids - qdrant_doc_ids
+            
+            if not orphans:
+                return {
+                    "success": True,
+                    "message": "No orphan documents found",
+                    "deleted": 0,
+                    "postgres_count": len(postgres_ids),
+                    "qdrant_count": len(qdrant_doc_ids),
+                }
+            
+            # Delete orphans
+            for orphan_id in orphans:
+                await db.execute(
+                    text("DELETE FROM documents WHERE id = :id"),
+                    {"id": orphan_id}
+                )
+                logger.info(f"Deleted orphan document: {orphan_id}")
+            
+            await db.commit()
+            
+            # Invalidate caches
+            invalidate_admin_caches()
+            
+            return {
+                "success": True,
+                "message": f"Deleted {len(orphans)} orphan documents",
+                "deleted": len(orphans),
+                "deleted_ids": list(orphans),
+                "postgres_count": len(postgres_ids) - len(orphans),
+                "qdrant_count": len(qdrant_doc_ids),
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to cleanup orphans: {e}")
+        return {"success": False, "message": str(e), "deleted": 0}
+
