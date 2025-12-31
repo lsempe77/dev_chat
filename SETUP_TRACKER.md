@@ -89,14 +89,30 @@ Branch: main
 | **Teams architecture** | Role-based team access; Frontend and backend | ⬜ TODO |
 
 
-### P2 - Future (Citation Quality Improvements)
+### P2 - Citation Quality Improvements (See `CITATION_IMPROVEMENT_PLAN.md`)
+
+**Current Metrics (After Deduplication Fix v4):**
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| Faithfulness | 0.455 | 0.70+ | ❌ Gap |
+| Citation Recall | 0.868 | 0.70 | ✅ Exceeds ALCE |
+| Citation Precision | 0.869 | 0.70 | ✅ Exceeds ALCE |
 
 | Task | Description | Status |
 |------|-------------|--------|
-| **Source-to-Claim Ledger** | Two-step LLM: first create claim→source map with exact quotes, then write answer using ONLY verified claims. ALCE-style. | ✅ Done |
-| **Structured Answer Sections** | Force sections like "Consensus", "Disagreements", "Methods caveats" - gives LLM places to cite more sources | ⬜ TODO |
-| **Diversity Boosting Retrieval** | Cluster/dedup + rank by "novel contribution" not just similarity. Fewer, more distinct items → higher usage | ⬜ TODO |
-| **PDF Text Highlighting** | Currently uses browser's #search= (Chrome/Edge only). Could implement custom PDF viewer with highlight overlay | ⬜ TODO |
+| **MiniCheck Dual-Lane Evaluator** | NLI-based faithfulness + ALCE-style citation metrics | ✅ Done |
+| **Source-to-Claim Ledger** | Two-step LLM: claim→source map with exact quotes | ✅ Done |
+| **Strict Grounding Prompts** | Constrain LLM to only quote/paraphrase sources (P0) | ⬜ TODO |
+| **Smart MinerU Post-Processing** | Section detection, table repair, OCR cleanup (P1) | ⬜ TODO |
+| **Structured Output (Instructor)** | Pydantic models + forced citation per claim (P1) | ⬜ TODO |
+| **Post-Hoc Verification** | MiniCheck verify-and-repair layer (P2) | ⬜ TODO |
+| **Contextual Retrieval** | Anthropic-style chunk context prefixes (P2) | ⬜ TODO |
+
+### P3 - Future (Platform Features)
+
+| Task | Description | Status |
+|------|-------------|--------|
+| **PDF Text Highlighting** | Custom PDF viewer with highlight overlay | ⬜ TODO |
 | **Config-driven Branding** | Logo, colors, name via env vars | ⬜ TODO |
 | **Collection Isolation** | Per-team Qdrant collections | ⬜ TODO |
 | **Google OAuth authentication with tier sync** | see other folder where i've developed already evidence_synthesis_LLM_newsletter | ⬜ TODO |

@@ -34,6 +34,7 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 - [x] **Settings Wiring** - Connect frontend settings panel to backend parameters ✅
 - [x] **Admin Metadata Review UI** - Edit & verify document metadata ✅
 - [x] **PostgreSQL Dual-Store** - Instant admin queries via dedicated metadata DB ✅
+- [x] **MiniCheck Citation Evaluator** - NLI-based faithfulness + ALCE-style citation metrics ✅
 
 ### Medium Priority  
 - [ ] **Admin Authentication** - Protect `/admin` routes with API key or OAuth
@@ -41,11 +42,22 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 - [ ] **Bulk Import** - RIS/BibTeX/CSV bibliography import with fuzzy matching
 - [ ] **Metadata Filters in Search** - Filter by country, sector, study type
 
+### Citation Quality (See `CITATION_IMPROVEMENT_PLAN.md`)
+
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| Faithfulness | 0.455 | 0.70+ | 🔄 In Progress |
+| Citation Recall | 0.868 | 0.70 | ✅ Exceeds ALCE |
+| Citation Precision | 0.869 | 0.70 | ✅ Exceeds ALCE |
+
+- [ ] **Strict Grounding Prompts** - Constrain LLM to quote/paraphrase sources (P0)
+- [ ] **Smart MinerU Post-Processing** - Section detection, table repair, OCR cleanup (P1)
+- [ ] **Structured Output (Instructor)** - Pydantic models + forced citation per claim (P1)
+
 ### Future Enhancements
 - [ ] **Zotero Integration** - OAuth sync with Zotero libraries
 - [ ] **Contextual Retrieval** - Add document context to chunks (Anthropic technique)
 - [ ] **RAPTOR Trees** - Hierarchical summarization for multi-hop reasoning
-- [ ] **RAGAS Evaluation** - Automated quality metrics in CI/CD
 
 ---
 
