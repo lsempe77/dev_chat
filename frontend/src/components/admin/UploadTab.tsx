@@ -69,15 +69,18 @@ export function UploadTab() {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const allFiles = Array.from(e.target.files);
-      // Filter to only PDFs (for folder upload which may include non-PDFs)
-      const pdfFiles = allFiles.filter(
-        file => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-      );
-      const skippedCount = allFiles.length - pdfFiles.length;
-      if (skippedCount > 0) {
-        alert(`${skippedCount} non-PDF file(s) were skipped. Only PDF files are supported.`);
-      }
-      addFiles(pdfFiles);
+      // Process async to avoid blocking UI with large folders
+      setTimeout(() => {
+        // Filter to only PDFs (for folder upload which may include non-PDFs)
+        const pdfFiles = allFiles.filter(
+          file => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+        );
+        const skippedCount = allFiles.length - pdfFiles.length;
+        if (skippedCount > 0) {
+          alert(`${skippedCount} non-PDF file(s) were skipped. Only PDF files are supported.`);
+        }
+        addFiles(pdfFiles);
+      }, 0);
     }
   }, []);
 
