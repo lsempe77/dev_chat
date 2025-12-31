@@ -21,6 +21,8 @@ from ..dependencies import (
     get_indexer,
     get_r2_client,
     trigger_modal_processing,
+    is_postgres_available,
+    get_db_session,
 )
 
 logger = get_logger(__name__)
@@ -62,16 +64,31 @@ async def get_processing_jobs():
                         "uploaded_at": obj.get("LastModified"),
                     }
         
-        # Get indexed doc_ids from Qdrant
+        # Get indexed doc_ids
         indexed_doc_ids = set()
         
-        # Optimization: Use cache if available
-        if documents_cache["data"] is not None:
+        # 1. Try PostgreSQL first (Fastest & Most Reliable)
+        if is_postgres_available():
+            try:
+                db = await get_db_session()
+                if db:
+                    async with db:
+                        from src.database.repository import DocumentRepository
+                        # Get all IDs (limit 10k to be safe)
+                        docs = await DocumentRepository.list_all(db, limit=10000)
+                        for doc in docs:
+                            indexed_doc_ids.add(doc.id)
+            except Exception as e:
+                logger.warning(f"PostgreSQL query failed in jobs check: {e}")
+
+        # 2. If no IDs found (or Postgres failed), try Cache
+        if not indexed_doc_ids and documents_cache["data"] is not None:
             # Extract IDs from cached response
             for doc in documents_cache["data"].documents:
                 indexed_doc_ids.add(doc.id)
-        else:
-            # Fallback: Scroll through to get unique doc_ids
+        
+        # 3. If still empty, Fallback: Scroll through to get unique doc_ids
+        if not indexed_doc_ids:
             try:
                 indexer = get_indexer()
                 next_offset = None
