@@ -479,12 +479,17 @@ async def list_project_documents(
         # Extract metadata from JSONB field
         metadata = d.get("metadata", {}) or {}
         
+        # Handle authors - can be string or list
+        authors = metadata.get("authors")
+        if isinstance(authors, list):
+            authors = ", ".join(authors) if authors else None
+        
         documents.append(DocumentResponse(
             id=str(d["id"]),
             filename=d["filename"],
             original_filename=d["original_filename"],
             title=metadata.get("title"),
-            authors=metadata.get("authors"),
+            authors=authors,
             year=metadata.get("year"),
             doi=metadata.get("doi"),
             status=d["status"],
