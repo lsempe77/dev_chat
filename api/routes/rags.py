@@ -1082,7 +1082,10 @@ async def enrich_document_metadata(
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> MetadataDetail:
     """
-    Enrich document metadata from CrossRef/OpenAlex using DOI.
+    Enrich document metadata from CrossRef/OpenAlex.
+    
+    If DOI is present, uses DOI lookup.
+    If no DOI, tries to extract DOI from filename or search by title.
     """
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
@@ -1095,36 +1098,90 @@ async def enrich_document_metadata(
     
     current_metadata = result.data.get("metadata", {}) or {}
     doi = current_metadata.get("doi")
+    original_filename = result.data.get("original_filename", "")
     
+    # Try to extract DOI from filename if not present
+    # Pattern: files often contain DOI-like strings like "10.xxxx_xxxxx" 
     if not doi:
-        raise HTTPException(status_code=400, detail="Document has no DOI for enrichment")
+        import re
+        # Look for DOI pattern in filename
+        doi_match = re.search(r'10\.\d{4,}/[^\s]+', original_filename.replace('_', '/'))
+        if doi_match:
+            doi = doi_match.group(0)
+            logger.info(f"Extracted DOI from filename: {doi}")
     
-    # Lookup in CrossRef
+    # Import metadata clients
     from src.ingestion.metadata.crossref_client import CrossRefClient
+    from src.ingestion.metadata.openalex_client import OpenAlexClient
+    
+    enriched = {**current_metadata}
+    source = None
     
     try:
-        crossref = CrossRefClient()
-        work = await crossref.get_by_doi(doi)
+        if doi:
+            # Try CrossRef first
+            crossref = CrossRefClient()
+            work = await crossref.get_by_doi(doi)
+            
+            if work:
+                enriched.update({
+                    "doi": doi,
+                    "title": work.title or enriched.get("title"),
+                    "authors": work.authors or enriched.get("authors", []),
+                    "year": work.year or enriched.get("year"),
+                    "journal": work.journal or enriched.get("journal"),
+                    "publisher": work.publisher or enriched.get("publisher"),
+                    "volume": work.volume or enriched.get("volume"),
+                    "issue": work.issue or enriched.get("issue"),
+                    "pages": work.pages or enriched.get("pages"),
+                    "item_type": work.type or enriched.get("item_type"),
+                })
+                source = "crossref"
+            
+            # Also try OpenAlex for additional data
+            openalex = OpenAlexClient()
+            oa_work = await openalex.get_by_doi(doi)
+            
+            if oa_work:
+                # OpenAlex often has better abstract, concepts, SDGs
+                if oa_work.abstract and not enriched.get("abstract"):
+                    enriched["abstract"] = oa_work.abstract
+                if oa_work.concepts:
+                    enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                if oa_work.is_open_access is not None:
+                    enriched["is_open_access"] = oa_work.is_open_access
+                if not source:
+                    source = "openalex"
         
-        if not work:
-            raise HTTPException(status_code=404, detail="DOI not found in CrossRef")
+        else:
+            # No DOI - try OpenAlex search by title from filename
+            openalex = OpenAlexClient()
+            # Clean up filename to get a searchable title
+            search_title = original_filename.replace('.pdf', '').replace('_', ' ')
+            # Remove common prefixes like hash
+            import re
+            search_title = re.sub(r'^[a-f0-9]{10,}_', '', search_title)
+            
+            works = await openalex.search(search_title, limit=1)
+            if works and len(works) > 0:
+                oa_work = works[0]
+                enriched.update({
+                    "title": oa_work.title or enriched.get("title"),
+                    "authors": oa_work.authors or enriched.get("authors", []),
+                    "year": oa_work.year or enriched.get("year"),
+                    "doi": oa_work.doi or enriched.get("doi"),
+                    "abstract": oa_work.abstract or enriched.get("abstract"),
+                })
+                if oa_work.concepts:
+                    enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                source = "openalex"
+            else:
+                raise HTTPException(status_code=404, detail="Could not find metadata. Try adding a DOI manually.")
         
-        # Update metadata with CrossRef data
-        enriched = {
-            **current_metadata,
-            "title": work.title or current_metadata.get("title"),
-            "authors": work.authors or current_metadata.get("authors", []),
-            "year": work.year or current_metadata.get("year"),
-            "journal": work.journal or current_metadata.get("journal"),
-            "publisher": work.publisher or current_metadata.get("publisher"),
-            "volume": work.volume or current_metadata.get("volume"),
-            "issue": work.issue or current_metadata.get("issue"),
-            "pages": work.pages or current_metadata.get("pages"),
-            "item_type": work.type or current_metadata.get("item_type"),
-            "metadata_source": "crossref",
-            "metadata_confidence": 0.95,
-            "needs_review": False,
-        }
+        if source:
+            enriched["metadata_source"] = source
+            enriched["metadata_confidence"] = 0.95 if doi else 0.7
+            enriched["needs_review"] = False
         
         # Update in Supabase
         client.table("documents").update({
@@ -1132,10 +1189,12 @@ async def enrich_document_metadata(
             "updated_at": datetime.utcnow().isoformat(),
         }).eq("id", doc_id).execute()
         
-        logger.info(f"Enriched doc {doc_id} from CrossRef")
+        logger.info(f"Enriched doc {doc_id} from {source}")
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"CrossRef enrichment failed: {e}")
+        logger.error(f"Enrichment failed: {e}")
         raise HTTPException(status_code=500, detail=f"Enrichment failed: {e}")
     
     return await get_document_metadata(project_id, doc_id, user)
@@ -1168,13 +1227,25 @@ async def get_document_pdf_url(
         r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
         
-        # The R2 key could be in different formats
-        # Try using the filename field or original_filename
-        possible_keys = [
+        # Try the stored r2_input_key first, then fallback to constructed paths
+        possible_keys = []
+        
+        # 1. Use stored R2 key if available
+        if doc.get("r2_input_key"):
+            possible_keys.append(doc["r2_input_key"])
+        
+        # 2. Multi-tenant path: rags/{project_id}/input-pdfs/{filename}.pdf
+        possible_keys.extend([
+            f"rags/{project_id}/input-pdfs/{doc['filename']}.pdf",
+            f"rags/{project_id}/input-pdfs/{doc['filename']}",
+        ])
+        
+        # 3. Legacy paths (for backwards compatibility)
+        possible_keys.extend([
             f"input-pdfs/{doc['filename']}",
             f"input-pdfs/{doc['original_filename']}",
             f"input-pdfs/{doc_id}.pdf",
-        ]
+        ])
         
         r2_key = None
         for key in possible_keys:
@@ -1186,6 +1257,7 @@ async def get_document_pdf_url(
                 continue
         
         if not r2_key:
+            logger.warning(f"PDF not found for doc {doc_id}. Tried keys: {possible_keys}")
             raise HTTPException(status_code=404, detail="PDF not found in storage")
         
         # Generate presigned URL (valid for 1 hour)
