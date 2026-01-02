@@ -1118,6 +1118,7 @@ def sync_to_supabase_rag(
     Updates the documents table directly via Supabase client.
     """
     import os
+    from pathlib import Path
     from supabase import create_client
     
     supabase_url = os.environ.get("SUPABASE_URL")
@@ -1132,22 +1133,28 @@ def sync_to_supabase_rag(
         
         # Find document by filename pattern in this project
         # The doc_id should match original_filename stem or a stored doc_id
-        result = client.table("documents").select("id, original_filename").eq("rag_project_id", project_id).execute()
+        result = client.table("documents").select("id, original_filename, r2_key").eq("rag_project_id", project_id).execute()
         
         matching_doc = None
         for doc in result.data or []:
-            # Match by filename stem
-            if doc.get("original_filename", "").replace(".pdf", "") == doc_id:
+            original_filename = doc.get("original_filename", "")
+            r2_key = doc.get("r2_key", "")
+            
+            # Match by original_filename stem (case insensitive, handle .pdf and .PDF)
+            filename_stem = Path(original_filename).stem if original_filename else ""
+            if filename_stem.lower() == doc_id.lower():
                 matching_doc = doc
                 break
-            # Or if we stored doc_id in metadata
-            stored_id = doc.get("metadata", {}).get("doc_id") if doc.get("metadata") else None
-            if stored_id == doc_id:
+            
+            # Match by r2_key (the R2 path contains the doc_id)
+            if doc_id in r2_key:
                 matching_doc = doc
                 break
         
         if not matching_doc:
             print(f"  ⚠ Document not found in Supabase: {doc_id}")
+            print(f"     Looking in project: {project_id}")
+            print(f"     Found {len(result.data or [])} documents in project")
             return False
         
         # Update the document
