@@ -37,11 +37,17 @@ async def _update_state(*, healthy: bool, error: Optional[str], connecting: Opti
 
 def _check_qdrant_connection() -> bool:
     """Run the blocking Qdrant connection attempt in a worker thread."""
-    indexer = QdrantIndexer()
-    info = indexer.get_collection_info()
-    if info and "error" not in info:
-        return True
-    raise RuntimeError(info.get("error", "Unknown Qdrant error"))
+    from qdrant_client import QdrantClient
+    from src.config.settings import settings
+    
+    # Just check connectivity by listing collections, don't require a specific one
+    client = QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key,
+    )
+    # This will throw if Qdrant is unreachable
+    collections = client.get_collections()
+    return True
 
 
 async def warm_up_qdrant_connection() -> None:
