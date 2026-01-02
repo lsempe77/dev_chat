@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { RagMetadataTab } from "@/components/dashboard/RagMetadataTab";
+import { RagSettingsTab } from "@/components/dashboard/RagSettingsTab";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -604,145 +605,15 @@ export default function RAGAdminPage() {
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  Project Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="slug">URL Slug (optional)</Label>
-                  <Input
-                    id="slug"
-                    value={editSlug}
-                    onChange={(e) => setEditSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
-                    placeholder="my-knowledge-base"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Public URL: {window.location.origin}/r/{editSlug || ragId}
-                  </p>
-                </div>
-                
-                <div className="flex items-center justify-between border rounded-lg p-4">
-                  <div className="flex items-center gap-3">
-                    {editIsPublic ? (
-                      <Globe className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <Lock className="h-5 w-5" />
-                    )}
-                    <div>
-                      <p className="font-medium">
-                        {editIsPublic ? "Public" : "Private"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {editIsPublic 
-                          ? "Anyone with the link can chat with this RAG"
-                          : "Only you can access this RAG"}
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={editIsPublic}
-                    onCheckedChange={setEditIsPublic}
-                  />
-                </div>
-
-                {editIsPublic && (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      readOnly
-                      value={`${window.location.origin}/r/${editSlug || ragId}`}
-                      className="flex-1"
-                    />
-                    <Button variant="outline" size="icon" onClick={copyShareUrl}>
-                      {copied ? (
-                        <Check className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                )}
-                
-                <Button onClick={handleSaveSettings} disabled={isSaving}>
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save Changes"
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Danger Zone */}
-            <Card className="border-destructive">
-              <CardHeader>
-                <CardTitle className="text-destructive">Danger Zone</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Deleting this project will permanently remove all documents and data.
-                </p>
-                <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Project
-                </Button>
-              </CardContent>
-            </Card>
+            <RagSettingsTab 
+              ragId={ragId}
+              project={project}
+              onProjectUpdated={fetchProject}
+              onProjectDeleted={handleDeleteProject}
+            />
           </TabsContent>
         </Tabs>
       </main>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Project</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &quot;{project.name}&quot;? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteProject} disabled={isDeleting}>
-              {isDeleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

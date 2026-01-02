@@ -945,3 +945,124 @@ async def get_document_pdf_url(
         logger.error(f"Failed to generate PDF URL: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get PDF URL: {str(e)}")
 
+
+# =============================================================================
+# Per-RAG Danger Zone Endpoints
+# =============================================================================
+
+@router.delete("/{project_id}/vectors")
+async def reset_project_vectors(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Delete all vector embeddings for this project from Qdrant.
+    Documents will need to be reprocessed.
+    """
+    project = await get_user_project(user, project_id)
+    
+    try:
+        indexer = QdrantIndexer(collection_name=project["qdrant_collection"])
+        
+        # Delete all points in the collection
+        indexer.client.delete(
+            collection_name=project["qdrant_collection"],
+            points_selector={"filter": {}},  # Delete all
+        )
+        
+        # Update chunk counts in documents
+        client = get_supabase_client()
+        client.table("documents").update({
+            "chunk_count": 0,
+            "status": "pending",
+        }).eq("rag_project_id", project_id).execute()
+        
+        logger.info(f"Reset vectors for project {project_id}")
+        return {"message": "Vectors reset successfully", "collection": project["qdrant_collection"]}
+        
+    except Exception as e:
+        logger.error(f"Failed to reset vectors: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reset vectors: {str(e)}")
+
+
+@router.delete("/{project_id}/storage")
+async def clear_project_storage(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Delete all PDFs and processed outputs for this project from R2.
+    """
+    import os
+    from src.ingestion.r2_client import R2Client
+    
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get all documents for this project
+    result = client.table("documents").select("filename, original_filename").eq("rag_project_id", project_id).execute()
+    
+    try:
+        r2_client = R2Client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        deleted_count = 0
+        
+        for doc in result.data or []:
+            # Delete input PDF
+            for key in [f"input-pdfs/{doc['filename']}", f"input-pdfs/{doc['original_filename']}"]:
+                try:
+                    r2_client.client.delete_object(Bucket=bucket_name, Key=key)
+                    deleted_count += 1
+                except Exception:
+                    pass
+            
+            # Delete output files (markdown, etc.)
+            # Output files are typically in outputs/{doc_id}/
+            try:
+                prefix = f"outputs/{doc['filename'].replace('.pdf', '')}/"
+                response = r2_client.client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+                for obj in response.get('Contents', []):
+                    r2_client.client.delete_object(Bucket=bucket_name, Key=obj['Key'])
+                    deleted_count += 1
+            except Exception:
+                pass
+        
+        logger.info(f"Cleared {deleted_count} files from R2 for project {project_id}")
+        return {"message": "Storage cleared", "deleted": deleted_count}
+        
+    except Exception as e:
+        logger.error(f"Failed to clear storage: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear storage: {str(e)}")
+
+
+@router.delete("/{project_id}/documents")
+async def reset_project_documents(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Delete all document records from the database for this project.
+    Does not delete files from R2 or vectors from Qdrant.
+    """
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    try:
+        # Count documents first
+        count_result = client.table("documents").select("id", count="exact").eq("rag_project_id", project_id).execute()
+        doc_count = count_result.count or 0
+        
+        # Delete all documents
+        client.table("documents").delete().eq("rag_project_id", project_id).execute()
+        
+        # Also delete any jobs
+        client.table("processing_jobs").delete().eq("rag_project_id", project_id).execute()
+        
+        logger.info(f"Deleted {doc_count} documents from project {project_id}")
+        return {"message": "Documents reset", "deleted": doc_count}
+        
+    except Exception as e:
+        logger.error(f"Failed to reset documents: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reset documents: {str(e)}")
+
+
