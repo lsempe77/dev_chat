@@ -282,3 +282,40 @@ export interface PDFUrlResponse {
   expires_in: number;
   r2_key: string;
 }
+
+// =============================================================================
+// Bibliography Import Types
+// =============================================================================
+
+export interface ImportedEntry {
+  index: number;
+  title: string;
+  authors: string[];
+  year?: number;
+  doi?: string;
+  abstract?: string;
+  journal?: string;
+  entry_type?: string;
+  matched_document_id?: string;
+  match_confidence?: number;
+  is_duplicate: boolean;
+  extra?: Record<string, unknown>;
+}
+
+export interface ImportPreviewResponse {
+  success: boolean;
+  file_format: string;
+  total_entries: number;
+  valid_entries: number;
+  entries: ImportedEntry[];
+  errors: string[];
+}
+
+export interface ImportConfirmResponse {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  updated: number;
+  enriched: number;
+  errors: string[];
+}

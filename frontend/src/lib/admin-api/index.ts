@@ -528,3 +528,70 @@ export async function getPDFUrl(documentId: string): Promise<PDFUrlResponse> {
 
   return response.json();
 }
+
+// =============================================================================
+// Bibliography Import
+// =============================================================================
+
+import type { ImportPreviewResponse, ImportConfirmResponse, ImportedEntry } from "./types";
+export type { ImportedEntry, ImportPreviewResponse, ImportConfirmResponse };
+
+/**
+ * Preview a bibliography file before importing
+ */
+export async function previewBibliographyImport(
+  file: File
+): Promise<ImportPreviewResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/bibliography/import/preview`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to preview bibliography: ${error}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Confirm and import bibliography entries
+ */
+export async function confirmBibliographyImport(
+  entries: ImportedEntry[],
+  options: {
+    skip_duplicates?: boolean;
+    merge_duplicates?: boolean;
+    enrich_from_doi?: boolean;
+  } = {}
+): Promise<ImportConfirmResponse> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/bibliography/import/confirm`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        entries,
+        skip_duplicates: options.skip_duplicates ?? true,
+        merge_duplicates: options.merge_duplicates ?? false,
+        enrich_from_doi: options.enrich_from_doi ?? false,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to import bibliography: ${error}`);
+  }
+
+  return response.json();
+}
