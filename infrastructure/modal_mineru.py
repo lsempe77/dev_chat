@@ -865,8 +865,46 @@ def orchestrate_rag(
     
     print(f"Found {len(existing_outputs)} existing outputs")
     
+    # Check Qdrant for existing vectors
+    qdrant_indexed = set()
+    try:
+        from qdrant_client import QdrantClient
+        from qdrant_client.http.models import ScrollRequest
+        
+        qdrant = QdrantClient(
+            url=os.environ["QDRANT_URL"],
+            api_key=os.environ["QDRANT_API_KEY"],
+        )
+        
+        # Check if collection exists
+        try:
+            qdrant.get_collection(collection)
+            # Scroll through to get all unique source values (doc IDs)
+            offset = None
+            while True:
+                results, next_offset = qdrant.scroll(
+                    collection_name=collection,
+                    limit=100,
+                    with_payload=["source"],
+                    offset=offset,
+                )
+                for point in results:
+                    source = point.payload.get("source", "")
+                    if source:
+                        # source is like "docname.pdf" or "docname"
+                        qdrant_indexed.add(source.replace(".pdf", ""))
+                if next_offset is None:
+                    break
+                offset = next_offset
+            print(f"Found {len(qdrant_indexed)} documents indexed in Qdrant")
+        except Exception as e:
+            print(f"  Collection {collection} doesn't exist yet")
+    except Exception as e:
+        print(f"  Qdrant check failed: {e}")
+    
     # Determine which PDFs to process
     to_process = []
+    to_reindex = []  # Have R2 output but no Qdrant vectors
     skipped = []
     
     for pdf_key in pdf_keys:
@@ -874,14 +912,27 @@ def orchestrate_rag(
         pdf_name = Path(pdf_key).stem
         doc_id = pdf_name  # Could add hash if needed
         
-        # Skip if already processed (unless force)
-        if not force_reprocess and doc_id in existing_outputs:
-            skipped.append(pdf_key)
-            print(f"  ✓ Skipping (already processed): {pdf_name}")
-            continue
+        has_r2_output = doc_id in existing_outputs
+        has_qdrant = doc_id in qdrant_indexed
+        
+        if not force_reprocess:
+            if has_r2_output and has_qdrant:
+                # Fully processed
+                skipped.append(pdf_key)
+                print(f"  ✓ Skipping (R2 + Qdrant OK): {pdf_name}")
+                continue
+            elif has_r2_output and not has_qdrant:
+                # Need to re-embed only
+                if max_documents > 0 and (len(to_process) + len(to_reindex)) >= max_documents:
+                    skipped.append(pdf_key)
+                    print(f"  ⏸ Skipping (limit reached): {pdf_name}")
+                    continue
+                to_reindex.append(pdf_key)
+                print(f"  ⚠ Re-indexing (R2 OK, Qdrant missing): {pdf_name}")
+                continue
         
         # Apply limit
-        if max_documents > 0 and len(to_process) >= max_documents:
+        if max_documents > 0 and (len(to_process) + len(to_reindex)) >= max_documents:
             skipped.append(pdf_key)
             print(f"  ⏸ Skipping (limit reached): {pdf_name}")
             continue
@@ -890,7 +941,9 @@ def orchestrate_rag(
         print(f"  Queuing: {pdf_name}")
         to_process.append(pdf_key)
     
-    if not to_process:
+    all_to_process = to_process + to_reindex
+    
+    if not all_to_process:
         print("No new PDFs to process")
         return {
             "project_id": project_id,
@@ -901,7 +954,7 @@ def orchestrate_rag(
             "results": [],
         }
     
-    print(f"\nProcessing {len(to_process)} PDFs (waiting for completion)...")
+    print(f"\nProcessing {len(all_to_process)} PDFs ({len(to_process)} new, {len(to_reindex)} re-index)...")
     
     # Use starmap to process all PDFs in parallel and WAIT for completion
     # This is the key fix - spawn() doesn't wait, but starmap() does
@@ -910,7 +963,7 @@ def orchestrate_rag(
     failed = 0
     
     for result in process_pdf_rag.starmap(
-        [(pdf_key, project_id, collection) for pdf_key in to_process],
+        [(pdf_key, project_id, collection) for pdf_key in all_to_process],
         return_exceptions=True,
     ):
         if isinstance(result, Exception):
