@@ -48,6 +48,26 @@ export interface MetadataDetail {
   publisher: string | null;
   place: string | null;
   
+  // Book-specific fields
+  edition: string | null;
+  series: string | null;
+  series_number: string | null;
+  book_title: string | null;
+  num_pages: string | null;
+  
+  // Report/Working Paper fields
+  institution: string | null;
+  report_number: string | null;
+  report_type: string | null;
+  thesis_type: string | null;
+  
+  // Conference fields
+  conference_name: string | null;
+  proceedings_title: string | null;
+  
+  // Other
+  accessed_date: string | null;
+  
   // 3ie Classification
   countries: string[];
   sectors: string[];
@@ -84,6 +104,28 @@ export interface MetadataUpdateRequest {
   pages?: string;
   publisher?: string;
   place?: string;
+  
+  // Book-specific fields
+  edition?: string;
+  series?: string;
+  series_number?: string;
+  book_title?: string;
+  num_pages?: string;
+  
+  // Report/Working Paper fields
+  institution?: string;
+  report_number?: string;
+  report_type?: string;
+  thesis_type?: string;
+  
+  // Conference fields
+  conference_name?: string;
+  proceedings_title?: string;
+  
+  // Other
+  accessed_date?: string;
+  
+  // 3ie Classification
   countries?: string[];
   sectors?: string[];
   study_type?: string;

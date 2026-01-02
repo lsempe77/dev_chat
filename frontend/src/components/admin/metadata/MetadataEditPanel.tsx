@@ -239,7 +239,7 @@ export function MetadataEditPanel({
           )}
 
           {/* === PUBLISHER INFO === */}
-          {(showField("publisher") || showField("place")) && (
+          {(showField("publisher") || showField("place") || showField("edition")) && (
             <div className="space-y-3 pt-2 border-t">
               <Label className="text-xs font-semibold text-muted-foreground uppercase">Publisher</Label>
               <div className="grid grid-cols-2 gap-2">
@@ -262,20 +262,132 @@ export function MetadataEditPanel({
                   </div>
                 )}
               </div>
+              {showField("edition") && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Edition</Label>
+                  <Input
+                    value={editForm.edition || ""}
+                    onChange={(e) => setEditForm({ ...editForm, edition: e.target.value })}
+                    placeholder="e.g., 2nd"
+                  />
+                </div>
+              )}
             </div>
           )}
 
-          {/* === INSTITUTION (Reports/Thesis) === */}
-          {showField("institution") && (
+          {/* === BOOK SECTION FIELDS === */}
+          {showField("book_title") && (
             <div className="space-y-3 pt-2 border-t">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase">Institution</Label>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase">Book Info</Label>
               <div className="space-y-1">
-                <Label className="text-xs">Institution</Label>
+                <Label className="text-xs">Book Title</Label>
                 <Input
-                  value={editForm.institution || ""}
-                  onChange={(e) => setEditForm({ ...editForm, institution: e.target.value })}
+                  value={editForm.book_title || ""}
+                  onChange={(e) => setEditForm({ ...editForm, book_title: e.target.value })}
                 />
               </div>
+            </div>
+          )}
+
+          {/* === CONFERENCE FIELDS === */}
+          {(showField("conference_name") || showField("proceedings_title")) && (
+            <div className="space-y-3 pt-2 border-t">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase">Conference</Label>
+              {showField("conference_name") && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Conference Name</Label>
+                  <Input
+                    value={editForm.conference_name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, conference_name: e.target.value })}
+                  />
+                </div>
+              )}
+              {showField("proceedings_title") && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Proceedings Title</Label>
+                  <Input
+                    value={editForm.proceedings_title || ""}
+                    onChange={(e) => setEditForm({ ...editForm, proceedings_title: e.target.value })}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* === WEB/ACCESS FIELDS === */}
+          {(showField("url") || showField("accessed_date")) && (
+            <div className="space-y-3 pt-2 border-t">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase">Access</Label>
+              {showField("url") && (
+                <div className="space-y-1">
+                  <Label className="text-xs">URL</Label>
+                  <Input
+                    value={editForm.url || ""}
+                    onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
+                    placeholder="https://..."
+                  />
+                </div>
+              )}
+              {showField("accessed_date") && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Date Accessed</Label>
+                  <Input
+                    value={editForm.accessed_date || ""}
+                    onChange={(e) => setEditForm({ ...editForm, accessed_date: e.target.value })}
+                    placeholder="YYYY-MM-DD"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* === INSTITUTION (Reports/Thesis/Working Paper) === */}
+          {(showField("institution") || showField("series") || showField("report_number")) && (
+            <div className="space-y-3 pt-2 border-t">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase">Institution / Series</Label>
+              
+              {showField("institution") && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Institution</Label>
+                  <Input
+                    value={editForm.institution || ""}
+                    onChange={(e) => setEditForm({ ...editForm, institution: e.target.value })}
+                  />
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-2">
+                {showField("series") && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Series</Label>
+                    <Input
+                      value={editForm.series || ""}
+                      onChange={(e) => setEditForm({ ...editForm, series: e.target.value })}
+                      placeholder="e.g., NBER Working Paper Series"
+                    />
+                  </div>
+                )}
+                {showField("series_number") && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Series Number</Label>
+                    <Input
+                      value={editForm.series_number || ""}
+                      onChange={(e) => setEditForm({ ...editForm, series_number: e.target.value })}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {showField("report_number") && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Report/Paper Number</Label>
+                  <Input
+                    value={editForm.report_number || ""}
+                    onChange={(e) => setEditForm({ ...editForm, report_number: e.target.value })}
+                    placeholder="e.g., WPS 12345"
+                  />
+                </div>
+              )}
               
               {showField("report_type") && (
                 <div className="space-y-1">

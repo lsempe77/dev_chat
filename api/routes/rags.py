@@ -956,10 +956,34 @@ class MetadataDetail(BaseModel):
     volume: Optional[str] = None
     issue: Optional[str] = None
     pages: Optional[str] = None
+    edition: Optional[str] = None
     
     # Publisher info
     publisher: Optional[str] = None
     place: Optional[str] = None
+    
+    # Series
+    series: Optional[str] = None
+    series_number: Optional[str] = None
+    
+    # Book/Book Section
+    book_title: Optional[str] = None
+    num_pages: Optional[int] = None
+    
+    # Report/Working Paper
+    institution: Optional[str] = None
+    report_number: Optional[str] = None
+    report_type: Optional[str] = None
+    
+    # Thesis
+    thesis_type: Optional[str] = None
+    
+    # Conference
+    conference_name: Optional[str] = None
+    proceedings_title: Optional[str] = None
+    
+    # Access
+    accessed_date: Optional[str] = None
     
     # 3ie Classification
     countries: List[str] = []
@@ -982,27 +1006,62 @@ class MetadataListResponse(BaseModel):
 
 
 class MetadataUpdateRequest(BaseModel):
-    """Request to update document metadata."""
+    """Request to update document metadata - Zotero compatible."""
+    # Core
     title: Optional[str] = None
     authors: Optional[List[str]] = None
     year: Optional[int] = None
     abstract: Optional[str] = None
     item_type: Optional[str] = None
+    
+    # Identifiers
     doi: Optional[str] = None
     isbn: Optional[str] = None
     issn: Optional[str] = None
     url: Optional[str] = None
+    
+    # Publication info
     publication: Optional[str] = None
     journal: Optional[str] = None
     volume: Optional[str] = None
     issue: Optional[str] = None
     pages: Optional[str] = None
+    edition: Optional[str] = None
+    
+    # Publisher info
     publisher: Optional[str] = None
     place: Optional[str] = None
+    
+    # Series
+    series: Optional[str] = None
+    series_number: Optional[str] = None
+    
+    # Book/Book Section
+    book_title: Optional[str] = None
+    num_pages: Optional[int] = None
+    
+    # Report/Working Paper
+    institution: Optional[str] = None
+    report_number: Optional[str] = None
+    report_type: Optional[str] = None
+    
+    # Thesis
+    thesis_type: Optional[str] = None
+    
+    # Conference
+    conference_name: Optional[str] = None
+    proceedings_title: Optional[str] = None
+    
+    # Access
+    accessed_date: Optional[str] = None
+    
+    # 3ie Classification
     countries: Optional[List[str]] = None
     sectors: Optional[List[str]] = None
     study_type: Optional[str] = None
     intervention_type: Optional[str] = None
+    
+    # Review status
     needs_review: Optional[bool] = None
 
 
@@ -1064,8 +1123,20 @@ async def list_project_metadata(
             volume=metadata.get("volume"),
             issue=metadata.get("issue"),
             pages=metadata.get("pages"),
+            edition=metadata.get("edition"),
             publisher=metadata.get("publisher"),
             place=metadata.get("place"),
+            series=metadata.get("series"),
+            series_number=metadata.get("series_number"),
+            book_title=metadata.get("book_title"),
+            num_pages=metadata.get("num_pages"),
+            institution=metadata.get("institution"),
+            report_number=metadata.get("report_number"),
+            report_type=metadata.get("report_type"),
+            thesis_type=metadata.get("thesis_type"),
+            conference_name=metadata.get("conference_name"),
+            proceedings_title=metadata.get("proceedings_title"),
+            accessed_date=metadata.get("accessed_date"),
             countries=metadata.get("countries", []),
             sectors=metadata.get("sectors", []),
             study_type=metadata.get("study_type"),
