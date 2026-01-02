@@ -959,15 +959,19 @@ async def reset_project_vectors(
     Delete all vector embeddings for this project from Qdrant.
     Documents will need to be reprocessed.
     """
+    from qdrant_client import models
+    
     project = await get_user_project(user, project_id)
     
     try:
         indexer = QdrantIndexer(collection_name=project["qdrant_collection"])
         
-        # Delete all points in the collection
+        # Delete all points in the collection using FilterSelector
         indexer.client.delete(
             collection_name=project["qdrant_collection"],
-            points_selector={"filter": {}},  # Delete all
+            points_selector=models.FilterSelector(
+                filter=models.Filter()  # Empty filter = match all
+            ),
         )
         
         # Update chunk counts in documents
