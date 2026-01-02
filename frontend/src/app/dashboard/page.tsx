@@ -360,7 +360,7 @@ export default function DashboardPage() {
                         Manage
                       </Button>
                     </Link>
-                    <Link href={`/?rag=${project.id}`} className="flex-1">
+                    <Link href={`/r/${project.id}`} className="flex-1">
                       <Button className="w-full">
                         Chat
                       </Button>
