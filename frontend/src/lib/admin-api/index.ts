@@ -440,6 +440,22 @@ export async function checkHealth(): Promise<{
   return response.json();
 }
 
+/**
+ * Get backend settings (read-only)
+ */
+import type { BackendSettings } from "./types";
+export type { BackendSettings };
+
+export async function getBackendSettings(): Promise<BackendSettings> {
+  const response = await adminFetch(`${API_BASE_URL}/admin/settings`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch backend settings: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 // =============================================================================
 // Metadata Review
 // =============================================================================

@@ -101,6 +101,43 @@ export interface AdminStatusResponse {
   active_workers: number;
 }
 
+// =============================================================================
+// Backend Settings Types
+// =============================================================================
+
+export interface BackendSettings {
+  chunking: {
+    chunk_size: number;
+    chunk_overlap: number;
+    parent_chunk_size: number;
+    use_semantic_chunking: boolean;
+  };
+  retrieval: {
+    hybrid_enabled: boolean;
+    hybrid_alpha: number;
+    retrieval_top_k: number;
+    final_top_k: number;
+    rerank_enabled: boolean;
+    rerank_model: string;
+    rerank_top_n: number;
+  };
+  embeddings: {
+    provider: string;
+    model: string;
+    dimension: number;
+  };
+  llm: {
+    provider: string;
+    fast_model: string;
+    reasoning_model: string;
+    temperature: number;
+    max_tokens: number;
+  };
+  processing: {
+    qdrant_collection: string;
+  };
+}
+
 export interface TriggerProcessingRequest {
   force_reprocess?: boolean;
   specific_files?: string[];
