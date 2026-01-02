@@ -136,9 +136,9 @@ export function BibliographyImportDialog({
 
     try {
       const result = await confirmBibliographyImport(entriesToImport, {
-        skipDuplicates,
-        mergeDuplicates,
-        enrichFromDoi,
+        skip_duplicates: skipDuplicates,
+        merge_duplicates: mergeDuplicates,
+        enrich_from_doi: enrichFromDoi,
       });
       setImportResult({
         imported: result.imported_count,
