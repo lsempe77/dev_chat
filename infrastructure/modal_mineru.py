@@ -1122,7 +1122,8 @@ def sync_to_supabase_rag(
     from supabase import create_client
     
     supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+    # Support both naming conventions
+    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     
     if not supabase_url or not supabase_key:
         print("  ⚠ Supabase credentials not configured")
@@ -1131,23 +1132,16 @@ def sync_to_supabase_rag(
     try:
         client = create_client(supabase_url, supabase_key)
         
-        # Find document by filename pattern in this project
-        # The doc_id should match original_filename stem or a stored doc_id
-        result = client.table("documents").select("id, original_filename, r2_key").eq("rag_project_id", project_id).execute()
+        # Find document by 'filename' field (not original_filename)
+        # The doc_id matches the 'filename' field which is the R2 key stem
+        result = client.table("documents").select("id, filename").eq("rag_project_id", project_id).execute()
         
         matching_doc = None
         for doc in result.data or []:
-            original_filename = doc.get("original_filename", "")
-            r2_key = doc.get("r2_key", "")
+            filename = doc.get("filename", "")
             
-            # Match by original_filename stem (case insensitive, handle .pdf and .PDF)
-            filename_stem = Path(original_filename).stem if original_filename else ""
-            if filename_stem.lower() == doc_id.lower():
-                matching_doc = doc
-                break
-            
-            # Match by r2_key (the R2 path contains the doc_id)
-            if doc_id in r2_key:
+            # Match by filename field (exact match)
+            if filename == doc_id:
                 matching_doc = doc
                 break
         
