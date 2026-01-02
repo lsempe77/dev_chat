@@ -205,7 +205,7 @@ export function MetadataTab() {
     try {
       await updateDocumentMetadata(editingDoc.id, {
         ...editForm,
-        needs_review: false,
+        // Don't auto-remove from review - user can explicitly mark as reviewed
       });
       setEditingDoc(null);
       fetchDocuments();
