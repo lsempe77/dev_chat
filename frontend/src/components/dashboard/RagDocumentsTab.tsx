@@ -50,6 +50,8 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch documents
@@ -167,6 +169,29 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
     URL.revokeObjectURL(url);
   };
 
+  // Sync R2 with Supabase (recover orphaned uploads)
+  const syncDocuments = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents/sync`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) throw new Error("Failed to sync documents");
+      const data = await response.json();
+      setSyncMessage(data.message);
+      if (data.synced > 0) {
+        await fetchDocuments();
+        onDocumentsChanged?.();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to sync documents");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
       year: "numeric",
@@ -207,6 +232,17 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
           <AlertCircle className="h-4 w-4" />
           <span>{error}</span>
           <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
+            Dismiss
+          </Button>
+        </div>
+      )}
+
+      {/* Sync Success Banner */}
+      {syncMessage && (
+        <div className="bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle className="h-4 w-4" />
+          <span>{syncMessage}</span>
+          <Button variant="ghost" size="sm" onClick={() => setSyncMessage(null)} className="ml-auto">
             Dismiss
           </Button>
         </div>
@@ -276,6 +312,10 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={syncDocuments} disabled={isSyncing}>
+                <RefreshCw className={`h-4 w-4 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Syncing..." : "Sync R2"}
+              </Button>
               <Button variant="outline" size="sm" onClick={fetchDocuments} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh

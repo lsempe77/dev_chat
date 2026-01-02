@@ -482,6 +482,87 @@ async def list_project_documents(
     return DocumentListResponse(documents=documents, total=len(documents))
 
 
+class SyncResponse(BaseModel):
+    """Response for syncing R2 with Supabase."""
+    synced: int
+    already_exists: int
+    errors: int
+    message: str
+
+
+@router.post("/{project_id}/documents/sync", response_model=SyncResponse)
+async def sync_project_documents(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> SyncResponse:
+    """
+    Sync R2 files with Supabase documents table.
+    
+    Finds files in R2 that don't have corresponding Supabase records and creates them.
+    This handles orphaned uploads where R2 succeeded but Supabase failed.
+    """
+    project = await get_user_project(user, project_id)
+    
+    r2_client = get_r2_client()
+    bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+    client = get_supabase_client()
+    
+    # Get existing documents from Supabase
+    result = client.table("documents").select("filename").eq("rag_project_id", project_id).execute()
+    existing_filenames = set(d["filename"] for d in result.data or [])
+    
+    # Get files from R2
+    prefix = f"rags/{project_id}/input-pdfs/"
+    paginator = r2_client.get_paginator("list_objects_v2")
+    
+    synced = 0
+    already_exists = 0
+    errors = 0
+    
+    for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            filename = key.replace(prefix, "")
+            doc_id = os.path.splitext(filename)[0]
+            
+            if doc_id in existing_filenames:
+                already_exists += 1
+                continue
+            
+            # Extract original filename from doc_id (format: hash_originalname)
+            parts = doc_id.split("_", 1)
+            if len(parts) > 1:
+                original_name = parts[1] + ".pdf"
+                content_hash = parts[0]
+            else:
+                original_name = filename
+                content_hash = ""
+            
+            try:
+                client.table("documents").insert({
+                    "rag_project_id": project_id,
+                    "filename": doc_id,
+                    "original_filename": original_name,
+                    "file_size_bytes": obj.get("Size", 0),
+                    "mime_type": "application/pdf",
+                    "status": "pending",
+                    "r2_input_key": key,
+                    "metadata": {"content_hash": content_hash} if content_hash else {},
+                }).execute()
+                synced += 1
+                logger.info(f"Synced orphaned R2 file to Supabase: {doc_id}")
+            except Exception as e:
+                errors += 1
+                logger.error(f"Failed to sync {doc_id}: {e}")
+    
+    return SyncResponse(
+        synced=synced,
+        already_exists=already_exists,
+        errors=errors,
+        message=f"Synced {synced} orphaned files, {already_exists} already existed, {errors} errors",
+    )
+
+
 # =============================================================================
 # Document Upload Helpers
 # =============================================================================
@@ -601,18 +682,31 @@ async def upload_document(
         
         logger.info(f"Uploaded {file.filename} to R2 as {r2_key} (doc_id={doc_id}, project={project_id}, {size_bytes} bytes)")
         
-        # Create document record in database
-        client = get_supabase_client()
-        client.table("documents").upsert({
-            "rag_project_id": project_id,
-            "filename": doc_id,
-            "original_filename": file.filename,
-            "file_size_bytes": size_bytes,
-            "mime_type": file.content_type or "application/pdf",
-            "status": "pending",
-            "r2_input_key": r2_key,
-            "metadata": {"content_hash": content_hash},
-        }, on_conflict="filename,rag_project_id").execute()
+        # Create document record in database (atomic with R2 - rollback on failure)
+        try:
+            client = get_supabase_client()
+            client.table("documents").upsert({
+                "rag_project_id": project_id,
+                "filename": doc_id,
+                "original_filename": file.filename,
+                "file_size_bytes": size_bytes,
+                "mime_type": file.content_type or "application/pdf",
+                "status": "pending",
+                "r2_input_key": r2_key,
+                "metadata": {"content_hash": content_hash},
+            }, on_conflict="filename,rag_project_id").execute()
+        except Exception as db_error:
+            # Rollback: delete from R2 if Supabase insert fails
+            logger.error(f"Supabase insert failed, rolling back R2 upload: {db_error}")
+            try:
+                r2_client.delete_object(Bucket=bucket_name, Key=r2_key)
+                logger.info(f"Rolled back R2 upload: {r2_key}")
+            except Exception as rollback_error:
+                logger.error(f"Failed to rollback R2 upload: {rollback_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to save document record: {str(db_error)}"
+            )
         
         return UploadResponse(
             success=True,
