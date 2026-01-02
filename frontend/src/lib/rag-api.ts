@@ -317,3 +317,25 @@ export async function getRagPdfUrl(
   
   return response.json();
 }
+
+/**
+ * Delete a document from a RAG project
+ */
+export async function deleteRagDocument(
+  ragId: string,
+  documentId: string
+): Promise<{ message: string; document_id: string; filename: string }> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "DELETE",
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to delete document: ${response.statusText}`);
+  }
+  
+  return response.json();
+}

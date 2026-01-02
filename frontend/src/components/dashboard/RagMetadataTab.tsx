@@ -23,6 +23,7 @@ import {
   ExternalLink,
   X,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { 
   getRagMetadata, 
@@ -30,6 +31,7 @@ import {
   enrichRagDocumentMetadata,
   enrichAllRagDocuments,
   getRagPdfUrl,
+  deleteRagDocument,
   type MetadataDetail,
   type MetadataUpdateRequest,
 } from "@/lib/rag-api";
@@ -63,6 +65,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
   const [isEnriching, setIsEnriching] = useState<string | null>(null);
   const [isEnrichingAll, setIsEnrichingAll] = useState(false);
   const [enrichAllResult, setEnrichAllResult] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Open PDF viewer
   const openPdfViewer = async (doc: MetadataDetail) => {
@@ -259,6 +262,31 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       setError(err instanceof Error ? err.message : "Enrich all failed");
     } finally {
       setIsEnrichingAll(false);
+    }
+  };
+
+  // Delete a document
+  const handleDelete = async (doc: MetadataDetail) => {
+    if (!confirm(`Delete "${doc.filename}"?\n\nThis will also remove associated vectors and files. This action cannot be undone.`)) {
+      return;
+    }
+    
+    setIsDeleting(doc.id);
+    try {
+      await deleteRagDocument(ragId, doc.id);
+      // Close edit panel if deleting the currently edited doc
+      if (editingDoc?.id === doc.id) {
+        setEditingDoc(null);
+      }
+      // Close PDF viewer if viewing this doc
+      if (viewingPdfDoc?.id === doc.id) {
+        closePdfViewer();
+      }
+      fetchDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete document");
+    } finally {
+      setIsDeleting(null);
     }
   };
 
@@ -506,6 +534,20 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                                 Mark OK
                               </Button>
                             )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(doc)}
+                              disabled={isDeleting === doc.id}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              title="Delete document"
+                            >
+                              {isDeleting === doc.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
                           </div>
                         </div>
                       </CardContent>

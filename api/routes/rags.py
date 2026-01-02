@@ -1819,3 +1819,106 @@ async def reset_project_documents(
         raise HTTPException(status_code=500, detail=f"Failed to reset documents: {str(e)}")
 
 
+@router.delete("/{project_id}/documents/{document_id}")
+async def delete_single_document(
+    project_id: str,
+    document_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Delete a single document from the project.
+    Also deletes associated vectors from Qdrant and files from R2.
+    """
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    try:
+        # Get document info first
+        doc_result = client.table("documents").select("filename, r2_key").eq("id", document_id).eq("rag_project_id", project_id).execute()
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        doc = doc_result.data[0]
+        filename = doc.get("filename", "")
+        r2_key = doc.get("r2_key", "")
+        
+        # Delete vectors from Qdrant
+        try:
+            from qdrant_client import QdrantClient
+            from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+            import os
+            
+            qdrant_url = os.environ.get("QDRANT_URL", "")
+            qdrant_api_key = os.environ.get("QDRANT_API_KEY", "")
+            
+            if qdrant_url:
+                qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+                collection_name = f"rag_{project_id}"
+                
+                # Check if collection exists
+                collections = qdrant.get_collections().collections
+                if any(c.name == collection_name for c in collections):
+                    # Delete by document_id filter
+                    qdrant.delete(
+                        collection_name=collection_name,
+                        points_selector=Filter(
+                            must=[
+                                FieldCondition(
+                                    key="document_id",
+                                    match=MatchValue(value=document_id)
+                                )
+                            ]
+                        )
+                    )
+                    logger.info(f"Deleted vectors for document {document_id} from Qdrant")
+        except Exception as e:
+            logger.warning(f"Failed to delete vectors from Qdrant: {e}")
+        
+        # Delete files from R2
+        try:
+            import boto3
+            
+            r2_endpoint = os.environ.get("R2_ENDPOINT_URL", "")
+            r2_access_key = os.environ.get("R2_ACCESS_KEY_ID", "")
+            r2_secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+            r2_bucket = os.environ.get("R2_BUCKET_NAME", "devchat-docs")
+            
+            if r2_endpoint and r2_key:
+                s3 = boto3.client(
+                    "s3",
+                    endpoint_url=r2_endpoint,
+                    aws_access_key_id=r2_access_key,
+                    aws_secret_access_key=r2_secret_key,
+                )
+                
+                # Delete PDF
+                try:
+                    s3.delete_object(Bucket=r2_bucket, Key=r2_key)
+                    logger.info(f"Deleted PDF from R2: {r2_key}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete PDF from R2: {e}")
+                
+                # Delete markdown output if exists
+                md_key = r2_key.replace("/pdfs/", "/outputs/").replace(".pdf", ".md")
+                try:
+                    s3.delete_object(Bucket=r2_bucket, Key=md_key)
+                    logger.info(f"Deleted markdown from R2: {md_key}")
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            logger.warning(f"Failed to delete files from R2: {e}")
+        
+        # Delete from database
+        client.table("documents").delete().eq("id", document_id).execute()
+        
+        logger.info(f"Deleted document {document_id} ({filename}) from project {project_id}")
+        return {"message": "Document deleted", "document_id": document_id, "filename": filename}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete document: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
+
+
