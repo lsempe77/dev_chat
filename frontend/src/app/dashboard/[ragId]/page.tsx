@@ -58,6 +58,10 @@ interface Document {
   id: string;
   filename: string;
   original_filename: string;
+  title?: string;
+  authors?: string;
+  year?: number;
+  doi?: string;
   status: "pending" | "processing" | "completed" | "failed";
   error_message: string | null;
   chunk_count: number;
@@ -417,6 +421,7 @@ export default function RAGAdminPage() {
         <Tabs defaultValue="documents" className="space-y-6">
           <TabsList>
             <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="metadata">Metadata</TabsTrigger>
             <TabsTrigger value="processing">Processing</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -537,6 +542,78 @@ export default function RAGAdminPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Metadata Tab */}
+          <TabsContent value="metadata" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Document Metadata
+                </CardTitle>
+                <CardDescription>
+                  Review and edit bibliographic metadata for documents. 
+                  Documents with DOIs can be enriched from CrossRef/OpenAlex.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {documents.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No documents yet</p>
+                    <p className="text-sm">Upload documents in the Documents tab to see metadata here.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-start justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <span className="font-medium truncate">{doc.title || doc.original_filename}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-muted-foreground space-y-1">
+                            {doc.authors && (
+                              <p><span className="font-medium">Authors:</span> {doc.authors}</p>
+                            )}
+                            {doc.year && (
+                              <p><span className="font-medium">Year:</span> {doc.year}</p>
+                            )}
+                            {!doc.authors && !doc.year && (
+                              <p className="text-amber-600">⚠ Missing metadata - click to edit</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          {doc.doi ? (
+                            <Badge variant="outline" className="text-xs">
+                              DOI
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs text-muted-foreground">
+                              No DOI
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-4 border-t">
+                      <p className="text-sm text-muted-foreground">
+                        📌 To edit metadata, use the old admin panel at{" "}
+                        <Link href="/admin" className="text-primary hover:underline">
+                          /admin
+                        </Link>
+                        {" "}or update the PDF filenames to include author and year (e.g., &quot;Smith_2024_Title.pdf&quot;).
+                      </p>
+                    </div>
                   </div>
                 )}
               </CardContent>
