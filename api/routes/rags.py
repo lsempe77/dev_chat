@@ -447,7 +447,7 @@ class DocumentResponse(BaseModel):
     filename: str
     original_filename: str
     title: Optional[str] = None
-    authors: Optional[str] = None
+    authors: List[str] = []
     year: Optional[int] = None
     doi: Optional[str] = None
     status: str
@@ -479,10 +479,12 @@ async def list_project_documents(
         # Extract metadata from JSONB field
         metadata = d.get("metadata", {}) or {}
         
-        # Handle authors - can be string or list
-        authors = metadata.get("authors")
-        if isinstance(authors, list):
-            authors = ", ".join(authors) if authors else None
+        # Handle authors - ensure it's always a list
+        authors = metadata.get("authors", [])
+        if isinstance(authors, str):
+            authors = [a.strip() for a in authors.split(",") if a.strip()]
+        elif not isinstance(authors, list):
+            authors = []
         
         documents.append(DocumentResponse(
             id=str(d["id"]),
