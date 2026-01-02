@@ -73,9 +73,9 @@ export function MetadataEditPanel({
   const showField = (field: string) => fieldsForType.includes(field);
 
   return (
-    <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-background">
+    <div className="flex flex-col h-full max-h-full border rounded-lg overflow-hidden bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 flex-shrink-0">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">Edit Metadata</h3>
           <Badge variant="outline" className="text-xs">{document.filename}</Badge>
@@ -101,7 +101,7 @@ export function MetadataEditPanel({
       </div>
       
       {/* Scrollable Form */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-4">
           {/* === ITEM TYPE (always shown first) === */}
           <div className="space-y-2">
@@ -365,7 +365,7 @@ export function MetadataEditPanel({
       </ScrollArea>
 
       {/* Footer with Save/Cancel */}
-      <div className="flex items-center justify-end gap-2 px-4 py-3 border-t bg-muted/30">
+      <div className="flex items-center justify-end gap-2 px-4 py-3 border-t bg-muted/30 flex-shrink-0">
         <Button variant="outline" size="sm" onClick={onClose}>
           Cancel
         </Button>
