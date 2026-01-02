@@ -1,5 +1,6 @@
 # DevChat v2.0 - Railway Production Dockerfile
 # Slim image for API-only deployment (no PDF processing)
+# Build: 2026-01-02 - force cache invalidation
 
 FROM python:3.12-slim
 
@@ -17,7 +18,7 @@ COPY requirements-prod.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements-prod.txt
 
-# Copy application code
+# Copy application code (cache bust on any source change)
 COPY api/ api/
 COPY src/ src/
 
