@@ -141,14 +141,14 @@ export function BibliographyImportDialog({
         enrich_from_doi: enrichFromDoi,
       });
       setImportResult({
-        imported: result.imported_count,
-        skipped: result.skipped_count,
-        updated: result.updated_count,
-        enriched: result.enriched_count,
+        imported: result.imported,
+        skipped: result.skipped,
+        updated: result.updated,
+        enriched: result.enriched,
         errors: result.errors,
       });
       
-      if (result.imported_count > 0 || result.updated_count > 0) {
+      if (result.imported > 0 || result.updated > 0) {
         onImportComplete();
       }
     } catch (err) {
