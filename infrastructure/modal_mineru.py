@@ -1001,6 +1001,9 @@ def process_pdf_rag(
             pdf_name=Path(pdf_key).name,
         )
         
+        # Sanitize content to remove invalid UTF-8 surrogates
+        result["content"] = sanitize_text(result["content"])
+        
         # Upload outputs to R2 under project folder
         output_prefix = f"rags/{project_id}/outputs"
         
@@ -1025,6 +1028,8 @@ def process_pdf_rag(
             "content": result["content"],
             "page_count": result.get("page_count", 0),
         }
+        # Sanitize all strings to remove UTF-8 surrogates
+        output_data = sanitize_dict(output_data)
         s3.put_object(
             Bucket=bucket,
             Key=json_key,
@@ -1048,16 +1053,13 @@ def process_pdf_rag(
         
         print(f"  Metadata: source={enriched_metadata.get('metadata_source')}, confidence={enriched_metadata.get('metadata_confidence', 0):.2f}")
         
-        # Chunk and embed to Qdrant
-        print(f"  Chunking and embedding...")
-        chunks = chunk_document(
+        # Chunk and embed to Qdrant using project-specific collection
+        print(f"  Chunking and embedding to {qdrant_collection}...")
+        chunk_count = embed_and_index(
             content=result["content"],
-            doc_id=doc_id,
             metadata=enriched_metadata,
-        )
-        
-        chunk_count = embed_to_qdrant(
-            chunks=chunks,
+            doc_id=doc_id,
+            content_list=result.get("content_list"),  # Page-aware chunking if available
             collection_name=qdrant_collection,  # Project-specific collection
         )
         
@@ -1600,7 +1602,7 @@ def extract_abstract(content: str) -> Optional[str]:
 # Embedding & Indexing
 # ============================================================================
 
-def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: list = None) -> int:
+def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: list = None, collection_name: str = None) -> int:
     """
     Chunk content, generate embeddings, and upsert to Qdrant.
     
@@ -1613,6 +1615,7 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
         metadata: Document metadata (title, authors, year, source, doc_id)
         doc_id: Universal document identifier (used across all systems)
         content_list: Optional MinerU content list with page_idx for page tracking
+        collection_name: Optional Qdrant collection name (default: QDRANT_COLLECTION_NAME)
     
     Returns:
         Number of chunks indexed
@@ -1630,7 +1633,9 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
         api_key=os.environ["QDRANT_API_KEY"],
     )
     
-    collection_name = QDRANT_COLLECTION_NAME
+    # Use provided collection name or default
+    if collection_name is None:
+        collection_name = QDRANT_COLLECTION_NAME
     vector_name = "dense"  # Named vector in existing collection
     
     # Ensure collection exists with correct config for Cohere embed-v4.0 (1536 dims)
