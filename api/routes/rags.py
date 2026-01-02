@@ -1626,6 +1626,86 @@ async def clear_project_storage(
         raise HTTPException(status_code=500, detail=f"Failed to clear storage: {str(e)}")
 
 
+@router.post("/{project_id}/sync-status")
+async def sync_document_status(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Sync document status from R2 outputs.
+    
+    Checks which documents have JSON outputs in R2 and updates their
+    status to 'completed' in Supabase. Useful if Modal processing 
+    completed but status sync failed.
+    """
+    from pathlib import Path
+    
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    r2 = get_r2_client()
+    bucket = os.environ.get("R2_BUCKET_NAME", "devchat")
+    
+    try:
+        # Get completed outputs from R2
+        output_prefix = f"rags/{project_id}/outputs/json/"
+        completed_stems = set()
+        
+        continuation_token = None
+        while True:
+            if continuation_token:
+                response = r2.list_objects_v2(
+                    Bucket=bucket, Prefix=output_prefix, ContinuationToken=continuation_token
+                )
+            else:
+                response = r2.list_objects_v2(Bucket=bucket, Prefix=output_prefix)
+            
+            if "Contents" in response:
+                for obj in response["Contents"]:
+                    stem = Path(obj["Key"]).stem
+                    completed_stems.add(stem)
+            
+            if response.get("IsTruncated"):
+                continuation_token = response.get("NextContinuationToken")
+            else:
+                break
+        
+        logger.info(f"Found {len(completed_stems)} JSON outputs in R2")
+        
+        # Get all documents from Supabase
+        docs_result = client.table("documents").select("id, filename, status").eq("rag_project_id", project_id).execute()
+        docs = docs_result.data or []
+        
+        updated = 0
+        for doc in docs:
+            filename = doc.get("filename", "")
+            if doc["status"] != "completed" and filename in completed_stems:
+                # Update to completed
+                client.table("documents").update({
+                    "status": "completed",
+                    "updated_at": datetime.utcnow().isoformat(),
+                }).eq("id", doc["id"]).execute()
+                updated += 1
+                logger.info(f"  Synced to completed: {filename}")
+        
+        # Count final status
+        final_result = client.table("documents").select("status").eq("rag_project_id", project_id).execute()
+        status_counts = {}
+        for d in final_result.data or []:
+            s = d["status"]
+            status_counts[s] = status_counts.get(s, 0) + 1
+        
+        return {
+            "message": f"Synced {updated} documents to completed",
+            "updated": updated,
+            "r2_outputs": len(completed_stems),
+            "status_counts": status_counts,
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to sync status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync status: {str(e)}")
+
+
 @router.delete("/{project_id}/documents")
 async def reset_project_documents(
     project_id: str,
