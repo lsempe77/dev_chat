@@ -4,35 +4,12 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   ArrowLeft,
-  Upload,
-  FileText,
-  Trash2,
   Loader2,
-  Settings,
   ExternalLink,
-  RefreshCw,
-  Play,
-  Copy,
-  Check,
   Globe,
   Lock,
 } from "lucide-react";
@@ -40,6 +17,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RagMetadataTab } from "@/components/dashboard/RagMetadataTab";
 import { RagSettingsTab } from "@/components/dashboard/RagSettingsTab";
 import { RagUploadTab } from "@/components/dashboard/RagUploadTab";
+import { RagDocumentsTab } from "@/components/dashboard/RagDocumentsTab";
+import { RagProcessingTab } from "@/components/dashboard/RagProcessingTab";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -57,30 +36,6 @@ interface RAGProject {
   updated_at: string;
 }
 
-interface Document {
-  id: string;
-  filename: string;
-  original_filename: string;
-  title?: string;
-  authors?: string;
-  year?: number;
-  doi?: string;
-  status: "pending" | "processing" | "completed" | "failed";
-  error_message: string | null;
-  chunk_count: number;
-  created_at: string;
-  processed_at: string | null;
-}
-
-interface ProcessingJob {
-  id: string;
-  job_type: string;
-  status: string;
-  progress: number;
-  message: string | null;
-  created_at: string;
-}
-
 export default function RAGAdminPage() {
   const params = useParams();
   const router = useRouter();
@@ -89,24 +44,8 @@ export default function RAGAdminPage() {
   
   // Project state
   const [project, setProject] = useState<RAGProject | null>(null);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [jobs, setJobs] = useState<ProcessingJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Settings state
-  const [editName, setEditName] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editSlug, setEditSlug] = useState("");
-  const [editIsPublic, setEditIsPublic] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  
-  // Delete dialog
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  
-  // Copied state
-  const [copied, setCopied] = useState(false);
 
   const fetchProject = useCallback(async () => {
     if (!session?.access_token) return;
@@ -131,52 +70,10 @@ export default function RAGAdminPage() {
       
       const data = await response.json();
       setProject(data);
-      setEditName(data.name);
-      setEditDescription(data.description || "");
-      setEditSlug(data.slug || "");
-      setEditIsPublic(data.is_public);
     } catch (err) {
       setError("Failed to connect to server");
     } finally {
       setIsLoading(false);
-    }
-  }, [ragId, session?.access_token]);
-
-  const fetchDocuments = useCallback(async () => {
-    if (!session?.access_token) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setDocuments(data.documents || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch documents:", err);
-    }
-  }, [ragId, session?.access_token]);
-
-  const fetchJobs = useCallback(async () => {
-    if (!session?.access_token) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/jobs`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setJobs(data.jobs || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch jobs:", err);
     }
   }, [ragId, session?.access_token]);
 
@@ -189,106 +86,12 @@ export default function RAGAdminPage() {
     
     if (session?.access_token) {
       fetchProject();
-      fetchDocuments();
-      fetchJobs();
     }
-  }, [authLoading, session, isConfigured, router, fetchProject, fetchDocuments, fetchJobs]);
-
-  // Poll for job updates
-  useEffect(() => {
-    const hasActiveJobs = jobs.some(j => j.status === "pending" || j.status === "running");
-    if (!hasActiveJobs) return;
-    
-    const interval = setInterval(() => {
-      fetchJobs();
-      fetchDocuments();
-      fetchProject();
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, [jobs, fetchJobs, fetchDocuments, fetchProject]);
-
-  const handleSaveSettings = async () => {
-    if (!session?.access_token || !project) return;
-    
-    setIsSaving(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          name: editName,
-          description: editDescription || null,
-          slug: editSlug || null,
-          is_public: editIsPublic,
-        }),
-      });
-      
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || "Failed to save");
-      }
-      
-      await fetchProject();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save settings");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleProcessAll = async () => {
-    if (!session?.access_token) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/process`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      
-      if (response.ok) {
-        fetchJobs();
-      }
-    } catch (err) {
-      console.error("Failed to start processing:", err);
-    }
-  };
-
-  const handleDeleteDocument = async (docId: string) => {
-    if (!session?.access_token) return;
-    
-    try {
-      await fetch(`${API_BASE_URL}/rags/${ragId}/documents/${docId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      
-      fetchDocuments();
-      fetchProject();
-    } catch (err) {
-      console.error("Failed to delete document:", err);
-    }
-  };
+  }, [authLoading, session, isConfigured, router, fetchProject]);
 
   const handleDeleteProject = async () => {
     // Called by RagSettingsTab after successful deletion - just redirect
     router.push("/dashboard");
-  };
-
-  const copyShareUrl = () => {
-    const url = project?.slug 
-      ? `${window.location.origin}/r/${project.slug}`
-      : `${window.location.origin}/r/${ragId}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   // Loading state
@@ -316,11 +119,6 @@ export default function RAGAdminPage() {
       </div>
     );
   }
-
-  const pendingDocs = documents.filter(d => d.status === "pending");
-  const processingDocs = documents.filter(d => d.status === "processing");
-  const completedDocs = documents.filter(d => d.status === "completed");
-  const failedDocs = documents.filter(d => d.status === "failed");
 
   return (
     <div className="min-h-screen bg-background">
@@ -374,79 +172,18 @@ export default function RAGAdminPage() {
                 ragId={ragId}
                 accessToken={session.access_token}
                 apiBaseUrl={API_BASE_URL}
-                onUploadComplete={() => {
-                  fetchDocuments();
-                  fetchProject();
-                }}
+                onUploadComplete={fetchProject}
               />
             )}
 
-            {/* Process Button */}
-            {pendingDocs.length > 0 && (
-              <Alert>
-                <AlertDescription className="flex items-center justify-between">
-                  <span>
-                    {pendingDocs.length} document(s) ready to process
-                  </span>
-                  <Button size="sm" onClick={handleProcessAll}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Process All
-                  </Button>
-                </AlertDescription>
-              </Alert>
+            {/* Documents List */}
+            {session?.access_token && (
+              <RagDocumentsTab
+                ragId={ragId}
+                accessToken={session.access_token}
+                onDocumentsChanged={fetchProject}
+              />
             )}
-
-            {/* Document List */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Documents ({documents.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {documents.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">
-                    No documents yet. Upload some PDFs to get started.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {documents.map(doc => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between p-3 border rounded-lg"
-                      >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <FileText className="h-5 w-5 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{doc.original_filename}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {doc.chunk_count} chunks
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={
-                              doc.status === "completed" ? "default" :
-                              doc.status === "processing" ? "secondary" :
-                              doc.status === "failed" ? "destructive" :
-                              "outline"
-                            }
-                          >
-                            {doc.status}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteDocument(doc.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* Metadata Tab */}
@@ -456,50 +193,13 @@ export default function RAGAdminPage() {
 
           {/* Processing Tab */}
           <TabsContent value="processing" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Processing Jobs</CardTitle>
-                  <Button variant="outline" size="sm" onClick={fetchJobs}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {jobs.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">
-                    No processing jobs
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {jobs.map(job => (
-                      <div key={job.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium">{job.job_type}</span>
-                          <Badge
-                            variant={
-                              job.status === "completed" ? "default" :
-                              job.status === "running" ? "secondary" :
-                              job.status === "failed" ? "destructive" :
-                              "outline"
-                            }
-                          >
-                            {job.status}
-                          </Badge>
-                        </div>
-                        {job.status === "running" && (
-                          <Progress value={job.progress} className="mb-2" />
-                        )}
-                        {job.message && (
-                          <p className="text-sm text-muted-foreground">{job.message}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {session?.access_token && (
+              <RagProcessingTab
+                ragId={ragId}
+                accessToken={session.access_token}
+                onProcessingComplete={fetchProject}
+              />
+            )}
           </TabsContent>
 
           {/* Settings Tab */}
