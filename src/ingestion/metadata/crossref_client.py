@@ -34,6 +34,9 @@ class CrossRefWork(BaseModel):
     type: Optional[str] = None  # journal-article, book-chapter, etc.
     cited_by_count: Optional[int] = None
     is_open_access: Optional[bool] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
     
     # Raw response for debugging
     raw: Optional[Dict[str, Any]] = None
@@ -213,6 +216,9 @@ class CrossRefClient:
                 type=data.get("type"),
                 cited_by_count=data.get("is-referenced-by-count"),
                 is_open_access=data.get("is-oa"),
+                volume=data.get("volume"),
+                issue=data.get("issue"),
+                pages=data.get("page"),
                 raw=data,
             )
             
