@@ -850,27 +850,32 @@ async def trigger_processing(
     
     if modal_webhook_url:
         # Call Modal webhook to trigger processing
+        # The webhook expects: { "project_id": "uuid", "force_reprocess": bool, "max_documents": int }
         try:
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
+            async with httpx.AsyncClient(timeout=60.0) as http_client:
                 response = await http_client.post(
                     modal_webhook_url,
                     json={
-                        "action": "process_rag_project",
                         "project_id": project_id,
-                        "qdrant_collection": project.qdrant_collection,
                         "force_reprocess": force,
+                        "max_documents": 0,  # 0 = unlimited
                     },
                 )
                 
                 if response.status_code == 200:
                     result = response.json()
                     logger.info(f"Modal triggered for project {project_id}: {result}")
-                    return ProcessResponse(
-                        message=f"Processing triggered for {len(pending_docs)} documents",
-                        queued=len(pending_docs),
-                        skipped=0,
-                        function_id=result.get("function_id"),
-                    )
+                    
+                    # Webhook returns: { success, project_id, processed, failed, skipped, total, message }
+                    if result.get("success"):
+                        return ProcessResponse(
+                            message=result.get("message", f"Processing {len(pending_docs)} documents"),
+                            queued=result.get("total", len(pending_docs)),
+                            skipped=result.get("skipped", 0),
+                        )
+                    else:
+                        logger.error(f"Modal webhook returned error: {result.get('error')}")
+                        # Fall through to manual processing message
                 else:
                     logger.error(f"Modal webhook failed: {response.status_code} - {response.text}")
                     # Fall through to manual processing message

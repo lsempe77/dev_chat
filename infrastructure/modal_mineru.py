@@ -2414,7 +2414,7 @@ def main(
 
 @app.function(
     image=base_image,
-    secrets=[r2_secret, qdrant_secret, cohere_secret],
+    secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret],
     timeout=600,
 )
 @modal.fastapi_endpoint(method="POST")
@@ -2424,16 +2424,17 @@ def trigger_processing(request: dict = None) -> dict:
     
     POST body (all optional):
         {
+            "project_id": "uuid",           # If provided, process for this RAG project
             "force_reprocess": false,
             "check_qdrant": true,
-            "max_documents": 10,
+            "max_documents": 0,             # 0 = unlimited
             "api_key": "optional-secret-key"
         }
     
     Returns:
         {
             "success": true,
-            "queued": 5,
+            "processed": 5,
             "skipped": 3,
             "message": "Processing started"
         }
@@ -2450,10 +2451,10 @@ def trigger_processing(request: dict = None) -> dict:
     if request is None:
         request = {}
     
+    project_id = request.get("project_id")  # RAG project UUID
     force_reprocess = request.get("force_reprocess", False)
     check_qdrant = request.get("check_qdrant", True)
-    max_documents = request.get("max_documents", 10)
-    dry_run = request.get("dry_run", False)  # Safety: preview what would be processed
+    max_documents = request.get("max_documents", 0)  # 0 = unlimited
     
     # SAFETY: force_reprocess requires explicit confirmation
     if force_reprocess and not request.get("confirm_force", False):
@@ -2476,23 +2477,41 @@ def trigger_processing(request: dict = None) -> dict:
             }
     
     try:
-        # Call the orchestrator (spawns in Modal's infrastructure)
-        # Pass max_documents to limit number of PDFs processed
-        result = orchestrate.remote(
-            force_reprocess=force_reprocess,
-            check_qdrant=check_qdrant,
-            max_documents=max_documents
-        )
-        
-        return {
-            "success": True,
-            "queued": result.get("queued", 0),
-            "reindexed": result.get("needs_reindex", 0),
-            "skipped_limit": result.get("skipped_limit", 0),
-            "skipped_errors": result.get("skipped_qdrant_errors", 0),
-            "max_documents": max_documents,
-            "message": f"Processing triggered. Queued {result.get('queued', 0)} PDFs, re-indexing {result.get('needs_reindex', 0)}.",
-        }
+        # If project_id is provided, use project-specific orchestrator
+        if project_id:
+            print(f"Processing RAG project: {project_id}")
+            result = orchestrate_rag.remote(
+                project_id=project_id,
+                force_reprocess=force_reprocess,
+                max_documents=max_documents
+            )
+            
+            return {
+                "success": True,
+                "project_id": project_id,
+                "processed": result.get("processed", 0),
+                "failed": result.get("failed", 0),
+                "skipped": result.get("skipped", 0),
+                "total": result.get("total", 0),
+                "message": f"Processed {result.get('processed', 0)} PDFs for project {project_id}.",
+            }
+        else:
+            # Legacy: process global input-pdfs folder
+            result = orchestrate.remote(
+                force_reprocess=force_reprocess,
+                check_qdrant=check_qdrant,
+                max_documents=max_documents
+            )
+            
+            return {
+                "success": True,
+                "queued": result.get("queued", 0),
+                "reindexed": result.get("needs_reindex", 0),
+                "skipped_limit": result.get("skipped_limit", 0),
+                "skipped_errors": result.get("skipped_qdrant_errors", 0),
+                "max_documents": max_documents,
+                "message": f"Processing triggered. Queued {result.get('queued', 0)} PDFs, re-indexing {result.get('needs_reindex', 0)}.",
+            }
         
     except Exception as e:
         print(f"Error in trigger: {e}")
