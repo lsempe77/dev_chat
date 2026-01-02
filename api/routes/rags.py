@@ -1246,35 +1246,24 @@ async def clear_project_storage(
     import os
     
     project = await get_user_project(user, project_id)
-    client = get_supabase_client()
-    
-    # Get all documents for this project
-    result = client.table("documents").select("filename, original_filename").eq("rag_project_id", project_id).execute()
     
     try:
         r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
         deleted_count = 0
         
-        for doc in result.data or []:
-            # Delete input PDF
-            for key in [f"input-pdfs/{doc['filename']}", f"input-pdfs/{doc['original_filename']}"]:
+        # Multi-tenant path: rags/{project_id}/
+        prefix = f"rags/{project_id}/"
+        paginator = r2_client.get_paginator("list_objects_v2")
+        
+        # Delete all objects under the project prefix
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+            for obj in page.get("Contents", []):
                 try:
-                    r2_client.delete_object(Bucket=bucket_name, Key=key)
+                    r2_client.delete_object(Bucket=bucket_name, Key=obj["Key"])
                     deleted_count += 1
-                except Exception:
-                    pass
-            
-            # Delete output files (markdown, etc.)
-            # Output files are typically in outputs/{doc_id}/
-            try:
-                prefix = f"outputs/{doc['filename'].replace('.pdf', '')}/"
-                response = r2_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-                for obj in response.get('Contents', []):
-                    r2_client.delete_object(Bucket=bucket_name, Key=obj['Key'])
-                    deleted_count += 1
-            except Exception:
-                pass
+                except Exception as e:
+                    logger.warning(f"Failed to delete {obj['Key']}: {e}")
         
         logger.info(f"Cleared {deleted_count} files from R2 for project {project_id}")
         return {"message": "Storage cleared", "deleted": deleted_count}
