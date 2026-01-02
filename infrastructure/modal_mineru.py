@@ -865,8 +865,8 @@ def orchestrate_rag(
     
     print(f"Found {len(existing_outputs)} existing outputs")
     
-    # Queue PDFs for processing
-    queued = []
+    # Determine which PDFs to process
+    to_process = []
     skipped = []
     
     for pdf_key in pdf_keys:
@@ -881,27 +881,57 @@ def orchestrate_rag(
             continue
         
         # Apply limit
-        if max_documents > 0 and len(queued) >= max_documents:
+        if max_documents > 0 and len(to_process) >= max_documents:
             skipped.append(pdf_key)
             print(f"  ⏸ Skipping (limit reached): {pdf_name}")
             continue
         
-        # Queue for processing
+        # Add to processing queue
         print(f"  Queuing: {pdf_name}")
-        process_pdf_rag.spawn(
-            pdf_key=pdf_key,
-            project_id=project_id,
-            qdrant_collection=collection,
-        )
-        queued.append(pdf_key)
+        to_process.append(pdf_key)
+    
+    if not to_process:
+        print("No new PDFs to process")
+        return {
+            "project_id": project_id,
+            "qdrant_collection": collection,
+            "processed": 0,
+            "skipped": len(skipped),
+            "total": len(pdf_keys),
+            "results": [],
+        }
+    
+    print(f"\nProcessing {len(to_process)} PDFs (waiting for completion)...")
+    
+    # Use starmap to process all PDFs in parallel and WAIT for completion
+    # This is the key fix - spawn() doesn't wait, but starmap() does
+    results = []
+    success = 0
+    failed = 0
+    
+    for result in process_pdf_rag.starmap(
+        [(pdf_key, project_id, collection) for pdf_key in to_process],
+        return_exceptions=True,
+    ):
+        if isinstance(result, Exception):
+            print(f"  ✗ Error: {result}")
+            failed += 1
+            results.append({"error": str(result)})
+        else:
+            print(f"  ✓ Completed: {result.get('pdf_name', 'unknown')}")
+            success += 1
+            results.append(result)
+    
+    print(f"\nProcessing complete: {success} succeeded, {failed} failed")
     
     return {
         "project_id": project_id,
         "qdrant_collection": collection,
-        "queued": len(queued),
+        "processed": success,
+        "failed": failed,
         "skipped": len(skipped),
         "total": len(pdf_keys),
-        "queued_files": [Path(k).name for k in queued[:10]],
+        "results": results[:10],  # First 10 results for summary
     }
 
 
