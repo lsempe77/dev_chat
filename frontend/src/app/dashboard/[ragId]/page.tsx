@@ -39,6 +39,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { RagMetadataTab } from "@/components/dashboard/RagMetadataTab";
 import { RagSettingsTab } from "@/components/dashboard/RagSettingsTab";
+import { RagUploadTab } from "@/components/dashboard/RagUploadTab";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -99,11 +100,6 @@ export default function RAGAdminPage() {
   const [editSlug, setEditSlug] = useState("");
   const [editIsPublic, setEditIsPublic] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Upload state
-  const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
-  const [isUploading, setIsUploading] = useState(false);
   
   // Delete dialog
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -244,47 +240,6 @@ export default function RAGAdminPage() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setUploadingFiles(files);
-  };
-
-  const handleUpload = async () => {
-    if (!session?.access_token || uploadingFiles.length === 0) return;
-    
-    setIsUploading(true);
-    
-    for (const file of uploadingFiles) {
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        
-        setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
-        
-        const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents/upload`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: formData,
-        });
-        
-        if (!response.ok) {
-          console.error(`Failed to upload ${file.name}`);
-        }
-        
-        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
-      } catch (err) {
-        console.error(`Error uploading ${file.name}:`, err);
-      }
-    }
-    
-    setIsUploading(false);
-    setUploadingFiles([]);
-    setUploadProgress({});
-    fetchDocuments();
-  };
-
   const handleProcessAll = async () => {
     if (!session?.access_token) return;
     
@@ -414,56 +369,17 @@ export default function RAGAdminPage() {
           {/* Documents Tab */}
           <TabsContent value="documents" className="space-y-6">
             {/* Upload Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Upload Documents
-                </CardTitle>
-                <CardDescription>
-                  Upload PDF files to add to your knowledge base
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Input
-                    type="file"
-                    accept=".pdf"
-                    multiple
-                    onChange={handleFileSelect}
-                    disabled={isUploading}
-                  />
-                  
-                  {uploadingFiles.length > 0 && (
-                    <div className="space-y-2">
-                      {uploadingFiles.map(file => (
-                        <div key={file.name} className="flex items-center gap-2 text-sm">
-                          <FileText className="h-4 w-4" />
-                          <span className="flex-1 truncate">{file.name}</span>
-                          {uploadProgress[file.name] !== undefined && (
-                            <Progress value={uploadProgress[file.name]} className="w-20" />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <Button onClick={handleUpload} disabled={isUploading || uploadingFiles.length === 0}>
-                    {isUploading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload {uploadingFiles.length} file(s)
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            {session?.access_token && (
+              <RagUploadTab
+                ragId={ragId}
+                accessToken={session.access_token}
+                apiBaseUrl={API_BASE_URL}
+                onUploadComplete={() => {
+                  fetchDocuments();
+                  fetchProject();
+                }}
+              />
+            )}
 
             {/* Process Button */}
             {pendingDocs.length > 0 && (

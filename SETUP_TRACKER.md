@@ -701,6 +701,8 @@ for r in results.points:
 | 🟡 P2 | Multi-tenant architecture | 3-5 days |
 | 🟢 P3 | Docker containerization | 2-3 days |
 | 🟢 P3 | PDF retention policy | 1 day |
+| 🟢 P3 | App admin (see users, rags, track costs, observability, RAG testings, etc) | 5 days |
+
 
 ### Long-Term (v3.0)
 

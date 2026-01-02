@@ -5,12 +5,15 @@ Allows authenticated users to create, list, update, and delete their RAG project
 Each RAG project corresponds to a separate Qdrant collection.
 """
 
+import hashlib
+import os
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 from pydantic import BaseModel, Field
+from botocore.exceptions import ClientError
 
 from src.auth import AuthenticatedUser, get_current_user, get_supabase_client, is_multi_tenant_enabled
 from src.utils.logging import get_logger
@@ -477,6 +480,154 @@ async def list_project_documents(
         ))
     
     return DocumentListResponse(documents=documents, total=len(documents))
+
+
+# =============================================================================
+# Document Upload Helpers
+# =============================================================================
+
+def compute_content_hash(content: bytes) -> str:
+    """Compute SHA-256 hash of content, truncated for use in filenames."""
+    return hashlib.sha256(content).hexdigest()[:12]
+
+
+def find_existing_document_for_project(r2_client, bucket_name: str, project_id: str, content_hash: str, base_name: str) -> dict | None:
+    """Check if a document with the same content hash already exists in the project's R2 folder."""
+    prefix = f"rags/{project_id}/input-pdfs/"
+    try:
+        response = r2_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        for obj in response.get("Contents", []):
+            key = obj["Key"]
+            # Doc ID is the filename without .pdf
+            filename = key.replace(prefix, "")
+            if filename.startswith(f"{content_hash}_"):
+                doc_id = os.path.splitext(filename)[0]
+                return {
+                    "key": key,
+                    "doc_id": doc_id,
+                    "size": obj["Size"],
+                }
+    except Exception as e:
+        logger.warning(f"Error checking for duplicates: {e}")
+    return None
+
+
+class UploadResponse(BaseModel):
+    """Response for file upload."""
+    success: bool
+    filename: str
+    r2_key: Optional[str] = None
+    size_bytes: Optional[int] = None
+    queued_for_processing: bool = False
+    doc_id: Optional[str] = None
+    message: Optional[str] = None
+    is_duplicate: bool = False
+
+
+@router.post("/{project_id}/documents/upload", response_model=UploadResponse)
+async def upload_document(
+    project_id: str,
+    file: UploadFile = File(...),
+    force_upload: bool = False,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> UploadResponse:
+    """
+    Upload a PDF document to a RAG project.
+    
+    Uses content-based deduplication: files with identical content won't be uploaded twice.
+    Set force_upload=true to bypass duplicate detection.
+    """
+    project = await get_user_project(user, project_id)
+    
+    # Validate file type (only PDFs supported)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    
+    file_ext = os.path.splitext(file.filename.lower())[1]
+    if file_ext != ".pdf":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only PDF files are supported. Got: {file_ext}"
+        )
+    
+    try:
+        # Read file content for deduplication
+        content = await file.read()
+        size_bytes = len(content)
+        
+        # Compute content hash for deduplication
+        content_hash = compute_content_hash(content)
+        
+        safe_filename = file.filename.replace(" ", "_").replace("/", "_")
+        base_name = os.path.splitext(safe_filename)[0]
+        
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # Check for existing document with same content
+        if not force_upload:
+            existing = find_existing_document_for_project(r2_client, bucket_name, project_id, content_hash, base_name)
+            if existing:
+                logger.info(f"Duplicate detected: {file.filename} matches existing {existing['doc_id']} in project {project_id}")
+                return UploadResponse(
+                    success=True,
+                    filename=file.filename,
+                    r2_key=existing["key"],
+                    size_bytes=existing["size"],
+                    queued_for_processing=False,
+                    doc_id=existing["doc_id"],
+                    message=f"Document already exists as {existing['doc_id']}. No duplicate created.",
+                    is_duplicate=True,
+                )
+        
+        # Generate doc_id using content hash
+        doc_id = f"{content_hash}_{base_name}"
+        r2_key = f"rags/{project_id}/input-pdfs/{doc_id}{file_ext}"
+        
+        # Upload to R2
+        r2_client.put_object(
+            Bucket=bucket_name,
+            Key=r2_key,
+            Body=content,
+            ContentType=file.content_type or "application/pdf",
+            Metadata={
+                "doc_id": doc_id,
+                "content_hash": content_hash,
+                "original_filename": file.filename,
+                "upload_timestamp": datetime.utcnow().isoformat(),
+                "project_id": project_id,
+            }
+        )
+        
+        logger.info(f"Uploaded {file.filename} to R2 as {r2_key} (doc_id={doc_id}, project={project_id}, {size_bytes} bytes)")
+        
+        # Create document record in database
+        client = get_supabase_client()
+        client.table("documents").upsert({
+            "id": doc_id,
+            "rag_project_id": project_id,
+            "filename": doc_id,
+            "original_filename": file.filename,
+            "status": "pending",
+            "r2_key": r2_key,
+            "metadata": {},
+        }, on_conflict="id").execute()
+        
+        return UploadResponse(
+            success=True,
+            filename=file.filename,
+            r2_key=r2_key,
+            size_bytes=size_bytes,
+            queued_for_processing=True,
+            doc_id=doc_id,
+        )
+        
+    except ClientError as e:
+        logger.error(f"R2 upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload to R2: {str(e)}")
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
 class JobResponse(BaseModel):
