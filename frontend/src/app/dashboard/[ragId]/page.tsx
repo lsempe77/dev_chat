@@ -156,17 +156,28 @@ export default function RAGAdminPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="documents" className="space-y-6">
-          <TabsList>
+        <Tabs defaultValue="upload" className="space-y-6">
+          {/* Tab descriptions */}
+          <div className="mb-4 p-4 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+            <p className="font-medium text-foreground mb-2">Workflow:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li><strong>Upload</strong> — Add PDF files to this project (stored in R2)</li>
+              <li><strong>Processing</strong> — Trigger MinerU extraction &amp; vectorization on Modal</li>
+              <li><strong>Documents</strong> — View processed documents and their chunks</li>
+              <li><strong>Metadata</strong> — Review and enrich title, authors, DOI, year</li>
+            </ol>
+          </div>
+          
+          <TabsList className="grid w-full max-w-2xl grid-cols-5">
+            <TabsTrigger value="upload">Upload</TabsTrigger>
+            <TabsTrigger value="processing">Processing</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="metadata">Metadata</TabsTrigger>
-            <TabsTrigger value="processing">Processing</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
-          {/* Documents Tab - forceMount keeps component mounted to preserve upload state */}
-          <TabsContent value="documents" className="space-y-6" forceMount>
-            {/* Upload Section */}
+          {/* Upload Tab - forceMount keeps component mounted to preserve upload state */}
+          <TabsContent value="upload" className="space-y-6" forceMount>
             {session?.access_token && (
               <RagUploadTab
                 ragId={ragId}
@@ -175,8 +186,21 @@ export default function RAGAdminPage() {
                 onUploadComplete={fetchProject}
               />
             )}
+          </TabsContent>
 
-            {/* Documents List */}
+          {/* Processing Tab - forceMount to preserve auto-refresh state */}
+          <TabsContent value="processing" className="space-y-6" forceMount>
+            {session?.access_token && (
+              <RagProcessingTab
+                ragId={ragId}
+                accessToken={session.access_token}
+                onProcessingComplete={fetchProject}
+              />
+            )}
+          </TabsContent>
+
+          {/* Documents Tab */}
+          <TabsContent value="documents" className="space-y-6">
             {session?.access_token && (
               <RagDocumentsTab
                 ragId={ragId}
@@ -189,17 +213,6 @@ export default function RAGAdminPage() {
           {/* Metadata Tab */}
           <TabsContent value="metadata" className="space-y-6">
             <RagMetadataTab ragId={ragId} />
-          </TabsContent>
-
-          {/* Processing Tab - forceMount to preserve auto-refresh state */}
-          <TabsContent value="processing" className="space-y-6" forceMount>
-            {session?.access_token && (
-              <RagProcessingTab
-                ragId={ragId}
-                accessToken={session.access_token}
-                onProcessingComplete={fetchProject}
-              />
-            )}
           </TabsContent>
 
           {/* Settings Tab */}

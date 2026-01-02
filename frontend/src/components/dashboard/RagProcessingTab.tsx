@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Progress } from "@/components/ui/progress";
 import { 
   Activity, 
   Play, 
@@ -20,19 +19,15 @@ import {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-interface ProcessingJob {
+interface Document {
   id: string;
-  job_type: string;
-  status: "queued" | "processing" | "completed" | "failed";
-  progress: number;
-  message: string | null;
+  filename: string;
+  original_filename: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  error_message: string | null;
+  chunk_count: number;
   created_at: string;
-  started_at?: string;
-  completed_at?: string;
-  error?: string;
-  filename?: string;
-  pages?: number;
-  chunks?: number;
+  processed_at: string | null;
 }
 
 interface RagProcessingTabProps {
@@ -42,7 +37,7 @@ interface RagProcessingTabProps {
 }
 
 export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: RagProcessingTabProps) {
-  const [jobs, setJobs] = useState<ProcessingJob[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
   const [isClearingLocks, setIsClearingLocks] = useState(false);
@@ -50,25 +45,25 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
 
-  // Calculate stats
-  const queuedCount = jobs.filter(j => j.status === "queued").length;
-  const processingCount = jobs.filter(j => j.status === "processing").length;
-  const completedCount = jobs.filter(j => j.status === "completed").length;
-  const failedCount = jobs.filter(j => j.status === "failed").length;
+  // Calculate stats from documents
+  const pendingCount = documents.filter(d => d.status === "pending").length;
+  const processingCount = documents.filter(d => d.status === "processing").length;
+  const completedCount = documents.filter(d => d.status === "completed").length;
+  const failedCount = documents.filter(d => d.status === "failed").length;
 
-  // Fetch jobs
-  const refreshJobs = useCallback(async () => {
+  // Fetch documents (not jobs)
+  const refreshDocuments = useCallback(async () => {
     setIsRefreshing(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/jobs`, {
+      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) throw new Error("Failed to fetch jobs");
+      if (!response.ok) throw new Error("Failed to fetch documents");
       const data = await response.json();
-      setJobs(data.jobs || []);
+      setDocuments(data.documents || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch jobs");
+      setError(err instanceof Error ? err.message : "Failed to fetch documents");
     } finally {
       setIsRefreshing(false);
     }
@@ -76,14 +71,14 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
 
   // Initial load
   useEffect(() => {
-    refreshJobs();
-  }, [refreshJobs]);
+    refreshDocuments();
+  }, [refreshDocuments]);
 
   // Auto-refresh every 5 seconds
   useEffect(() => {
-    const interval = setInterval(refreshJobs, 5000);
+    const interval = setInterval(refreshDocuments, 5000);
     return () => clearInterval(interval);
-  }, [refreshJobs]);
+  }, [refreshDocuments]);
 
   // Trigger processing
   const triggerProcessing = async () => {
@@ -98,7 +93,7 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
       const data = await response.json();
       setTriggerMessage(data.message || "Processing triggered");
       setLastTriggeredAt(new Date());
-      await refreshJobs();
+      await refreshDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to trigger processing");
     } finally {
@@ -118,7 +113,7 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
       if (!response.ok) throw new Error("Failed to clear locks");
       const data = await response.json();
       setTriggerMessage(data.message || "Locks cleared");
-      await refreshJobs();
+      await refreshDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to clear locks");
     } finally {
@@ -128,7 +123,7 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "queued": return <Clock className="h-4 w-4 text-muted-foreground" />;
+      case "pending": return <Clock className="h-4 w-4 text-muted-foreground" />;
       case "processing": return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
       case "completed": return <CheckCircle className="h-4 w-4 text-green-500" />;
       case "failed": return <AlertCircle className="h-4 w-4 text-red-500" />;
@@ -138,7 +133,7 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "queued": return <Badge variant="secondary">Queued</Badge>;
+      case "pending": return <Badge variant="secondary">Pending</Badge>;
       case "processing": return <Badge className="bg-blue-500">Processing</Badge>;
       case "completed": return <Badge className="bg-green-500">Completed</Badge>;
       case "failed": return <Badge variant="destructive">Failed</Badge>;
@@ -196,8 +191,8 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Queued</p>
-                <p className="text-2xl font-bold">{queuedCount}</p>
+                <p className="text-sm text-muted-foreground">Pending</p>
+                <p className="text-2xl font-bold">{pendingCount}</p>
               </div>
               <Clock className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -249,13 +244,13 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="h-5 w-5" />
-                Processing Queue
+                Document Processing Status
               </CardTitle>
               <CardDescription>
                 {lastTriggeredAt && (
                   <>Last triggered: {lastTriggeredAt.toLocaleTimeString()}. </>
                 )}
-                Click &quot;Process Pending&quot; to start processing queued documents.
+                Click &quot;Process Pending&quot; to send documents to Modal for MinerU extraction.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -278,7 +273,7 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
               <Button
                 size="sm"
                 variant="outline"
-                onClick={refreshJobs}
+                onClick={refreshDocuments}
                 disabled={isRefreshing}
               >
                 <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -287,70 +282,61 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
               <Button
                 size="sm"
                 onClick={triggerProcessing}
-                disabled={isTriggering || queuedCount === 0}
+                disabled={isTriggering || pendingCount === 0}
               >
                 {isTriggering ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 ) : (
                   <Play className="h-4 w-4 mr-1" />
                 )}
-                Process Pending ({queuedCount})
+                Process Pending ({pendingCount})
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {jobs.length === 0 ? (
+          {documents.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Activity className="h-10 w-10 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No processing jobs</p>
-              <p className="text-xs mt-1">Upload documents to start processing</p>
+              <p className="text-sm">No documents uploaded yet</p>
+              <p className="text-xs mt-1">Go to the Upload tab to add documents</p>
             </div>
           ) : (
             <ScrollArea className="h-[400px]">
               <div className="space-y-3">
-                {jobs.map(job => (
+                {documents.map(doc => (
                   <div
-                    key={job.id}
+                    key={doc.id}
                     className={`flex items-center gap-4 p-4 rounded-lg border ${
-                      job.status === "queued" 
+                      doc.status === "pending" 
                         ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800"
-                        : job.status === "processing"
+                        : doc.status === "processing"
                         ? "bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700"
-                        : job.status === "completed"
+                        : doc.status === "completed"
                         ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
                         : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
                     }`}
                   >
-                    {getStatusIcon(job.status)}
+                    {getStatusIcon(doc.status)}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium truncate">
-                          {job.filename || job.job_type}
+                          {doc.original_filename}
                         </span>
-                        {getStatusBadge(job.status)}
+                        {getStatusBadge(doc.status)}
                       </div>
-                      {job.status === "processing" && job.progress > 0 && (
-                        <Progress value={job.progress} className="h-1 mt-2" />
-                      )}
-                      {job.message && (
-                        <p className="text-xs text-muted-foreground mt-1 truncate">
-                          {job.message}
-                        </p>
-                      )}
-                      {job.error && (
+                      {doc.error_message && (
                         <p className="text-xs text-red-600 dark:text-red-400 mt-1 truncate">
-                          {job.error}
+                          {doc.error_message}
                         </p>
                       )}
                     </div>
                     <div className="text-right text-xs text-muted-foreground">
-                      {job.pages && <div>{job.pages} pages</div>}
-                      {job.chunks && <div>{job.chunks} chunks</div>}
-                      <div>{formatDate(job.created_at)}</div>
-                      {(job.status === "processing" || job.status === "completed") && job.started_at && (
-                        <div>{formatDuration(job.started_at, job.completed_at)}</div>
+                      {doc.chunk_count > 0 && <div>{doc.chunk_count} chunks</div>}
+                      <div>{formatDate(doc.created_at)}</div>
+                      {doc.processed_at && (
+                        <div>Processed: {formatDate(doc.processed_at)}</div>
                       )}
                     </div>
                   </div>
