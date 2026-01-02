@@ -7,6 +7,8 @@ Extract DOI from PDF documents using multiple methods:
 3. URL patterns in references
 """
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
 from typing import Optional, List, TYPE_CHECKING
