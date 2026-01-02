@@ -833,10 +833,10 @@ async def trigger_processing(
             skipped=0,
         )
     
-    # Update status to 'queued' for all pending docs
+    # Update status to 'processing' for all pending docs
     doc_ids = [d["id"] for d in pending_docs]
     client.table("documents").update({
-        "status": "queued",
+        "status": "processing",
         "updated_at": datetime.utcnow().isoformat(),
     }).in_("id", doc_ids).execute()
     
