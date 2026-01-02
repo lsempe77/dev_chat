@@ -323,25 +323,8 @@ export default function RAGAdminPage() {
   };
 
   const handleDeleteProject = async () => {
-    if (!session?.access_token) return;
-    
-    setIsDeleting(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      
-      if (response.ok) {
-        router.push("/dashboard");
-      }
-    } catch (err) {
-      setError("Failed to delete project");
-    } finally {
-      setIsDeleting(false);
-    }
+    // Called by RagSettingsTab after successful deletion - just redirect
+    router.push("/dashboard");
   };
 
   const copyShareUrl = () => {
