@@ -164,8 +164,8 @@ export default function RAGAdminPage() {
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
-          {/* Documents Tab */}
-          <TabsContent value="documents" className="space-y-6">
+          {/* Documents Tab - forceMount keeps component mounted to preserve upload state */}
+          <TabsContent value="documents" className="space-y-6" forceMount>
             {/* Upload Section */}
             {session?.access_token && (
               <RagUploadTab
@@ -191,8 +191,8 @@ export default function RAGAdminPage() {
             <RagMetadataTab ragId={ragId} />
           </TabsContent>
 
-          {/* Processing Tab */}
-          <TabsContent value="processing" className="space-y-6">
+          {/* Processing Tab - forceMount to preserve auto-refresh state */}
+          <TabsContent value="processing" className="space-y-6" forceMount>
             {session?.access_token && (
               <RagProcessingTab
                 ragId={ragId}
