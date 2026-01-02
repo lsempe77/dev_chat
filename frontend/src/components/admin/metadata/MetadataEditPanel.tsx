@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -163,6 +164,20 @@ export function MetadataEditPanel({
                 />
               </div>
             </div>
+
+            {/* Abstract */}
+            {showField("abstract") && (
+              <div className="space-y-1">
+                <Label className="text-xs">Abstract</Label>
+                <Textarea
+                  value={editForm.abstract || ""}
+                  onChange={(e) => setEditForm({ ...editForm, abstract: e.target.value })}
+                  placeholder="Document abstract..."
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
+            )}
           </div>
 
           {/* === PUBLICATION INFO (conditional) === */}

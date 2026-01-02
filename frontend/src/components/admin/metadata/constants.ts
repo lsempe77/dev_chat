@@ -73,19 +73,21 @@ export const SECTORS = [
  * Follows Zotero's field structure.
  */
 export const FIELDS_BY_ITEM_TYPE: Record<string, string[]> = {
-  journalArticle: ["publication", "volume", "issue", "pages", "doi", "issn"],
-  book: ["publisher", "place", "edition", "isbn", "series", "series_number", "num_pages"],
-  bookSection: ["book_title", "publisher", "place", "edition", "pages", "isbn", "series"],
-  report: ["institution", "report_number", "report_type", "place", "pages", "series"],
-  workingPaper: ["institution", "report_number", "place", "series"],
-  thesis: ["institution", "thesis_type", "place", "num_pages"],
-  conferencePaper: ["conference_name", "proceedings_title", "publisher", "place", "pages", "doi"],
-  manuscript: ["place", "num_pages"],
-  document: ["publisher", "place"],
-  webpage: ["url", "accessed_date"],
-  dataset: ["publisher", "url", "doi"],
-  preprint: ["publication", "doi", "url"],
-  other: ["publisher", "place"],
+  journalArticle: ["journal", "publication", "volume", "issue", "pages", "doi", "issn", "abstract"],
+  book: ["publisher", "place", "edition", "isbn", "series", "series_number", "num_pages", "abstract"],
+  bookSection: ["book_title", "publisher", "place", "edition", "pages", "isbn", "series", "abstract"],
+  report: ["institution", "report_number", "report_type", "place", "pages", "series", "abstract"],
+  workingPaper: ["institution", "report_number", "place", "series", "abstract"],
+  thesis: ["institution", "thesis_type", "place", "num_pages", "abstract"],
+  conferencePaper: ["conference_name", "proceedings_title", "publisher", "place", "pages", "doi", "abstract"],
+  manuscript: ["place", "num_pages", "abstract"],
+  document: ["publisher", "place", "abstract"],
+  webpage: ["url", "accessed_date", "abstract"],
+  dataset: ["publisher", "url", "doi", "abstract"],
+  preprint: ["publication", "doi", "url", "abstract"],
+  other: ["publisher", "place", "abstract"],
+  // Default for no item type selected - show common fields
+  "": ["journal", "volume", "issue", "pages", "publisher", "abstract"],
 };
 
 /**
