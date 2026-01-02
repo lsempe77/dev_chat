@@ -28,6 +28,7 @@ import {
   getRagMetadata, 
   updateRagDocumentMetadata,
   enrichRagDocumentMetadata,
+  enrichAllRagDocuments,
   getRagPdfUrl,
   type MetadataDetail,
   type MetadataUpdateRequest,
@@ -60,6 +61,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [isEnriching, setIsEnriching] = useState<string | null>(null);
+  const [isEnrichingAll, setIsEnrichingAll] = useState(false);
+  const [enrichAllResult, setEnrichAllResult] = useState<string | null>(null);
 
   // Open PDF viewer
   const openPdfViewer = async (doc: MetadataDetail) => {
@@ -228,6 +231,21 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     }
   };
 
+  // Enrich all documents
+  const handleEnrichAll = async () => {
+    setIsEnrichingAll(true);
+    setEnrichAllResult(null);
+    try {
+      const result = await enrichAllRagDocuments(ragId);
+      setEnrichAllResult(`Enriched ${result.enriched} of ${result.total} documents (${result.skipped} skipped, ${result.failed} failed)`);
+      fetchDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enrich all failed");
+    } finally {
+      setIsEnrichingAll(false);
+    }
+  };
+
   const getConfidenceBadge = (confidence: number) => {
     if (confidence >= 0.8) {
       return <Badge variant="default" className="bg-green-600">High ({(confidence * 100).toFixed(0)}%)</Badge>;
@@ -296,10 +314,26 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                   Review and correct document metadata for accurate citations
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={fetchDocuments}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleEnrichAll}
+                  disabled={isEnrichingAll || stats.total === 0}
+                  title="Auto-fetch metadata for all documents from CrossRef/OpenAlex"
+                >
+                  {isEnrichingAll ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-2" />
+                  )}
+                  Enrich All
+                </Button>
+                <Button variant="outline" size="sm" onClick={fetchDocuments}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="flex-1 overflow-hidden">
@@ -328,6 +362,16 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                 <AlertCircle className="h-4 w-4" />
                 {error}
                 <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {enrichAllResult && (
+              <div className="flex items-center gap-2 p-3 mb-4 text-green-600 bg-green-50 rounded-lg">
+                <CheckCircle className="h-4 w-4" />
+                {enrichAllResult}
+                <Button variant="ghost" size="sm" onClick={() => setEnrichAllResult(null)}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>

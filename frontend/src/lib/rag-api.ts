@@ -230,6 +230,33 @@ export async function enrichRagDocumentMetadata(
   return response.json();
 }
 
+export interface EnrichAllResult {
+  enriched: number;
+  failed: number;
+  skipped: number;
+  total: number;
+  details: Array<{ id: string; status: string; source?: string; reason?: string }>;
+}
+
+/**
+ * Enrich metadata for all documents in a RAG project
+ */
+export async function enrichAllRagDocuments(ragId: string): Promise<EnrichAllResult> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/metadata/enrich-all`,
+    {
+      method: "POST",
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to enrich all: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
 /**
  * Get presigned URL for PDF viewing (using documents endpoint)
  */

@@ -1200,6 +1200,132 @@ async def enrich_document_metadata(
     return await get_document_metadata(project_id, doc_id, user)
 
 
+@router.post("/{project_id}/metadata/enrich-all")
+async def enrich_all_documents(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Enrich metadata for all documents in a project.
+    Returns a summary of enriched vs failed documents.
+    """
+    import re
+    from src.ingestion.metadata.crossref_client import CrossRefClient
+    from src.ingestion.metadata.openalex_client import OpenAlexClient
+    
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get all documents
+    result = client.table("documents").select("*").eq("rag_project_id", project_id).execute()
+    
+    if not result.data:
+        return {"enriched": 0, "failed": 0, "skipped": 0, "total": 0, "details": []}
+    
+    enriched_count = 0
+    failed_count = 0
+    skipped_count = 0
+    details = []
+    
+    crossref = CrossRefClient()
+    openalex = OpenAlexClient()
+    
+    for doc in result.data:
+        doc_id = doc["id"]
+        current_metadata = doc.get("metadata", {}) or {}
+        doi = current_metadata.get("doi")
+        original_filename = doc.get("original_filename", "")
+        
+        # Skip if already enriched with high confidence
+        if current_metadata.get("metadata_source") and current_metadata.get("metadata_confidence", 0) >= 0.9:
+            skipped_count += 1
+            details.append({"id": doc_id, "status": "skipped", "reason": "Already enriched"})
+            continue
+        
+        # Try to extract DOI from filename if not present
+        if not doi:
+            doi_match = re.search(r'10\.\d{4,}/[^\s]+', original_filename.replace('_', '/'))
+            if doi_match:
+                doi = doi_match.group(0)
+        
+        try:
+            enriched = {**current_metadata}
+            source = None
+            
+            if doi:
+                # Try CrossRef
+                work = await crossref.get_by_doi(doi)
+                if work:
+                    enriched.update({
+                        "doi": doi,
+                        "title": work.title or enriched.get("title"),
+                        "authors": work.authors or enriched.get("authors", []),
+                        "year": work.year or enriched.get("year"),
+                        "journal": work.journal or enriched.get("journal"),
+                        "publisher": work.publisher or enriched.get("publisher"),
+                        "item_type": work.type or enriched.get("item_type"),
+                    })
+                    source = "crossref"
+                
+                # Also try OpenAlex for additional data
+                oa_work = await openalex.get_by_doi(doi)
+                if oa_work:
+                    if oa_work.abstract and not enriched.get("abstract"):
+                        enriched["abstract"] = oa_work.abstract
+                    if oa_work.concepts:
+                        enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                    if not source:
+                        source = "openalex"
+            else:
+                # Search by title from filename
+                search_title = original_filename.replace('.pdf', '').replace('_', ' ')
+                search_title = re.sub(r'^[a-f0-9]{10,}_', '', search_title)
+                
+                works = await openalex.search(search_title, limit=1)
+                if works and len(works) > 0:
+                    oa_work = works[0]
+                    enriched.update({
+                        "title": oa_work.title or enriched.get("title"),
+                        "authors": oa_work.authors or enriched.get("authors", []),
+                        "year": oa_work.year or enriched.get("year"),
+                        "doi": oa_work.doi or enriched.get("doi"),
+                    })
+                    if oa_work.concepts:
+                        enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                    source = "openalex"
+            
+            if source:
+                enriched["metadata_source"] = source
+                enriched["metadata_confidence"] = 0.95 if doi else 0.7
+                enriched["needs_review"] = False
+                
+                client.table("documents").update({
+                    "metadata": enriched,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }).eq("id", doc_id).execute()
+                
+                enriched_count += 1
+                details.append({"id": doc_id, "status": "enriched", "source": source})
+            else:
+                failed_count += 1
+                details.append({"id": doc_id, "status": "failed", "reason": "No metadata found"})
+                
+        except Exception as e:
+            failed_count += 1
+            details.append({"id": doc_id, "status": "failed", "reason": str(e)})
+            logger.warning(f"Failed to enrich doc {doc_id}: {e}")
+    
+    logger.info(f"Enrich all: {enriched_count} enriched, {failed_count} failed, {skipped_count} skipped")
+    
+    return {
+        "enriched": enriched_count,
+        "failed": failed_count,
+        "skipped": skipped_count,
+        "total": len(result.data),
+        "details": details,
+    }
+
+
 @router.get("/{project_id}/documents/{doc_id}/pdf")
 async def get_document_pdf_url(
     project_id: str,
