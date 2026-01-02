@@ -80,6 +80,7 @@ r2_secret = modal.Secret.from_name("r2-credentials")
 qdrant_secret = modal.Secret.from_name("qdrant-credentials")
 cohere_secret = modal.Secret.from_name("cohere-credentials")
 openrouter_secret = modal.Secret.from_name("openrouter-credentials")
+supabase_secret = modal.Secret.from_name("supabase-credentials")
 
 
 # ============================================================================
@@ -752,6 +753,393 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
         "error_files": [e["key"] for e in skipped_errors[:5]],
         "duplicate_files": skipped_duplicates[:5],
     }
+
+
+# ============================================================================
+# RAG Project Orchestrator - Process documents for a specific RAG project
+# ============================================================================
+
+@app.function(
+    image=base_image,
+    secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret],
+    timeout=600,
+)
+def orchestrate_rag(
+    project_id: str,
+    qdrant_collection: Optional[str] = None,
+    force_reprocess: bool = False,
+    max_documents: int = 0,
+) -> dict:
+    """
+    Process all documents for a specific RAG project.
+    
+    Called from the backend API when user clicks "Process Documents".
+    
+    Flow:
+    1. List PDFs in rags/{project_id}/input-pdfs/
+    2. Check which ones have outputs in rags/{project_id}/outputs/
+    3. Check Qdrant collection rag_{project_id} for existing embeddings
+    4. Process new PDFs with MinerU + metadata enrichment
+    5. Embed to project-specific Qdrant collection
+    6. Sync metadata back to Supabase documents table
+    
+    Args:
+        project_id: The RAG project UUID
+        qdrant_collection: Optional override (default: rag_{project_id})
+        force_reprocess: If True, reprocess all PDFs
+        max_documents: Max docs to process (0 = unlimited)
+        
+    Returns:
+        dict with processing stats
+    """
+    import boto3
+    import os
+    import httpx
+    from collections import Counter
+    
+    s3 = get_r2_client()
+    bucket = get_bucket_name()
+    collection = qdrant_collection or f"rag_{project_id}"
+    
+    # R2 paths for this project
+    input_prefix = f"rags/{project_id}/input-pdfs/"
+    output_prefix = f"rags/{project_id}/outputs/"
+    
+    print(f"Processing RAG project: {project_id}")
+    print(f"  Input prefix: {input_prefix}")
+    print(f"  Qdrant collection: {collection}")
+    
+    # List input PDFs
+    pdf_keys = []
+    continuation_token = None
+    
+    while True:
+        if continuation_token:
+            response = s3.list_objects_v2(
+                Bucket=bucket, Prefix=input_prefix, ContinuationToken=continuation_token
+            )
+        else:
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=input_prefix)
+        
+        if "Contents" in response:
+            pdf_keys.extend([
+                obj["Key"] for obj in response["Contents"]
+                if obj["Key"].lower().endswith(".pdf")
+            ])
+        
+        if response.get("IsTruncated"):
+            continuation_token = response.get("NextContinuationToken")
+        else:
+            break
+    
+    if not pdf_keys:
+        print("No PDFs found")
+        return {"message": "No PDFs found", "queued": 0, "project_id": project_id}
+    
+    print(f"Found {len(pdf_keys)} PDFs in R2")
+    
+    # Check existing outputs
+    existing_outputs = set()
+    continuation_token = None
+    json_prefix = f"{output_prefix}json/"
+    
+    while True:
+        if continuation_token:
+            response = s3.list_objects_v2(
+                Bucket=bucket, Prefix=json_prefix, ContinuationToken=continuation_token
+            )
+        else:
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=json_prefix)
+        
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                # Extract doc_id from json filename
+                json_name = Path(obj["Key"]).stem
+                existing_outputs.add(json_name)
+        
+        if response.get("IsTruncated"):
+            continuation_token = response.get("NextContinuationToken")
+        else:
+            break
+    
+    print(f"Found {len(existing_outputs)} existing outputs")
+    
+    # Queue PDFs for processing
+    queued = []
+    skipped = []
+    
+    for pdf_key in pdf_keys:
+        # Generate doc_id the same way as process_pdf_rag
+        pdf_name = Path(pdf_key).stem
+        doc_id = pdf_name  # Could add hash if needed
+        
+        # Skip if already processed (unless force)
+        if not force_reprocess and doc_id in existing_outputs:
+            skipped.append(pdf_key)
+            print(f"  ✓ Skipping (already processed): {pdf_name}")
+            continue
+        
+        # Apply limit
+        if max_documents > 0 and len(queued) >= max_documents:
+            skipped.append(pdf_key)
+            print(f"  ⏸ Skipping (limit reached): {pdf_name}")
+            continue
+        
+        # Queue for processing
+        print(f"  Queuing: {pdf_name}")
+        process_pdf_rag.spawn(
+            pdf_key=pdf_key,
+            project_id=project_id,
+            qdrant_collection=collection,
+        )
+        queued.append(pdf_key)
+    
+    return {
+        "project_id": project_id,
+        "qdrant_collection": collection,
+        "queued": len(queued),
+        "skipped": len(skipped),
+        "total": len(pdf_keys),
+        "queued_files": [Path(k).name for k in queued[:10]],
+    }
+
+
+@app.function(
+    image=mineru_image,
+    secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret],
+    volumes={"/root/.cache/huggingface": model_cache},
+    gpu="T4",
+    timeout=1800,
+    retries=2,
+)
+def process_pdf_rag(
+    pdf_key: str,
+    project_id: str,
+    qdrant_collection: str,
+) -> dict:
+    """
+    Process a single PDF for a RAG project.
+    
+    Similar to process_pdf but:
+    - Uses project-specific R2 paths
+    - Uses project-specific Qdrant collection
+    - Syncs metadata to documents table with rag_project_id
+    
+    Args:
+        pdf_key: Full R2 key (e.g., rags/{project_id}/input-pdfs/paper.pdf)
+        project_id: RAG project UUID for Supabase sync
+        qdrant_collection: Qdrant collection name (rag_{project_id})
+    """
+    import os
+    import tempfile
+    import httpx
+    from pathlib import Path
+    
+    s3 = get_r2_client()
+    bucket = get_bucket_name()
+    
+    pdf_name = Path(pdf_key).stem
+    doc_id = pdf_name
+    
+    print(f"\n{'='*60}")
+    print(f"Processing: {pdf_name} for project {project_id}")
+    print(f"{'='*60}")
+    
+    try:
+        # Download PDF
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
+            s3.download_file(bucket, pdf_key, tmp_pdf.name)
+            pdf_path = Path(tmp_pdf.name)
+        
+        print(f"  Downloaded: {pdf_path}")
+        
+        # Process with MinerU
+        result = run_mineru(pdf_path)
+        
+        if not result.get("success"):
+            raise Exception(result.get("error", "MinerU processing failed"))
+        
+        print(f"  MinerU: {result.get('page_count', 0)} pages, {len(result.get('content', ''))} chars")
+        
+        # Post-process content
+        result["content"] = post_process_content(
+            content=result["content"],
+            title=result.get("title"),
+            authors=result.get("authors"),
+            year=result.get("year"),
+            pdf_name=Path(pdf_key).name,
+        )
+        
+        # Upload outputs to R2 under project folder
+        output_prefix = f"rags/{project_id}/outputs"
+        
+        md_key = f"{output_prefix}/md/{doc_id}.md"
+        s3.put_object(
+            Bucket=bucket,
+            Key=md_key,
+            Body=result["content"].encode("utf-8"),
+            ContentType="text/markdown",
+        )
+        
+        json_key = f"{output_prefix}/json/{doc_id}.json"
+        output_data = {
+            "doc_id": doc_id,
+            "project_id": project_id,
+            "source_key": pdf_key,
+            "processed_at": datetime.now().isoformat(),
+            "title": result.get("title"),
+            "authors": result.get("authors"),
+            "year": result.get("year"),
+            "abstract": result.get("abstract"),
+            "content": result["content"],
+            "page_count": result.get("page_count", 0),
+        }
+        s3.put_object(
+            Bucket=bucket,
+            Key=json_key,
+            Body=json.dumps(output_data, indent=2, ensure_ascii=False).encode("utf-8"),
+            ContentType="application/json",
+        )
+        
+        print(f"  Uploaded: {md_key}")
+        
+        # Resolve metadata (CrossRef + OpenAlex)
+        print(f"  Resolving metadata...")
+        enriched_metadata = resolve_metadata(
+            content=result["content"],
+            title=result.get("title"),
+            authors=result.get("authors"),
+            year=result.get("year"),
+            pdf_filename=Path(pdf_key).name,
+        )
+        enriched_metadata["doc_id"] = doc_id
+        enriched_metadata["source"] = pdf_key
+        
+        print(f"  Metadata: source={enriched_metadata.get('metadata_source')}, confidence={enriched_metadata.get('metadata_confidence', 0):.2f}")
+        
+        # Chunk and embed to Qdrant
+        print(f"  Chunking and embedding...")
+        chunks = chunk_document(
+            content=result["content"],
+            doc_id=doc_id,
+            metadata=enriched_metadata,
+        )
+        
+        chunk_count = embed_to_qdrant(
+            chunks=chunks,
+            collection_name=qdrant_collection,  # Project-specific collection
+        )
+        
+        print(f"  Indexed {chunk_count} chunks to {qdrant_collection}")
+        
+        # Sync to Supabase with project_id
+        sync_to_supabase_rag(
+            doc_id=doc_id,
+            project_id=project_id,
+            metadata=enriched_metadata,
+            chunk_count=chunk_count,
+            page_count=result.get("page_count", 0),
+        )
+        
+        # Cleanup
+        pdf_path.unlink(missing_ok=True)
+        
+        return {
+            "success": True,
+            "doc_id": doc_id,
+            "project_id": project_id,
+            "chunks": chunk_count,
+            "pages": result.get("page_count", 0),
+            "metadata_source": enriched_metadata.get("metadata_source"),
+        }
+        
+    except Exception as e:
+        print(f"  ❌ Error: {e}")
+        # Update Supabase status to failed
+        try:
+            backend_url = os.environ.get("BACKEND_URL", "https://3iechat.up.railway.app")
+            with httpx.Client(timeout=10.0) as client:
+                client.patch(
+                    f"{backend_url}/rags/{project_id}/documents/{doc_id}/status",
+                    json={"status": "failed", "error": str(e)},
+                )
+        except:
+            pass
+        
+        return {
+            "success": False,
+            "doc_id": doc_id,
+            "project_id": project_id,
+            "error": str(e),
+        }
+
+
+def sync_to_supabase_rag(
+    doc_id: str,
+    project_id: str,
+    metadata: dict,
+    chunk_count: int,
+    page_count: int,
+) -> bool:
+    """
+    Sync processed document to Supabase for a RAG project.
+    
+    Updates the documents table directly via Supabase client.
+    """
+    import os
+    from supabase import create_client
+    
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+    
+    if not supabase_url or not supabase_key:
+        print("  ⚠ Supabase credentials not configured")
+        return False
+    
+    try:
+        client = create_client(supabase_url, supabase_key)
+        
+        # Find document by filename pattern in this project
+        # The doc_id should match original_filename stem or a stored doc_id
+        result = client.table("documents").select("id, original_filename").eq("rag_project_id", project_id).execute()
+        
+        matching_doc = None
+        for doc in result.data or []:
+            # Match by filename stem
+            if doc.get("original_filename", "").replace(".pdf", "") == doc_id:
+                matching_doc = doc
+                break
+            # Or if we stored doc_id in metadata
+            stored_id = doc.get("metadata", {}).get("doc_id") if doc.get("metadata") else None
+            if stored_id == doc_id:
+                matching_doc = doc
+                break
+        
+        if not matching_doc:
+            print(f"  ⚠ Document not found in Supabase: {doc_id}")
+            return False
+        
+        # Update the document
+        update_data = {
+            "status": "completed",
+            "chunk_count": chunk_count,
+            "processed_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "metadata": {
+                **metadata,
+                "doc_id": doc_id,
+                "chunk_count": chunk_count,
+                "page_count": page_count,
+            },
+        }
+        
+        client.table("documents").update(update_data).eq("id", matching_doc["id"]).execute()
+        print(f"  ✓ Synced to Supabase: {matching_doc['id']}")
+        return True
+        
+    except Exception as e:
+        print(f"  ⚠ Supabase sync error: {e}")
+        return False
 
 
 # ============================================================================

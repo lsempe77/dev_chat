@@ -782,6 +782,141 @@ async def list_project_jobs(
 
 
 # =============================================================================
+# Processing Trigger - Modal Integration
+# =============================================================================
+
+class ProcessResponse(BaseModel):
+    """Response for processing trigger."""
+    message: str
+    queued: int
+    skipped: int
+    function_id: Optional[str] = None
+
+
+@router.post("/{project_id}/process", response_model=ProcessResponse)
+async def trigger_processing(
+    project_id: str,
+    force: bool = False,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> ProcessResponse:
+    """
+    Trigger Modal processing for all unprocessed documents in this RAG project.
+    
+    This calls Modal's orchestrate_rag function which:
+    1. Finds all PDFs in rags/{project_id}/input-pdfs/
+    2. Processes each with MinerU (text extraction)
+    3. Enriches metadata from CrossRef/OpenAlex
+    4. Embeds chunks to Qdrant (project-specific collection)
+    5. Syncs metadata back to Supabase documents table
+    
+    Args:
+        project_id: The RAG project ID
+        force: If True, reprocess all documents (even already processed ones)
+    """
+    import httpx
+    
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get documents that need processing (status != 'completed')
+    if force:
+        docs_result = client.table("documents").select("id, original_filename, status").eq("rag_project_id", project_id).execute()
+    else:
+        docs_result = client.table("documents").select("id, original_filename, status").eq("rag_project_id", project_id).neq("status", "completed").execute()
+    
+    pending_docs = docs_result.data or []
+    
+    if not pending_docs:
+        return ProcessResponse(
+            message="No documents to process",
+            queued=0,
+            skipped=0,
+        )
+    
+    # Update status to 'queued' for all pending docs
+    doc_ids = [d["id"] for d in pending_docs]
+    client.table("documents").update({
+        "status": "queued",
+        "updated_at": datetime.utcnow().isoformat(),
+    }).in_("id", doc_ids).execute()
+    
+    # Trigger Modal function
+    # Modal needs to know:
+    # 1. The R2 prefix to scan: rags/{project_id}/input-pdfs/
+    # 2. The Qdrant collection: rag_{project_id}
+    # 3. The project_id for syncing back to Supabase
+    
+    modal_webhook_url = os.environ.get("MODAL_WEBHOOK_URL")
+    
+    if modal_webhook_url:
+        # Call Modal webhook to trigger processing
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                response = await http_client.post(
+                    modal_webhook_url,
+                    json={
+                        "action": "process_rag_project",
+                        "project_id": project_id,
+                        "qdrant_collection": project.qdrant_collection,
+                        "force_reprocess": force,
+                    },
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"Modal triggered for project {project_id}: {result}")
+                    return ProcessResponse(
+                        message=f"Processing triggered for {len(pending_docs)} documents",
+                        queued=len(pending_docs),
+                        skipped=0,
+                        function_id=result.get("function_id"),
+                    )
+                else:
+                    logger.error(f"Modal webhook failed: {response.status_code} - {response.text}")
+                    # Fall through to manual processing message
+                    
+        except Exception as e:
+            logger.error(f"Modal webhook error: {e}")
+            # Fall through to manual processing message
+    
+    # If no Modal webhook or it failed, return instructions for manual trigger
+    r2_prefix = f"rags/{project_id}/input-pdfs/"
+    qdrant_collection = project.qdrant_collection
+    
+    return ProcessResponse(
+        message=f"Documents marked as queued. Run Modal manually: modal run infrastructure/modal_mineru.py::orchestrate_rag --project-id {project_id}",
+        queued=len(pending_docs),
+        skipped=0,
+    )
+
+
+@router.delete("/{project_id}/locks")
+async def clear_project_locks(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Clear processing locks for stuck documents.
+    Resets any documents stuck in 'processing' status back to 'pending'.
+    """
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Find stuck documents
+    stuck_result = client.table("documents").select("id").eq("rag_project_id", project_id).eq("status", "processing").execute()
+    stuck_count = len(stuck_result.data or [])
+    
+    if stuck_count > 0:
+        # Reset to pending
+        client.table("documents").update({
+            "status": "pending",
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("rag_project_id", project_id).eq("status", "processing").execute()
+    
+    return {"message": f"Cleared {stuck_count} stuck documents", "cleared": stuck_count}
+
+
+# =============================================================================
 # Per-RAG Metadata Endpoints (Zotero-Compatible)
 # =============================================================================
 
