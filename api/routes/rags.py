@@ -427,6 +427,10 @@ class DocumentResponse(BaseModel):
     id: str
     filename: str
     original_filename: str
+    title: Optional[str] = None
+    authors: Optional[str] = None
+    year: Optional[int] = None
+    doi: Optional[str] = None
     status: str
     error_message: Optional[str]
     chunk_count: int
@@ -451,19 +455,25 @@ async def list_project_documents(
     
     result = client.table("documents").select("*").eq("rag_project_id", project_id).order("created_at", desc=True).execute()
     
-    documents = [
-        DocumentResponse(
+    documents = []
+    for d in result.data or []:
+        # Extract metadata from JSONB field
+        metadata = d.get("metadata", {}) or {}
+        
+        documents.append(DocumentResponse(
             id=str(d["id"]),
             filename=d["filename"],
             original_filename=d["original_filename"],
+            title=metadata.get("title"),
+            authors=metadata.get("authors"),
+            year=metadata.get("year"),
+            doi=metadata.get("doi"),
             status=d["status"],
             error_message=d.get("error_message"),
             chunk_count=d.get("chunk_count", 0),
             created_at=d["created_at"],
             processed_at=d.get("processed_at"),
-        )
-        for d in result.data or []
-    ]
+        ))
     
     return DocumentListResponse(documents=documents, total=len(documents))
 
@@ -507,3 +517,431 @@ async def list_project_jobs(
     ]
     
     return JobListResponse(jobs=jobs)
+
+
+# =============================================================================
+# Per-RAG Metadata Endpoints (Zotero-Compatible)
+# =============================================================================
+
+class MetadataDetail(BaseModel):
+    """Full Zotero-compatible metadata for a document."""
+    id: str
+    title: str
+    filename: str
+    authors: List[str] = []
+    year: Optional[int] = None
+    abstract: Optional[str] = None
+    
+    # Zotero item type
+    item_type: Optional[str] = None
+    
+    # Identifiers
+    doi: Optional[str] = None
+    isbn: Optional[str] = None
+    issn: Optional[str] = None
+    url: Optional[str] = None
+    
+    # Publication info
+    publication: Optional[str] = None
+    journal: Optional[str] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    
+    # Publisher info
+    publisher: Optional[str] = None
+    place: Optional[str] = None
+    
+    # 3ie Classification
+    countries: List[str] = []
+    sectors: List[str] = []
+    study_type: Optional[str] = None
+    intervention_type: Optional[str] = None
+    
+    # Processing metadata
+    metadata_source: Optional[str] = "extraction"
+    metadata_confidence: float = 0.0
+    needs_review: bool = True
+    chunk_count: int = 0
+
+
+class MetadataListResponse(BaseModel):
+    """Response for listing documents with metadata."""
+    documents: List[MetadataDetail]
+    total_count: int
+    needs_review_count: int
+
+
+class MetadataUpdateRequest(BaseModel):
+    """Request to update document metadata."""
+    title: Optional[str] = None
+    authors: Optional[List[str]] = None
+    year: Optional[int] = None
+    abstract: Optional[str] = None
+    item_type: Optional[str] = None
+    doi: Optional[str] = None
+    isbn: Optional[str] = None
+    issn: Optional[str] = None
+    url: Optional[str] = None
+    publication: Optional[str] = None
+    journal: Optional[str] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    publisher: Optional[str] = None
+    place: Optional[str] = None
+    countries: Optional[List[str]] = None
+    sectors: Optional[List[str]] = None
+    study_type: Optional[str] = None
+    intervention_type: Optional[str] = None
+    needs_review: Optional[bool] = None
+
+
+@router.get("/{project_id}/metadata", response_model=MetadataListResponse)
+async def list_project_metadata(
+    project_id: str,
+    filter_type: Optional[str] = None,  # "needs_review" or "all"
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> MetadataListResponse:
+    """
+    List all documents with full metadata for a RAG project.
+    Zotero-compatible fields.
+    """
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get documents with metadata
+    query = client.table("documents").select("*").eq("rag_project_id", project_id)
+    
+    result = query.order("created_at", desc=True).execute()
+    
+    documents = []
+    needs_review_count = 0
+    
+    for d in result.data or []:
+        metadata = d.get("metadata", {}) or {}
+        
+        # Parse authors - could be string or list
+        authors_raw = metadata.get("authors", [])
+        if isinstance(authors_raw, str):
+            authors = [a.strip() for a in authors_raw.split(",") if a.strip()]
+        elif isinstance(authors_raw, list):
+            authors = authors_raw
+        else:
+            authors = []
+        
+        needs_review = metadata.get("needs_review", True)
+        if needs_review:
+            needs_review_count += 1
+        
+        # Skip if filtering for needs_review and this doesn't need review
+        if filter_type == "needs_review" and not needs_review:
+            continue
+        
+        documents.append(MetadataDetail(
+            id=str(d["id"]),
+            title=metadata.get("title") or d.get("original_filename", "Unknown"),
+            filename=d["original_filename"],
+            authors=authors,
+            year=metadata.get("year"),
+            abstract=metadata.get("abstract"),
+            item_type=metadata.get("item_type"),
+            doi=metadata.get("doi"),
+            isbn=metadata.get("isbn"),
+            issn=metadata.get("issn"),
+            url=metadata.get("url"),
+            publication=metadata.get("publication"),
+            journal=metadata.get("journal"),
+            volume=metadata.get("volume"),
+            issue=metadata.get("issue"),
+            pages=metadata.get("pages"),
+            publisher=metadata.get("publisher"),
+            place=metadata.get("place"),
+            countries=metadata.get("countries", []),
+            sectors=metadata.get("sectors", []),
+            study_type=metadata.get("study_type"),
+            intervention_type=metadata.get("intervention_type"),
+            metadata_source=metadata.get("metadata_source", "extraction"),
+            metadata_confidence=metadata.get("metadata_confidence", 0.0),
+            needs_review=needs_review,
+            chunk_count=d.get("chunk_count", 0),
+        ))
+    
+    return MetadataListResponse(
+        documents=documents,
+        total_count=len(result.data or []),
+        needs_review_count=needs_review_count,
+    )
+
+
+@router.get("/{project_id}/metadata/{doc_id}")
+async def get_document_metadata(
+    project_id: str,
+    doc_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> MetadataDetail:
+    """Get full metadata for a single document."""
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", project_id).single().execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    d = result.data
+    metadata = d.get("metadata", {}) or {}
+    
+    authors_raw = metadata.get("authors", [])
+    if isinstance(authors_raw, str):
+        authors = [a.strip() for a in authors_raw.split(",") if a.strip()]
+    elif isinstance(authors_raw, list):
+        authors = authors_raw
+    else:
+        authors = []
+    
+    return MetadataDetail(
+        id=str(d["id"]),
+        title=metadata.get("title") or d.get("original_filename", "Unknown"),
+        filename=d["original_filename"],
+        authors=authors,
+        year=metadata.get("year"),
+        abstract=metadata.get("abstract"),
+        item_type=metadata.get("item_type"),
+        doi=metadata.get("doi"),
+        isbn=metadata.get("isbn"),
+        issn=metadata.get("issn"),
+        url=metadata.get("url"),
+        publication=metadata.get("publication"),
+        journal=metadata.get("journal"),
+        volume=metadata.get("volume"),
+        issue=metadata.get("issue"),
+        pages=metadata.get("pages"),
+        publisher=metadata.get("publisher"),
+        place=metadata.get("place"),
+        countries=metadata.get("countries", []),
+        sectors=metadata.get("sectors", []),
+        study_type=metadata.get("study_type"),
+        intervention_type=metadata.get("intervention_type"),
+        metadata_source=metadata.get("metadata_source", "extraction"),
+        metadata_confidence=metadata.get("metadata_confidence", 0.0),
+        needs_review=metadata.get("needs_review", True),
+        chunk_count=d.get("chunk_count", 0),
+    )
+
+
+@router.patch("/{project_id}/metadata/{doc_id}")
+async def update_document_metadata(
+    project_id: str,
+    doc_id: str,
+    update: MetadataUpdateRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> MetadataDetail:
+    """
+    Update metadata for a document.
+    Also syncs the metadata to Qdrant vectors for search.
+    """
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get current document
+    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", project_id).single().execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    current_metadata = result.data.get("metadata", {}) or {}
+    
+    # Merge updates into metadata
+    update_dict = update.model_dump(exclude_none=True)
+    new_metadata = {**current_metadata, **update_dict}
+    
+    # Mark as user-verified
+    new_metadata["metadata_source"] = "user"
+    new_metadata["metadata_confidence"] = 1.0
+    if "needs_review" not in update_dict:
+        new_metadata["needs_review"] = False
+    
+    # Update in Supabase
+    client.table("documents").update({
+        "metadata": new_metadata,
+        "updated_at": datetime.utcnow().isoformat(),
+    }).eq("id", doc_id).execute()
+    
+    # Sync to Qdrant vectors
+    try:
+        indexer = QdrantIndexer(collection_name=project["qdrant_collection"])
+        
+        # Build Qdrant payload update
+        qdrant_update = {}
+        if update.title:
+            qdrant_update["title"] = update.title
+        if update.authors:
+            qdrant_update["authors"] = ", ".join(update.authors)
+        if update.year:
+            qdrant_update["year"] = update.year
+        if update.doi:
+            qdrant_update["doi"] = update.doi
+        if update.countries:
+            qdrant_update["country"] = update.countries[0] if update.countries else None
+            qdrant_update["countries"] = update.countries
+        if update.sectors:
+            qdrant_update["sector"] = update.sectors[0] if update.sectors else None
+            qdrant_update["sectors"] = update.sectors
+        if update.study_type:
+            qdrant_update["study_type"] = update.study_type
+        
+        if qdrant_update:
+            # Update all vectors for this document
+            indexer.client.set_payload(
+                collection_name=project["qdrant_collection"],
+                payload=qdrant_update,
+                points=indexer.client.scroll(
+                    collection_name=project["qdrant_collection"],
+                    scroll_filter={
+                        "must": [{"key": "doc_id", "match": {"value": doc_id}}]
+                    },
+                    limit=1000,
+                    with_payload=False,
+                )[0],
+            )
+            logger.info(f"Synced metadata to Qdrant for doc {doc_id}")
+    except Exception as e:
+        logger.warning(f"Failed to sync metadata to Qdrant: {e}")
+    
+    # Return updated metadata
+    return await get_document_metadata(project_id, doc_id, user)
+
+
+@router.post("/{project_id}/metadata/{doc_id}/enrich")
+async def enrich_document_metadata(
+    project_id: str,
+    doc_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> MetadataDetail:
+    """
+    Enrich document metadata from CrossRef/OpenAlex using DOI.
+    """
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get current document
+    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", project_id).single().execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    current_metadata = result.data.get("metadata", {}) or {}
+    doi = current_metadata.get("doi")
+    
+    if not doi:
+        raise HTTPException(status_code=400, detail="Document has no DOI for enrichment")
+    
+    # Lookup in CrossRef
+    from src.ingestion.metadata.crossref_client import CrossRefClient
+    
+    try:
+        crossref = CrossRefClient()
+        work = await crossref.get_by_doi(doi)
+        
+        if not work:
+            raise HTTPException(status_code=404, detail="DOI not found in CrossRef")
+        
+        # Update metadata with CrossRef data
+        enriched = {
+            **current_metadata,
+            "title": work.title or current_metadata.get("title"),
+            "authors": work.authors or current_metadata.get("authors", []),
+            "year": work.year or current_metadata.get("year"),
+            "journal": work.journal or current_metadata.get("journal"),
+            "publisher": work.publisher or current_metadata.get("publisher"),
+            "volume": work.volume or current_metadata.get("volume"),
+            "issue": work.issue or current_metadata.get("issue"),
+            "pages": work.pages or current_metadata.get("pages"),
+            "item_type": work.type or current_metadata.get("item_type"),
+            "metadata_source": "crossref",
+            "metadata_confidence": 0.95,
+            "needs_review": False,
+        }
+        
+        # Update in Supabase
+        client.table("documents").update({
+            "metadata": enriched,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("id", doc_id).execute()
+        
+        logger.info(f"Enriched doc {doc_id} from CrossRef")
+        
+    except Exception as e:
+        logger.error(f"CrossRef enrichment failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Enrichment failed: {e}")
+    
+    return await get_document_metadata(project_id, doc_id, user)
+
+
+@router.get("/{project_id}/documents/{doc_id}/pdf")
+async def get_document_pdf_url(
+    project_id: str,
+    doc_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Get a presigned URL to view the PDF for a document.
+    """
+    import os
+    from botocore.exceptions import ClientError
+    from src.ingestion.r2_client import R2Client
+    
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get document
+    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", project_id).single().execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    doc = result.data
+    
+    try:
+        r2_client = R2Client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # The R2 key could be in different formats
+        # Try using the filename field or original_filename
+        possible_keys = [
+            f"input-pdfs/{doc['filename']}",
+            f"input-pdfs/{doc['original_filename']}",
+            f"input-pdfs/{doc_id}.pdf",
+        ]
+        
+        r2_key = None
+        for key in possible_keys:
+            try:
+                r2_client.client.head_object(Bucket=bucket_name, Key=key)
+                r2_key = key
+                break
+            except ClientError:
+                continue
+        
+        if not r2_key:
+            raise HTTPException(status_code=404, detail="PDF not found in storage")
+        
+        # Generate presigned URL (valid for 1 hour)
+        presigned_url = r2_client.client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': bucket_name,
+                'Key': r2_key,
+            },
+            ExpiresIn=3600,
+        )
+        
+        return {"url": presigned_url, "expires_in": 3600}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate PDF URL: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get PDF URL: {str(e)}")
+
