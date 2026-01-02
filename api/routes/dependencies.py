@@ -234,11 +234,25 @@ def get_indexer_for_user(user: Optional[AuthenticatedUser], rag_project_id: Opti
 
 _agent: Optional[DevChatAgent] = None
 _indexer: Optional[QdrantIndexer] = None
+_collection_agents: dict[str, DevChatAgent] = {}
 
 
-def get_agent() -> DevChatAgent:
-    """Get or create the global agent instance."""
-    global _agent
+def get_agent(collection_name: Optional[str] = None) -> DevChatAgent:
+    """Get or create the agent instance.
+    
+    Args:
+        collection_name: Optional Qdrant collection name for multi-tenant RAGs.
+                        If None, uses the default collection.
+    """
+    global _agent, _collection_agents
+    
+    if collection_name:
+        # Multi-tenant: create/cache agent per collection
+        if collection_name not in _collection_agents:
+            _collection_agents[collection_name] = DevChatAgent.create_with_custom_collection(collection_name)
+        return _collection_agents[collection_name]
+    
+    # Default single-tenant agent
     if _agent is None:
         _agent = DevChatAgent()
     return _agent

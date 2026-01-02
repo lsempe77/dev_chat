@@ -93,7 +93,6 @@ async def query_evidence(request: QueryRequest):
         
         try:
             async with llm_breaker:
-                agent = get_agent()
                 settings_obj = request.settings
                 
                 # Build filters from request
@@ -138,6 +137,9 @@ async def query_evidence(request: QueryRequest):
                         min_confidence=settings_obj.minConfidence,
                         year_cutoff=settings_obj.yearCutoff,
                     )
+                
+                # Get agent (with optional custom collection for multi-tenant)
+                agent = get_agent(collection_name=request.collection)
                 
                 # Call the agent with settings
                 response = await agent.chat(

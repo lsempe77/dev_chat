@@ -37,6 +37,7 @@ class QueryRequest(BaseModel):
     filters: Optional[List[FilterInput]] = None
     settings: Optional[SearchSettings] = None
     session_id: Optional[str] = Field(None, description="Session ID for conversation memory")
+    collection: Optional[str] = Field(None, description="Qdrant collection name for multi-tenant RAGs")
 
 
 class StudyResponse(BaseModel):

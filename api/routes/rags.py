@@ -30,12 +30,16 @@ class RAGProjectCreate(BaseModel):
     """Request to create a new RAG project."""
     name: str = Field(..., min_length=1, max_length=100, description="Project name")
     description: Optional[str] = Field(None, max_length=500, description="Project description")
+    slug: Optional[str] = Field(None, max_length=50, description="URL-friendly identifier")
+    is_public: bool = Field(default=False, description="Whether the RAG is publicly accessible")
 
 
 class RAGProjectUpdate(BaseModel):
     """Request to update a RAG project."""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
+    slug: Optional[str] = Field(None, max_length=50)
+    is_public: Optional[bool] = None
 
 
 class RAGProjectResponse(BaseModel):
@@ -43,7 +47,9 @@ class RAGProjectResponse(BaseModel):
     id: str
     name: str
     description: Optional[str]
+    slug: Optional[str]
     qdrant_collection: str
+    is_public: bool
     status: str
     document_count: int
     chunk_count: int
@@ -106,7 +112,9 @@ async def list_rag_projects(
             id=str(p["id"]),
             name=p["name"],
             description=p.get("description"),
+            slug=p.get("slug"),
             qdrant_collection=p["qdrant_collection"],
+            is_public=p.get("is_public", False),
             status=p["status"],
             document_count=p.get("document_count", 0),
             chunk_count=p.get("chunk_count", 0),
@@ -148,6 +156,8 @@ async def create_rag_project(
             "user_id": user.id,
             "name": request.name,
             "description": request.description,
+            "slug": request.slug,
+            "is_public": request.is_public,
         }).execute()
         
         if not result.data:
@@ -182,7 +192,9 @@ async def create_rag_project(
             id=str(project["id"]),
             name=project["name"],
             description=project.get("description"),
+            slug=project.get("slug"),
             qdrant_collection=project["qdrant_collection"],
+            is_public=project.get("is_public", False),
             status=project["status"],
             document_count=0,
             chunk_count=0,
@@ -214,7 +226,9 @@ async def get_rag_project(
         id=str(project["id"]),
         name=project["name"],
         description=project.get("description"),
+        slug=project.get("slug"),
         qdrant_collection=project["qdrant_collection"],
+        is_public=project.get("is_public", False),
         status=project["status"],
         document_count=project.get("document_count", 0),
         chunk_count=project.get("chunk_count", 0),
@@ -251,6 +265,20 @@ async def update_rag_project(
     if request.description is not None:
         update_data["description"] = request.description
     
+    if request.slug is not None:
+        # Check for duplicate slug
+        if request.slug:
+            existing = client.table("rag_projects").select("id").eq("slug", request.slug).neq("id", project_id).execute()
+            if existing.data:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"A RAG project with slug '{request.slug}' already exists"
+                )
+        update_data["slug"] = request.slug if request.slug else None
+    
+    if request.is_public is not None:
+        update_data["is_public"] = request.is_public
+    
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -271,7 +299,9 @@ async def update_rag_project(
         id=str(project["id"]),
         name=project["name"],
         description=project.get("description"),
+        slug=project.get("slug"),
         qdrant_collection=project["qdrant_collection"],
+        is_public=project.get("is_public", False),
         status=project["status"],
         document_count=project.get("document_count", 0),
         chunk_count=project.get("chunk_count", 0),
@@ -320,3 +350,153 @@ async def delete_rag_project(
     client.table("rag_projects").delete().eq("id", project_id).execute()
     
     logger.info(f"Deleted RAG project: {project_id}")
+
+
+# =============================================================================
+# Public Endpoints (No Auth Required)
+# =============================================================================
+
+class PublicRAGResponse(BaseModel):
+    """Public-facing RAG info (limited fields)."""
+    id: str
+    name: str
+    description: Optional[str]
+    qdrant_collection: str
+    is_public: bool
+
+
+@router.get("/{project_id}/public", response_model=PublicRAGResponse)
+async def get_public_rag_project(project_id: str) -> PublicRAGResponse:
+    """
+    Get public info for a RAG project.
+    
+    No authentication required, but only works for public projects.
+    Accepts either project ID or slug.
+    """
+    if not is_multi_tenant_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Multi-tenant mode not enabled"
+        )
+    
+    client = get_supabase_client()
+    
+    # Try to find by ID first, then by slug
+    result = client.table("rag_projects").select("*").eq("id", project_id).execute()
+    
+    if not result.data:
+        # Try by slug
+        result = client.table("rag_projects").select("*").eq("slug", project_id).execute()
+    
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="RAG not found"
+        )
+    
+    project = result.data[0]
+    
+    if not project.get("is_public", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This RAG is private"
+        )
+    
+    return PublicRAGResponse(
+        id=str(project["id"]),
+        name=project["name"],
+        description=project.get("description"),
+        qdrant_collection=project["qdrant_collection"],
+        is_public=True,
+    )
+
+
+# =============================================================================
+# Per-RAG Document Endpoints
+# =============================================================================
+
+class DocumentResponse(BaseModel):
+    """Response for a document."""
+    id: str
+    filename: str
+    original_filename: str
+    status: str
+    error_message: Optional[str]
+    chunk_count: int
+    created_at: datetime
+    processed_at: Optional[datetime]
+
+
+class DocumentListResponse(BaseModel):
+    """Response for listing documents."""
+    documents: List[DocumentResponse]
+    total: int
+
+
+@router.get("/{project_id}/documents", response_model=DocumentListResponse)
+async def list_project_documents(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> DocumentListResponse:
+    """List all documents in a RAG project."""
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    result = client.table("documents").select("*").eq("rag_project_id", project_id).order("created_at", desc=True).execute()
+    
+    documents = [
+        DocumentResponse(
+            id=str(d["id"]),
+            filename=d["filename"],
+            original_filename=d["original_filename"],
+            status=d["status"],
+            error_message=d.get("error_message"),
+            chunk_count=d.get("chunk_count", 0),
+            created_at=d["created_at"],
+            processed_at=d.get("processed_at"),
+        )
+        for d in result.data or []
+    ]
+    
+    return DocumentListResponse(documents=documents, total=len(documents))
+
+
+class JobResponse(BaseModel):
+    """Response for a processing job."""
+    id: str
+    job_type: str
+    status: str
+    progress: int
+    message: Optional[str]
+    created_at: datetime
+
+
+class JobListResponse(BaseModel):
+    """Response for listing jobs."""
+    jobs: List[JobResponse]
+
+
+@router.get("/{project_id}/jobs", response_model=JobListResponse)
+async def list_project_jobs(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> JobListResponse:
+    """List processing jobs for a RAG project."""
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    result = client.table("processing_jobs").select("*").eq("rag_project_id", project_id).order("created_at", desc=True).limit(50).execute()
+    
+    jobs = [
+        JobResponse(
+            id=str(j["id"]),
+            job_type=j["job_type"],
+            status=j["status"],
+            progress=j.get("progress", 0),
+            message=j.get("message"),
+            created_at=j["created_at"],
+        )
+        for j in result.data or []
+    ]
+    
+    return JobListResponse(jobs=jobs)

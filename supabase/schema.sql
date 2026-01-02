@@ -14,9 +14,13 @@ CREATE TABLE IF NOT EXISTS rag_projects (
     -- Project info
     name TEXT NOT NULL,
     description TEXT,
+    slug TEXT UNIQUE,  -- URL-friendly identifier (e.g., "my-research-rag")
     
     -- Qdrant collection (auto-generated: rag_{id})
     qdrant_collection TEXT NOT NULL UNIQUE,
+    
+    -- Access control
+    is_public BOOLEAN NOT NULL DEFAULT false,  -- If true, anyone can chat with this RAG
     
     -- Status
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'processing', 'error', 'deleted')),
@@ -36,6 +40,8 @@ CREATE TABLE IF NOT EXISTS rag_projects (
 -- Index for fast user lookups
 CREATE INDEX IF NOT EXISTS idx_rag_projects_user_id ON rag_projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_rag_projects_qdrant_collection ON rag_projects(qdrant_collection);
+CREATE INDEX IF NOT EXISTS idx_rag_projects_slug ON rag_projects(slug);
+CREATE INDEX IF NOT EXISTS idx_rag_projects_is_public ON rag_projects(is_public) WHERE is_public = true;
 
 -- =============================================================================
 -- Documents Table  
@@ -121,6 +127,11 @@ ALTER TABLE processing_jobs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own rag_projects"
     ON rag_projects FOR SELECT
     USING (auth.uid() = user_id);
+
+-- Public RAGs: Anyone can view public projects (for chat)
+CREATE POLICY "Anyone can view public rag_projects"
+    ON rag_projects FOR SELECT
+    USING (is_public = true);
 
 CREATE POLICY "Users can insert own rag_projects"
     ON rag_projects FOR INSERT
