@@ -253,7 +253,7 @@ export function BibliographyImportDialog({
             <div className="shrink-0 flex items-center justify-between py-2 border-b">
               <div className="flex items-center gap-4">
                 <Badge variant="outline">
-                  {preview.parsed_count} entries found
+                  {preview.total_entries} entries found
                 </Badge>
                 {preview.duplicates.length > 0 && (
                   <Badge variant="secondary" className="text-yellow-600">
