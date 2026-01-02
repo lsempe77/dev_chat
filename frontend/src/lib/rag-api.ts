@@ -79,6 +79,9 @@ export interface MetadataDetail {
   metadata_confidence: number;
   needs_review: boolean;
   chunk_count: number;
+  
+  // Flags for issues
+  needs_reprocessing: boolean;  // True if chunk_count=0 but status=completed
 }
 
 export interface MetadataListResponse {

@@ -205,7 +205,7 @@ export interface DocumentMetadataDetail {
   
   // Book-specific
   book_title?: string;
-  num_pages?: number;
+  num_pages?: string;
   
   // Report/Thesis specific
   institution?: string;
@@ -238,6 +238,7 @@ export interface DocumentMetadataDetail {
   needs_review: boolean;
   chunk_count: number;
   page_count?: number;
+  needs_reprocessing?: boolean;
   
   // Extra fields
   extra?: Record<string, unknown>;
@@ -287,8 +288,8 @@ export interface MetadataUpdateRequest {
   
   // Book
   book_title?: string;
-  num_pages?: number;
-  
+  num_pages?: string;
+
   // Report/Thesis
   institution?: string;
   report_number?: string;

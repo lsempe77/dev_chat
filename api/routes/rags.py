@@ -996,6 +996,9 @@ class MetadataDetail(BaseModel):
     metadata_confidence: float = 0.0
     needs_review: bool = True
     chunk_count: int = 0
+    
+    # Flags for issues
+    needs_reprocessing: bool = False  # True if chunk_count=0 but status=completed
 
 
 class MetadataListResponse(BaseModel):
@@ -1145,6 +1148,7 @@ async def list_project_metadata(
             metadata_confidence=metadata.get("metadata_confidence", 0.0),
             needs_review=needs_review,
             chunk_count=d.get("chunk_count", 0),
+            needs_reprocessing=d.get("chunk_count", 0) == 0 and d.get("status") == "completed",
         ))
     
     return MetadataListResponse(
@@ -1207,6 +1211,7 @@ async def get_document_metadata(
         metadata_confidence=metadata.get("metadata_confidence", 0.0),
         needs_review=metadata.get("needs_review", True),
         chunk_count=d.get("chunk_count", 0),
+        needs_reprocessing=d.get("chunk_count", 0) == 0 and d.get("status") == "completed",
     )
 
 

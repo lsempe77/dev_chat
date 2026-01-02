@@ -1118,6 +1118,12 @@ def process_pdf_rag(
         
         print(f"  Indexed {chunk_count} chunks to {qdrant_collection}")
         
+        # Validate: if no chunks, something went wrong
+        if chunk_count == 0:
+            print(f"  ⚠ WARNING: 0 chunks indexed! Content length: {len(result.get('content', ''))}")
+            # Don't mark as completed if no chunks - needs investigation
+            raise Exception(f"No chunks indexed. Content may be empty or too short.")
+        
         # Sync to Supabase with project_id
         sync_to_supabase_rag(
             doc_id=doc_id,
@@ -1206,6 +1212,32 @@ def sync_to_supabase_rag(
             print(f"     Found {len(result.data or [])} documents in project")
             return False
         
+        # Get existing metadata to preserve user edits
+        existing_result = client.table("documents").select("metadata").eq("id", matching_doc["id"]).execute()
+        existing_metadata = {}
+        if existing_result.data and existing_result.data[0].get("metadata"):
+            existing_metadata = existing_result.data[0]["metadata"]
+        
+        # Merge: preserve user edits (fields that were manually changed)
+        # User-editable fields that should be preserved if they were manually set
+        user_editable_fields = [
+            "title", "authors", "year", "abstract", "doi", "item_type",
+            "journal", "volume", "issue", "pages", "publisher", "place",
+            "institution", "series", "countries", "sectors", "study_type",
+            "intervention_type", "needs_review",
+        ]
+        
+        merged_metadata = {**metadata}  # Start with new enriched metadata
+        
+        # Only preserve user edits if metadata_source was already set (not first processing)
+        if existing_metadata.get("metadata_source"):
+            for field in user_editable_fields:
+                # If existing has a value and new doesn't, keep existing
+                if field in existing_metadata and existing_metadata[field] is not None:
+                    # Keep user edits unless they're the default extraction values
+                    if existing_metadata.get("metadata_source") in ["crossref", "openalex", "user"]:
+                        merged_metadata[field] = existing_metadata[field]
+        
         # Update the document
         update_data = {
             "status": "completed",
@@ -1213,7 +1245,7 @@ def sync_to_supabase_rag(
             "processed_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "metadata": {
-                **metadata,
+                **merged_metadata,
                 "doc_id": doc_id,
                 "chunk_count": chunk_count,
                 "page_count": page_count,

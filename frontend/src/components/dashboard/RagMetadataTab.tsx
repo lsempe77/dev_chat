@@ -144,7 +144,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     series: doc.series ?? undefined,
     series_number: doc.series_number ?? undefined,
     book_title: doc.book_title ?? undefined,
-    num_pages: doc.num_pages ? parseInt(doc.num_pages) : undefined,
+    num_pages: doc.num_pages ?? undefined,
     institution: doc.institution ?? undefined,
     report_number: doc.report_number ?? undefined,
     report_type: doc.report_type ?? undefined,
@@ -454,6 +454,12 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                             </div>
 
                             <div className="flex flex-wrap gap-2 mb-2">
+                              {doc.needs_reprocessing && (
+                                <Badge variant="destructive" className="gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  Needs Reprocessing
+                                </Badge>
+                              )}
                               {getConfidenceBadge(doc.metadata_confidence)}
                               {getSourceBadge(doc.metadata_source)}
                               {doc.doi && (
