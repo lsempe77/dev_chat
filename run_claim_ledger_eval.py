@@ -5,22 +5,33 @@ Dual-Lane Architecture:
 - Lane B (Citation Alignment): Does each [N] citation actually entail its sentence?
 
 Uses MiniCheck (EMNLP 2024) as NLI backbone for BOTH lanes.
+
+Usage:
+    python run_claim_ledger_eval.py                           # Default collection
+    python run_claim_ledger_eval.py --collection devchat_v2   # Specific collection
+    python run_claim_ledger_eval.py --queries 3               # Fewer queries for testing
 """
+import argparse
 import asyncio
 import json
 import re
 from datetime import datetime
-from src.agents.devchat_agent import DevChatAgent, SearchSettings
+from src.agents.devchat_agent import DevChatAgent, DevChatAgentFactory, SearchSettings
 from src.retrieval.context_builder import ContextBuilder
 from evaluation.minicheck_evaluator import MiniCheckEvaluator
 
 
-async def full_comparison():
+async def full_comparison(collection_name: str = None, num_queries: int = 5):
     with open('evaluation/test_cases.json') as f:
         data = json.load(f)
-    test_cases = data['test_cases'][:5]  # 5 queries
+    test_cases = data['test_cases'][:num_queries]
     
-    agent = DevChatAgent()
+    # Use custom collection if specified
+    if collection_name:
+        print(f'Using collection: {collection_name}')
+        agent = DevChatAgentFactory.create_with_custom_collection(collection_name)
+    else:
+        agent = DevChatAgent()
     # Use MiniCheck dual-lane evaluator (SOTA, EMNLP 2024)
     # backend='api' uses LLM API (no model download, production-ready)
     # backend='local' downloads flan-t5-large (~3GB, development)
@@ -28,18 +39,23 @@ async def full_comparison():
     
     results = []
     
-    print('Running Claim Ledger Evaluation (5 queries)...')
+    print('Running Claim Ledger Evaluation ({} queries)...'.format(num_queries))
     print('=' * 60)
     
     for i, tc in enumerate(test_cases, 1):
         query = tc['question']
         expected = tc.get('expected_answer', '')
         
-        print(f'[{i}/5] {query[:50]}...')
+        print(f'[{i}/{num_queries}] {query[:50]}...')
         
         # Run with claim ledger
         settings = SearchSettings(max_studies=5, use_claim_ledger=True)
         resp = await agent.chat(query, search_settings=settings)
+        
+        # Debug: print response info if no citations
+        if not resp.citations:
+            print(f"  DEBUG: No citations! Answer preview: {resp.answer[:200]}...")
+            print(f"  DEBUG: num_sources={resp.num_sources}")
         
         # Build FULL contexts for each source (use full_text for NLI evaluation)
         # IMPORTANT: Keep indices aligned! Use empty string for missing contexts.
@@ -123,9 +139,11 @@ async def full_comparison():
     print(f'  Old Overall:           {old_overall:.3f} -> New: {avg("overall"):.3f} ({avg("overall")-old_overall:+.3f})')
     
     # Save
+    collection_suffix = f"_{collection_name}" if collection_name else ""
     out = {
         'timestamp': datetime.now().isoformat(),
         'method': 'claim_ledger_minicheck',
+        'collection': collection_name or 'devchat_v2',
         'evaluator': 'MiniCheckEvaluator (flan-t5-large)',
         'num_queries': len(results),
         'averages': {
@@ -137,11 +155,19 @@ async def full_comparison():
         },
         'details': results
     }
-    with open('evaluation/claim_ledger_minicheck_results.json', 'w') as f:
+    output_file = f'evaluation/claim_ledger_minicheck_results{collection_suffix}.json'
+    with open(output_file, 'w') as f:
         json.dump(out, f, indent=2)
     print()
-    print('Saved to evaluation/claim_ledger_minicheck_results.json')
+    print(f'Saved to {output_file}')
 
 
 if __name__ == '__main__':
-    asyncio.run(full_comparison())
+    parser = argparse.ArgumentParser(description='Evaluate with Claim Ledger + MiniCheck')
+    parser.add_argument('--collection', type=str, default=None, 
+                        help='Qdrant collection name (default: devchat_v2)')
+    parser.add_argument('--queries', type=int, default=5,
+                        help='Number of test queries to run (default: 5)')
+    args = parser.parse_args()
+    
+    asyncio.run(full_comparison(collection_name=args.collection, num_queries=args.queries))

@@ -36,6 +36,7 @@ class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     filters: Optional[List[FilterInput]] = None
     settings: Optional[SearchSettings] = None
+    session_id: Optional[str] = Field(None, description="Session ID for conversation memory")
 
 
 class StudyResponse(BaseModel):
@@ -141,6 +142,11 @@ class ChatRequest(BaseModel):
     stream: bool = Field(
         default=False,
         description="Whether to stream the response",
+    )
+    
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Session ID for conversation memory",
     )
     
     year_min: Optional[int] = Field(

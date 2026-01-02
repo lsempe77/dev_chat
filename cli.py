@@ -244,7 +244,7 @@ def check_metadata(
         api_key=os.getenv('QDRANT_API_KEY')
     )
     
-    collection = os.getenv('QDRANT_COLLECTION_NAME', 'devchat_v2')
+    collection = os.getenv('QDRANT_COLLECTION_NAME', 'devchat_v2_enhanced')
     
     # Get collection info
     info = client.get_collection(collection)

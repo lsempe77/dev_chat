@@ -37,10 +37,11 @@ async def chat(request: ChatRequest):
     try:
         agent = get_agent()
         
-        # Call agent
+        # Call agent with session_id for conversation memory
         response = await agent.chat(
             query=request.query,
             include_citations=request.include_citations,
+            session_id=request.session_id,
         )
 
         await mark_qdrant_healthy()

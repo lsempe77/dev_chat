@@ -24,6 +24,7 @@ from src.config.settings import settings
 from src.retrieval.context_builder import FormattedContext
 from src.retrieval.query_processor import QueryClassification
 from src.utils.logging import get_logger
+from src.generation.post_hoc_verifier import PostHocVerifier, VerificationResult
 
 logger = get_logger(__name__)
 
@@ -105,21 +106,23 @@ class ClaimLedgerSynthesizer:
     Two-pass synthesizer using Source-to-Claim Ledger.
     
     This ensures citation accuracy by:
-    1. First extracting all claims with supporting quotes
-    2. Then writing using only the verified claim mappings
+    1. First extracting all claims with supporting quotes (fast model)
+    2. Then writing using only the verified claim mappings (strong model)
     """
     
-    def __init__(self, llm=None):
-        self.llm = llm
-        self._setup_llm()
+    def __init__(self, llm=None, writing_llm=None):
+        self.llm = llm  # For extraction (can be fast)
+        self.writing_llm = writing_llm  # For writing (needs to be strong)
+        self._setup_llms()
         self._llm_semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
     
-    def _setup_llm(self):
-        """Initialize LLM using OpenRouter."""
-        if self.llm is None:
-            try:
-                from llama_index.llms.openai_like import OpenAILike
-                
+    def _setup_llms(self):
+        """Initialize LLMs using OpenRouter."""
+        try:
+            from llama_index.llms.openai_like import OpenAILike
+            
+            # Fast model for claim extraction
+            if self.llm is None:
                 self.llm = OpenAILike(
                     model="openai/gpt-4o-mini",
                     api_key=settings.openrouter_api_key,
@@ -134,17 +137,41 @@ class ClaimLedgerSynthesizer:
                         }
                     }
                 )
-                logger.info("ClaimLedgerSynthesizer LLM initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize LLM: {e}")
+            
+            # Strong model for writing (better at following constraints)
+            if self.writing_llm is None:
+                self.writing_llm = OpenAILike(
+                    model=settings.llm_reasoning_model,  # GPT-4o or Claude
+                    api_key=settings.openrouter_api_key,
+                    api_base=settings.openrouter_base_url,
+                    temperature=0.0,  # Zero temp for maximum faithfulness
+                    max_tokens=4000,
+                    is_chat_model=True,
+                    additional_kwargs={
+                        "extra_headers": {
+                            "HTTP-Referer": "https://3ieimpact.org",
+                            "X-Title": "DevChat 3ie",
+                        }
+                    }
+                )
+            
+            logger.info(f"ClaimLedgerSynthesizer: extraction={self.llm.model}, writing={self.writing_llm.model}")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLMs: {e}")
     
     async def synthesize(
         self,
         query: QueryClassification,
         context: FormattedContext,
+        enable_post_hoc_verification: bool = False,  # Disabled - causes too aggressive filtering
     ) -> Tuple[str, SourceToClaimLedger]:
         """
         Generate answer with verified citations using claim ledger.
+        
+        Args:
+            query: Classified query
+            context: Formatted context with citations
+            enable_post_hoc_verification: Run post-hoc verification to filter ungrounded claims
         
         Returns:
             Tuple of (answer text, claim ledger for verification)
@@ -168,7 +195,52 @@ class ClaimLedgerSynthesizer:
             num_sources=context.num_studies,
         )
         
+        # Pass 3 (optional): Post-hoc verification
+        if enable_post_hoc_verification:
+            answer = await self._post_hoc_verify(answer, context.citations)
+        
         return answer, ledger
+    
+    async def _post_hoc_verify(
+        self,
+        answer: str,
+        citations: List[Dict],
+    ) -> str:
+        """
+        Pass 3: Verify claims and remove ungrounded statements.
+        
+        This runs MiniCheck-style NLI on each sentence to ensure
+        it's actually supported by the cited sources.
+        """
+        try:
+            verifier = PostHocVerifier(
+                verification_threshold=0.5,
+                remove_unverified=True  # Remove ungrounded claims
+            )
+            
+            # Build passage lookup from citations
+            passages = {}
+            for i, citation in enumerate(citations, 1):
+                text = citation.get('full_text') or citation.get('snippet', '')
+                if text:
+                    passages[i] = text
+            
+            if not passages:
+                logger.warning("No passages for post-hoc verification")
+                return answer
+            
+            result = verifier.verify(answer, passages, citations)
+            
+            logger.info(
+                f"Post-hoc verification: {result.verified_sentences}/{result.total_sentences} "
+                f"sentences verified ({result.verification_rate:.1%})"
+            )
+            
+            return result.verified_answer
+            
+        except Exception as e:
+            logger.error(f"Post-hoc verification failed: {e}")
+            return answer  # Return original on error
     
     async def _extract_claims_from_sources(
         self,
@@ -376,6 +448,8 @@ WRITING INSTRUCTIONS:
    - Do NOT use claim IDs like [1a] or [1b] - just use [1], [2], etc.
    - Include specific effect sizes and numbers from the claims
    - Be substantive (300-500 words)
+   - USE THE EXACT WORDING from claims whenever possible - do not paraphrase
+   - Do NOT add inferences like "this suggests" or "this indicates"
 
 3. **Structure** (use markdown headers):
    - Key Findings (cite the finding-type claims)
@@ -388,31 +462,42 @@ WRITING INSTRUCTIONS:
    - Every statement MUST have a [N] citation
    - You may combine claims: "Studies found positive effects [1, 3]..."
    - Do NOT make claims that aren't in the ledger
-   - Do NOT add a References section
+   - Do NOT add a References section at the end
+   - Do NOT list author names or study titles at the end
+   - Do NOT add any "Note:" or "Additional evidence" sections
 
 REMEMBER: 
 - You can ONLY state facts that appear in the verified claims ledger above.
 - Use [1], [2], [3] format - NOT [1a], [1b], [1c] format.
 - Any uncited claim or claim not in the ledger is a failure.
+- END your answer after the Limitations section - NO references or notes after that.
 
 Write your answer:"""
 
         try:
+            # Use regular LLM (GPT-4o-mini works well for this)
             response = await self.llm.acomplete(prompt)
             answer = response.text.strip()
             
-            # Remove auto-generated references
+            # Remove auto-generated references aggressively
             ref_markers = [
                 '\n---\n\n## References',
                 '\n\n## References',
                 '\n\n**References**',
                 '\n\n**Sources**',
+                '\n**Note**:',
+                '\n\n**Note**',
                 '\n---\n\n- ',
+                '\n\n---\n',
             ]
             for marker in ref_markers:
                 if marker in answer:
                     answer = answer.split(marker)[0].strip()
-                    break
+            
+            # Also remove any trailing "Note:" sections using regex
+            import re
+            answer = re.sub(r'\n\*\*Note\*\*:.*$', '', answer, flags=re.DOTALL)
+            answer = re.sub(r'\n---\s*$', '', answer)
             
             # Verify citation coverage
             answer = self._ensure_citation_coverage(answer, ledger)

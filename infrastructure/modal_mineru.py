@@ -48,6 +48,9 @@ from typing import Optional
 
 app = modal.App("devchat-mineru")
 
+# Collection name for Qdrant - using enhanced collection with post-processing
+QDRANT_COLLECTION_NAME = "devchat_v2_enhanced"
+
 # Base image with system dependencies
 base_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -129,6 +132,156 @@ def sanitize_dict(obj):
         return obj
 
 
+# ============================================================================
+# Post-Processing for Better RAG (Phase 2)
+# ============================================================================
+
+def post_process_content(
+    content: str,
+    title: str = None,
+    authors: list = None,
+    year: int = None,
+    pdf_name: str = None,
+) -> str:
+    """
+    Clean and enhance MinerU markdown output for better RAG retrieval.
+    
+    Features:
+    - OCR artifact cleanup
+    - Running headers/footers removal
+    - Reference section removal (reduces citation noise)
+    - Sentence boundary repair
+    - Table normalization (mark malformed tables)
+    - Equation cleanup
+    - Document header addition (for context)
+    
+    Args:
+        content: Raw MinerU markdown
+        title, authors, year, pdf_name: Document metadata
+        
+    Returns:
+        Enhanced markdown ready for chunking
+    """
+    import re
+    
+    original_len = len(content)
+    
+    # Step 1: Clean OCR artifacts
+    # Fix common character substitutions
+    content = re.sub(r"\bl(?=\d)", "1", content)  # l -> 1 when followed by digit
+    content = re.sub(r"(?<=\d)l\b", "1", content)  # l -> 1 when preceded by digit
+    content = re.sub(r"\bO(?=\d)", "0", content)  # O -> 0 when followed by digit
+    content = re.sub(r"(?<=\d)O\b", "0", content)  # O -> 0 when preceded by digit
+    
+    # Fix hyphenation across lines
+    content = re.sub(r"(\w+)-\s*\n\s*(\w+)", r"\1\2", content)
+    
+    # Fix ligatures
+    content = content.replace("ﬁ", "fi").replace("ﬂ", "fl")
+    content = content.replace("ﬀ", "ff").replace("ﬃ", "ffi").replace("ﬄ", "ffl")
+    
+    # Step 2: Remove running headers/footers
+    # Remove standalone page numbers
+    content = re.sub(r"^\s*\d{1,4}\s*$", "", content, flags=re.MULTILINE)
+    content = re.sub(r"^.*Page \d+ of \d+.*$", "", content, flags=re.MULTILINE)
+    content = re.sub(r"^-\s*\d+\s*-$", "", content, flags=re.MULTILINE)
+    # Remove PREPRINT/DRAFT markers
+    content = re.sub(r"^.*\bPREPRINT\b.*$", "", content, flags=re.MULTILINE | re.IGNORECASE)
+    content = re.sub(r"^.*\bDRAFT\b.*$", "", content, flags=re.MULTILINE | re.IGNORECASE)
+    # Remove download notices
+    content = re.sub(r"^\s*Downloaded from\s+.*$", "", content, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # Fix spacing
+    content = re.sub(r"  +", " ", content)
+    content = re.sub(r"\n{4,}", "\n\n\n", content)
+    
+    # Step 3: Remove references section (prevents citation noise in retrieval)
+    ref_pattern = r"(?i)^#{1,3}\s*(?:\d+\.?\s*)?(?:references?|bibliography|works\s+cited|literature\s+cited)\s*$"
+    lines = content.split("\n")
+    result_lines = []
+    in_references = False
+    next_section_pattern = r"^#{1,3}\s+\w"
+    
+    for line in lines:
+        if re.match(ref_pattern, line.strip()):
+            in_references = True
+            print(f"    Post-processing: Found references section, removing...")
+            continue
+        
+        if in_references:
+            # Check if we've hit another main section
+            if re.match(next_section_pattern, line.strip()):
+                if not re.match(ref_pattern, line.strip()):
+                    in_references = False
+                    result_lines.append(line)
+        else:
+            result_lines.append(line)
+    
+    content = "\n".join(result_lines)
+    
+    # Step 4: Clean footnote markers
+    content = re.sub(r"\[\d{1,3}\](?!\()", "", content)
+    content = re.sub(r"^\[\d+\]:\s*.*$", "", content, flags=re.MULTILINE)
+    
+    # Step 5: Handle malformed tables (mark them for exclusion)
+    def is_table_malformed(table_text):
+        lines = [l for l in table_text.strip().split("\n") if l.strip()]
+        if len(lines) < 2:
+            return True
+        col_counts = [line.count("|") for line in lines]
+        if max(col_counts) - min(col_counts) > 2:
+            return True
+        has_separator = any("-" * 3 in line and "|" in line for line in lines[:3])
+        if not has_separator:
+            return True
+        return False
+    
+    table_pattern = r"(\|[^\n]+\|(?:\n\|[^\n]+\|)+)"
+    def process_table(match):
+        table = match.group(1)
+        if is_table_malformed(table):
+            return "\n<!-- MALFORMED_TABLE: Content removed for RAG quality -->\n"
+        return table
+    
+    content = re.sub(table_pattern, process_table, content)
+    
+    # Step 6: Clean up broken equations
+    content = re.sub(r"\$\$[^$]{500,}\$\$", "[Complex equation removed]", content)
+    content = re.sub(r"\\begin\{equation\}.*?\\end\{equation\}", "[Equation]", content, flags=re.DOTALL)
+    content = re.sub(r"\\begin\{align\}.*?\\end\{align\}", "[Equation]", content, flags=re.DOTALL)
+    
+    # Step 7: Add document header for context
+    if title or authors or year:
+        header_parts = []
+        if title:
+            header_parts.append(f"# {title}")
+        
+        metadata_items = []
+        if authors:
+            author_str = ", ".join(authors[:3])
+            if len(authors) > 3:
+                author_str += " et al."
+            metadata_items.append(f"**Authors:** {author_str}")
+        if year:
+            metadata_items.append(f"**Year:** {year}")
+        if pdf_name:
+            metadata_items.append(f"**Source:** {pdf_name}")
+        
+        if metadata_items:
+            header_parts.append(" | ".join(metadata_items))
+        
+        if header_parts:
+            header_parts.append("\n---\n")
+            content = "\n".join(header_parts) + content
+    
+    # Log results
+    final_len = len(content)
+    reduction = (1 - final_len / original_len) * 100 if original_len > 0 else 0
+    print(f"    Post-processing: {original_len} -> {final_len} chars ({reduction:.1f}% reduction)")
+    
+    return content
+
+
 def compute_content_hash(content: bytes) -> str:
     """Compute MD5 hash of content for change detection."""
     return hashlib.md5(content).hexdigest()[:16]
@@ -158,7 +311,7 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
         
         # First check if collection exists
         try:
-            qdrant.get_collection("devchat_v2")
+            qdrant.get_collection(QDRANT_COLLECTION_NAME)
         except Exception:
             return False, 0, None  # Collection doesn't exist, not an error
         
@@ -172,7 +325,7 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
         # Try to count with filter - check BOTH formats
         try:
             result = qdrant.count(
-                collection_name="devchat_v2",
+                collection_name=QDRANT_COLLECTION_NAME,
                 count_filter=Filter(
                     should=[
                         FieldCondition(key="pdf_name", match=MatchValue(value=name))
@@ -189,7 +342,7 @@ def check_qdrant_indexed(pdf_name: str) -> tuple[bool, int, str | None]:
                 print(f"  Note: No index on pdf_name, using scroll fallback")
                 # Scroll through all points to check (slower but works)
                 scroll_result = qdrant.scroll(
-                    collection_name="devchat_v2",
+                    collection_name=QDRANT_COLLECTION_NAME,
                     scroll_filter=None,
                     limit=100,
                     with_payload=["pdf_name"],
@@ -230,7 +383,7 @@ def ensure_qdrant_indexes():
         for field, schema in indexes.items():
             try:
                 qdrant.create_payload_index(
-                    collection_name="devchat_v2",
+                    collection_name=QDRANT_COLLECTION_NAME,
                     field_name=field,
                     field_schema=schema,
                 )
@@ -262,7 +415,7 @@ def delete_qdrant_chunks(pdf_name: str) -> int:
         
         # Get count before delete
         count_before = qdrant.count(
-            collection_name="devchat_v2",
+            collection_name=QDRANT_COLLECTION_NAME,
             count_filter=Filter(
                 must=[FieldCondition(key="pdf_name", match=MatchValue(value=pdf_name))]
             ),
@@ -270,7 +423,7 @@ def delete_qdrant_chunks(pdf_name: str) -> int:
         
         if count_before > 0:
             qdrant.delete(
-                collection_name="devchat_v2",
+                collection_name=QDRANT_COLLECTION_NAME,
                 points_selector=Filter(
                     must=[FieldCondition(key="pdf_name", match=MatchValue(value=pdf_name))]
                 ),
@@ -411,7 +564,7 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
         sample_count = 0
         while sample_count < 2000:
             pts, offset = qdrant.scroll(
-                "devchat_v2", limit=500, offset=offset, with_payload=["doc_id"]
+                QDRANT_COLLECTION_NAME, limit=500, offset=offset, with_payload=["doc_id"]
             )
             for p in pts:
                 doc_counts[p.payload.get("doc_id")] += 1
@@ -745,6 +898,16 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             if result.get("abstract"):
                 result["abstract"] = sanitize_text(result["abstract"])
             
+            # Apply smart post-processing for better RAG (Phase 2)
+            # This removes reference sections, cleans OCR artifacts, adds document headers
+            result["content"] = post_process_content(
+                content=result["content"],
+                title=result.get("title"),
+                authors=result.get("authors"),
+                year=result.get("year"),
+                pdf_name=Path(pdf_key).name,
+            )
+            
             # Upload outputs to R2 (only for new extractions)
             # Use doc_id consistently for output paths
             md_key = f"outputs/md/{doc_id}.md"
@@ -1047,7 +1210,7 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
         api_key=os.environ["QDRANT_API_KEY"],
     )
     
-    collection_name = "devchat_v2"
+    collection_name = QDRANT_COLLECTION_NAME
     vector_name = "dense"  # Named vector in existing collection
     
     # Ensure collection exists with correct config for Cohere embed-v4.0 (1536 dims)
@@ -1716,7 +1879,7 @@ def check_qdrant() -> dict:
     )
     
     try:
-        info = qdrant.get_collection("devchat_v2")
+        info = qdrant.get_collection(QDRANT_COLLECTION_NAME)
         return {
             "status": "connected",
             "points_count": info.points_count,

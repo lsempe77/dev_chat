@@ -196,7 +196,7 @@ class HybridRetriever:
         """Generate sparse vector for query using deterministic hashing."""
         import hashlib
         import re
-        from collections import Counter
+        from collections import Counter, defaultdict
         
         # Tokenize
         tokens = re.findall(r'\b\w+\b', query.lower())
@@ -214,15 +214,20 @@ class HybridRetriever:
         
         # Count and convert using deterministic hash (same as indexer)
         freq = Counter(tokens)
-        indices = []
-        values = []
+        
+        # Aggregate by index to handle hash collisions (REQUIRED for Qdrant)
+        index_weights = defaultdict(float)
         
         for token, count in freq.items():
             # Deterministic hash: MD5 -> int -> modulo (must match indexer!)
             hash_bytes = hashlib.md5(token.encode()).digest()
             idx = int.from_bytes(hash_bytes[:4], 'big') % 100000
-            indices.append(idx)
-            values.append(float(count))
+            index_weights[idx] += float(count)
+        
+        # Convert to sorted lists (Qdrant requires unique indices)
+        sorted_items = sorted(index_weights.items())
+        indices = [idx for idx, _ in sorted_items]
+        values = [val for _, val in sorted_items]
         
         return models.SparseVector(indices=indices, values=values)
     

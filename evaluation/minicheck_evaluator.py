@@ -307,10 +307,27 @@ Respond with ONLY a JSON object:
         """
         Extract individual claims from the answer.
         
-        Uses sentence tokenization and filters out very short sentences.
+        Uses sentence tokenization and filters out:
+        - Very short sentences
+        - Markdown headers
+        - Meta-commentary (e.g., "I found X studies...")
+        - Reference section content
+        - Author names and study titles as standalone items
         """
         # Remove citation markers for claim extraction
         clean_answer = re.sub(r'\s*\[\d+\]', '', answer)
+        
+        # Remove Reference section if present
+        ref_patterns = [
+            r'## References.*$',
+            r'---\s*## References.*$',
+            r'\*\*References\*\*.*$',
+        ]
+        for pattern in ref_patterns:
+            clean_answer = re.sub(pattern, '', clean_answer, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Remove the "Note: Additional evidence" footer
+        clean_answer = re.sub(r'\*\*Note\*\*:.*?(?=\n\n|$)', '', clean_answer, flags=re.DOTALL)
         
         # Use NLTK sentence tokenizer
         try:
@@ -319,8 +336,40 @@ Respond with ONLY a JSON object:
             # Fallback to simple splitting
             sentences = re.split(r'(?<=[.!?])\s+', clean_answer)
         
-        # Filter out short sentences (headers, etc.)
-        claims = [s.strip() for s in sentences if len(s.strip()) > 20]
+        # Filter claims
+        claims = []
+        for s in sentences:
+            s = s.strip()
+            
+            # Skip short sentences
+            if len(s) <= 20:
+                continue
+            
+            # Skip markdown headers (## Header, # Header)
+            if re.match(r'^#+\s*', s):
+                continue
+            
+            # Skip if it's just a markdown header with content on same line
+            if s.startswith('##') or s.startswith('#'):
+                continue
+            
+            # Skip meta-commentary about finding studies
+            if re.match(r'^I found \d+ stud(y|ies)', s, re.IGNORECASE):
+                continue
+            
+            # Skip lines that look like author lists (- Name, Name...)
+            if re.match(r'^-\s+[A-Z][a-z]+\s+[A-Z]', s):
+                continue
+            
+            # Skip lines that are just italicized titles (*Title Here*)
+            if re.match(r'^\*[^*]+\*\.?$', s):
+                continue
+            
+            # Skip "Unknown Author" entries
+            if 'Unknown Author' in s:
+                continue
+            
+            claims.append(s)
         
         return claims
     

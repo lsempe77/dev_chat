@@ -17,14 +17,101 @@ from sqlalchemy import (
     Text,
     ARRAY,
     JSON,
+    ForeignKey,
+    Index,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     """Base class for all models."""
     pass
 
+
+# ============================================================================
+# Conversation Memory Models
+# ============================================================================
+
+class ChatSession(Base):
+    """
+    Represents a conversation session.
+    
+    Each session can have multiple messages and persists across page reloads.
+    """
+    __tablename__ = "chat_sessions"
+    
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    
+    # Session metadata
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship to messages
+    messages: Mapped[List["ChatMessage"]] = relationship("ChatMessage", back_populates="session", order_by="ChatMessage.created_at")
+    
+    def __repr__(self) -> str:
+        return f"<ChatSession(id='{self.id}', title='{self.title}')>"
+
+
+class ChatMessage(Base):
+    """
+    Individual message in a conversation.
+    
+    Stores both user queries and assistant responses with full context.
+    """
+    __tablename__ = "chat_messages"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(255), ForeignKey("chat_sessions.id"), nullable=False, index=True)
+    
+    # Message content
+    role: Mapped[str] = mapped_column(String(50), nullable=False)  # 'user' or 'assistant'
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    # Metadata for assistant messages
+    query_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    model_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    num_sources: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    citations: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # Timing and performance
+    total_time_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationship to session
+    session: Mapped["ChatSession"] = relationship("ChatSession", back_populates="messages")
+    
+    # Index for efficient message retrieval
+    __table_args__ = (
+        Index('ix_chat_messages_session_created', 'session_id', 'created_at'),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<ChatMessage(id={self.id}, role='{self.role}', session='{self.session_id}')>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "role": self.role,
+            "content": self.content,
+            "query_type": self.query_type,
+            "model_used": self.model_used,
+            "num_sources": self.num_sources,
+            "citations": self.citations,
+            "total_time_ms": self.total_time_ms,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ============================================================================
+# Document Metadata Model
+# ============================================================================
 
 class Document(Base):
     """

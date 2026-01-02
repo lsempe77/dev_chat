@@ -248,7 +248,7 @@ class QdrantIndexer:
         """
         import hashlib
         import re
-        from collections import Counter
+        from collections import Counter, defaultdict
         
         # Simple tokenization
         tokens = re.findall(r'\b\w+\b', text.lower())
@@ -268,14 +268,17 @@ class QdrantIndexer:
         
         # Convert to sparse vector format
         # Using deterministic hash (MD5) instead of Python's randomized hash()
-        indices = []
-        values = []
+        # Aggregate values for colliding indices to ensure uniqueness
+        index_values = defaultdict(float)
         for token, count in freq.items():
             # Deterministic hash: MD5 -> int -> modulo
             hash_bytes = hashlib.md5(token.encode()).digest()
             idx = int.from_bytes(hash_bytes[:4], 'big') % 100000
-            indices.append(idx)
-            values.append(float(count))
+            index_values[idx] += float(count)  # Aggregate colliding indices
+        
+        # Extract unique indices and their aggregated values
+        indices = list(index_values.keys())
+        values = list(index_values.values())
         
         return models.SparseVector(indices=indices, values=values)
     
@@ -500,3 +503,26 @@ class LlamaIndexQdrantAdapter:
         )
         
         return index
+
+
+# =============================================================================
+# Async Wrappers for Multi-Tenant Support
+# =============================================================================
+
+async def ensure_collection_exists_async(indexer: QdrantIndexer) -> None:
+    """Async wrapper to ensure a collection exists."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, indexer.create_collection, False, settings.hybrid_enabled)
+
+
+async def delete_collection_async(indexer: QdrantIndexer) -> None:
+    """Async wrapper to delete a collection."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, indexer.delete_collection)
+
+
+# Add async methods directly to QdrantIndexer for convenience
+QdrantIndexer.ensure_collection_exists = lambda self: ensure_collection_exists_async(self)
+QdrantIndexer.delete_collection_async = lambda self: delete_collection_async(self)

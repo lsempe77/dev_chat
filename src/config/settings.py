@@ -58,16 +58,26 @@ class Settings(BaseSettings):
     # =========================================================================
     openrouter_api_key: str = Field(default="", description="OpenRouter API key (unified access to all models)")
     anthropic_api_key: str = Field(default="", description="Anthropic API key for Claude (fallback)")
+    admin_api_key: str = Field(default="", description="Admin API key for programmatic /admin access")
+    admin_password: str = Field(default="", description="Admin password for browser login to /admin")
     openai_api_key: str = Field(default="", description="OpenAI API key (fallback)")
     cohere_api_key: str = Field(default="", description="Cohere API key for embeddings/rerank")
     voyage_api_key: Optional[str] = Field(default=None, description="Voyage AI API key")
+    
+    # =========================================================================
+    # Supabase (Multi-Tenant Auth & Database)
+    # =========================================================================
+    supabase_url: str = Field(default="", description="Supabase project URL")
+    supabase_anon_key: str = Field(default="", description="Supabase anonymous/public key")
+    supabase_service_role_key: str = Field(default="", description="Supabase service role key (backend only)")
+    supabase_jwt_secret: str = Field(default="", description="Supabase JWT secret for token verification")
     
     # =========================================================================
     # Vector Database
     # =========================================================================
     qdrant_url: str = Field(default="http://localhost:6333", description="Qdrant server URL")
     qdrant_api_key: Optional[str] = Field(default=None, description="Qdrant API key (for cloud)")
-    qdrant_collection_name: str = Field(default="devchat_v2", description="Qdrant collection name")
+    qdrant_collection_name: str = Field(default="devchat_v2_contextual", description="SOTA collection: Hybrid BM25+Dense, Contextual Prefixes")
     
     # =========================================================================
     # Observability
@@ -122,24 +132,28 @@ class Settings(BaseSettings):
     embedding_input_type: str = Field(default="search_document")
     
     # =========================================================================
-    # Reranking
+    # Reranking (Cohere v3.5)
     # =========================================================================
     rerank_enabled: bool = Field(default=True)
     rerank_model: str = Field(default="rerank-v3.5")
-    rerank_top_n: int = Field(default=15, ge=1)
     
     # =========================================================================
-    # Retrieval
+    # Retrieval (SOTA 2025: Contextual Retrieval + Hybrid + Reranking)
     # =========================================================================
-    hybrid_enabled: bool = Field(default=False, description="Enable hybrid search (requires sparse vectors in Qdrant)")
+    hybrid_enabled: bool = Field(default=True, description="Enable hybrid search BM25+Dense (Anthropic: 49% improvement)")
     hybrid_alpha: float = Field(
         default=0.7, 
         ge=0.0, 
         le=1.0,
-        description="Dense vs Sparse weight (1.0 = pure dense)"
+        description="Dense vs Sparse weight (1.0 = pure dense, 0.7 recommended)"
     )
-    retrieval_top_k: int = Field(default=50, ge=1, description="Initial retrieval count")
-    final_top_k: int = Field(default=10, ge=1, description="Final context chunks")
+    retrieval_top_k: int = Field(default=150, ge=1, description="Initial retrieval count (retrieve more, rerank down)")
+    rerank_top_n: int = Field(default=20, ge=1)  # Moved here for clarity
+    final_top_k: int = Field(default=20, ge=1, description="Final context chunks (Anthropic: 20 is optimal)")
+    
+    # Contextual Retrieval (Anthropic: 67% improvement with reranking)
+    contextual_retrieval_enabled: bool = Field(default=True, description="Prepend document context to chunks")
+    contextual_mode: str = Field(default="fast", description="'fast' (metadata-only) or 'llm' (AI-generated)")
     
     # =========================================================================
     # Chunking (256 words = better precision for RAG retrieval)
@@ -175,6 +189,37 @@ class Settings(BaseSettings):
     # =========================================================================
     query_expansion_enabled: bool = Field(default=True)
     query_classification_enabled: bool = Field(default=True)
+    
+    # HyDE: Hypothetical Document Embeddings (Gao et al. 2022)
+    # Generates a hypothetical answer to use for retrieval instead of the raw query
+    # NOTE: Disabled after testing - HyDE hurts faithfulness in this domain
+    # (likely because generated hypothetical answers introduce biases)
+    hyde_enabled: bool = Field(
+        default=False, 
+        description="Enable HyDE query enhancement (disabled - hurts faithfulness)"
+    )
+    
+    # Conversation Memory
+    conversation_memory_enabled: bool = Field(
+        default=True,
+        description="Enable persistent conversation memory across sessions"
+    )
+    max_conversation_history: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum messages to include in conversation context"
+    )
+    
+    # Knowledge Graph (Neo4j)
+    knowledge_graph_enabled: bool = Field(
+        default=False,  # Disabled by default - requires Neo4j setup
+        description="Enable knowledge graph for relationship-based retrieval"
+    )
+    graph_llm_extraction_enabled: bool = Field(
+        default=False,
+        description="Use LLM to extract entities from document content (slower but richer)"
+    )
     
     # =========================================================================
     # Production Scaling & Performance

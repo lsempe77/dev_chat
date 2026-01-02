@@ -64,6 +64,12 @@ sqlalchemy[asyncio]>=2.0.0
 asyncpg>=0.30.0
 alembic>=1.14.0
 
+# =============================================================================
+# Authentication (Supabase)
+# =============================================================================
+supabase>=2.0.0
+python-jose[cryptography]>=3.3.0  # JWT token verification
+
 # Frontend
 gradio>=5.0.0
 

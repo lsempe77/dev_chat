@@ -3,6 +3,11 @@
  * 
  * Handles all admin-related API calls for document management,
  * processing jobs, and system status.
+ * 
+ * Authentication:
+ * - Browser users: Login with password → receive session token
+ * - Session token stored in localStorage and sent as X-Admin-Session header
+ * - Optional: X-Admin-API-Key for programmatic access
  */
 
 import type {
@@ -28,7 +33,63 @@ export * from "./types";
 // =============================================================================
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "";
 const ADMIN_TIMEOUT_MS = 60_000; // 60 seconds
+
+// Storage key for session token
+const SESSION_TOKEN_KEY = "devchat_admin_session";
+
+// =============================================================================
+// Session Management
+// =============================================================================
+
+/**
+ * Get stored session token from localStorage
+ */
+export function getSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(SESSION_TOKEN_KEY);
+}
+
+/**
+ * Store session token in localStorage
+ */
+export function setSessionToken(token: string): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(SESSION_TOKEN_KEY, token);
+  }
+}
+
+/**
+ * Clear session token from localStorage
+ */
+export function clearSessionToken(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+  }
+}
+
+/**
+ * Get default headers for admin API calls (includes auth)
+ */
+function getAdminHeaders(additionalHeaders: Record<string, string> = {}): HeadersInit {
+  const headers: Record<string, string> = {
+    ...additionalHeaders,
+  };
+  
+  // Prefer session token (browser login)
+  const sessionToken = getSessionToken();
+  if (sessionToken) {
+    headers["X-Admin-Session"] = sessionToken;
+  }
+  
+  // Also include API key if configured (programmatic access)
+  if (ADMIN_API_KEY) {
+    headers["X-Admin-API-Key"] = ADMIN_API_KEY;
+  }
+  
+  return headers;
+}
 
 /**
  * Fetch with timeout for admin endpoints
@@ -44,6 +105,10 @@ async function fetchWithTimeout(
   try {
     const response = await fetch(url, {
       ...options,
+      headers: {
+        ...getAdminHeaders(),
+        ...options.headers,
+      },
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -57,6 +122,114 @@ async function fetchWithTimeout(
   }
 }
 
+/**
+ * Admin fetch wrapper that includes auth headers
+ */
+async function adminFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...getAdminHeaders(),
+      ...options.headers,
+    },
+  });
+  
+  if (response.status === 401) {
+    // Clear invalid session
+    clearSessionToken();
+    throw new Error("Authentication required. Please log in.");
+  }
+  
+  return response;
+}
+
+// =============================================================================
+// Authentication
+// =============================================================================
+
+export interface LoginResponse {
+  success: boolean;
+  token: string;
+  expires_in: number;
+  message: string;
+}
+
+export interface AuthStatusResponse {
+  authenticated: boolean;
+  auth_required: boolean;
+  message: string;
+}
+
+/**
+ * Login with admin password
+ */
+export async function adminLogin(password: string): Promise<LoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Login failed" }));
+    throw new Error(error.detail || "Login failed");
+  }
+  
+  const data = await response.json();
+  
+  // Store session token
+  if (data.success && data.token) {
+    setSessionToken(data.token);
+  }
+  
+  return data;
+}
+
+/**
+ * Logout and clear session
+ */
+export async function adminLogout(): Promise<void> {
+  const sessionToken = getSessionToken();
+  
+  if (sessionToken) {
+    try {
+      await fetch(`${API_BASE_URL}/admin/logout`, {
+        method: "POST",
+        headers: {
+          "X-Admin-Session": sessionToken,
+        },
+      });
+    } catch {
+      // Ignore errors, just clear local session
+    }
+  }
+  
+  clearSessionToken();
+}
+
+/**
+ * Check if user is authenticated
+ */
+export async function checkAuthStatus(): Promise<AuthStatusResponse> {
+  const sessionToken = getSessionToken();
+  
+  const response = await fetch(`${API_BASE_URL}/admin/auth-status`, {
+    headers: sessionToken ? { "X-Admin-Session": sessionToken } : {},
+  });
+  
+  if (!response.ok) {
+    return {
+      authenticated: false,
+      auth_required: true,
+      message: "Unable to check auth status",
+    };
+  }
+  
+  return response.json();
+}
+
 // =============================================================================
 // Document Upload & Processing
 // =============================================================================
@@ -68,7 +241,7 @@ export async function uploadDocument(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${API_BASE_URL}/admin/upload`, {
+  const response = await adminFetch(`${API_BASE_URL}/admin/upload`, {
     method: "POST",
     body: formData,
   });
@@ -85,7 +258,7 @@ export async function uploadDocument(file: File): Promise<UploadResponse> {
  * Get list of processing jobs
  */
 export async function getProcessingJobs(): Promise<ProcessingJobsResponse> {
-  const response = await fetch(`${API_BASE_URL}/admin/jobs`);
+  const response = await adminFetch(`${API_BASE_URL}/admin/jobs`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch jobs: ${response.statusText}`);
@@ -100,7 +273,7 @@ export async function getProcessingJobs(): Promise<ProcessingJobsResponse> {
 export async function triggerProcessing(
   options: TriggerProcessingRequest = {}
 ): Promise<TriggerProcessingResponse> {
-  const response = await fetch(`${API_BASE_URL}/admin/jobs/trigger`, {
+  const response = await adminFetch(`${API_BASE_URL}/admin/jobs/trigger`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -125,7 +298,7 @@ export async function clearProcessingLocks(): Promise<{
   cleared: number;
   message: string;
 }> {
-  const response = await fetch(`${API_BASE_URL}/admin/jobs/clear-locks`, {
+  const response = await adminFetch(`${API_BASE_URL}/admin/jobs/clear-locks`, {
     method: "POST",
   });
 
@@ -157,7 +330,7 @@ export async function getDocuments(options?: {
   if (options?.offset) params.append("offset", String(options.offset));
 
   const url = `${API_BASE_URL}/admin/documents${params.toString() ? `?${params}` : ""}`;
-  const response = await fetch(url);
+  const response = await adminFetch(url);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch documents: ${response.statusText}`);
@@ -170,7 +343,7 @@ export async function getDocuments(options?: {
  * Delete a document from the knowledge base
  */
 export async function deleteDocument(documentId: string): Promise<{ success: boolean; deleted: string }> {
-  const response = await fetch(`${API_BASE_URL}/admin/documents/${documentId}`, {
+  const response = await adminFetch(`${API_BASE_URL}/admin/documents/${documentId}`, {
     method: "DELETE",
   });
 
@@ -190,7 +363,7 @@ export async function reprocessDocument(documentId: string): Promise<{
   job_id: string;
   message: string;
 }> {
-  const response = await fetch(`${API_BASE_URL}/admin/documents/${documentId}/reprocess`, {
+  const response = await adminFetch(`${API_BASE_URL}/admin/documents/${documentId}/reprocess`, {
     method: "POST",
   });
 
@@ -209,7 +382,7 @@ export async function reprocessDocument(documentId: string): Promise<{
  * List files in R2 bucket
  */
 export async function listR2Files(prefix: string = "input-pdfs/"): Promise<R2ListResponse> {
-  const response = await fetch(`${API_BASE_URL}/admin/r2/list?prefix=${encodeURIComponent(prefix)}`);
+  const response = await adminFetch(`${API_BASE_URL}/admin/r2/list?prefix=${encodeURIComponent(prefix)}`);
 
   if (!response.ok) {
     throw new Error(`Failed to list R2 files: ${response.statusText}`);
@@ -284,7 +457,7 @@ export async function getMetadataForReview(params?: {
   if (params?.limit) searchParams.set("limit", params.limit.toString());
   if (params?.offset) searchParams.set("offset", params.offset.toString());
 
-  const response = await fetch(
+  const response = await adminFetch(
     `${API_BASE_URL}/admin/metadata/review?${searchParams.toString()}`
   );
 
@@ -301,7 +474,7 @@ export async function getMetadataForReview(params?: {
 export async function getDocumentMetadata(
   documentId: string
 ): Promise<DocumentMetadataDetail> {
-  const response = await fetch(
+  const response = await adminFetch(
     `${API_BASE_URL}/admin/metadata/${encodeURIComponent(documentId)}`
   );
 
@@ -319,7 +492,7 @@ export async function updateDocumentMetadata(
   documentId: string,
   update: MetadataUpdateRequest
 ): Promise<MetadataUpdateResponse> {
-  const response = await fetch(
+  const response = await adminFetch(
     `${API_BASE_URL}/admin/metadata/${encodeURIComponent(documentId)}`,
     {
       method: "PUT",
@@ -345,7 +518,7 @@ export async function updateDocumentMetadata(
  * Get a presigned URL to view a PDF document
  */
 export async function getPDFUrl(documentId: string): Promise<PDFUrlResponse> {
-  const response = await fetch(
+  const response = await adminFetch(
     `${API_BASE_URL}/admin/pdf/${encodeURIComponent(documentId)}`
   );
 

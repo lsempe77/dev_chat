@@ -21,8 +21,10 @@ from src.generation.structured_synthesizer import StructuredSynthesizer
 from src.generation.claim_ledger import ClaimLedgerSynthesizer
 from src.retrieval.context_builder import ContextBuilder, FormattedContext
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
+from src.retrieval.hyde import HyDEEnhancer
 from src.retrieval.query_processor import QueryClassification, QueryProcessor
 from src.retrieval.reranker import CohereReranker, Reranker, get_reranker
+from src.database.memory import get_conversation_memory
 from src.utils.cache import get_response_cache
 from src.utils.logging import get_logger
 
@@ -117,6 +119,7 @@ class DevChatAgent:
         query_processor: Optional[QueryProcessor] = None,
         synthesizer: Optional[Synthesizer] = None,
         context_builder: Optional[ContextBuilder] = None,
+        hyde_enhancer: Optional[HyDEEnhancer] = None,
     ):
         # Initialize components
         self.retriever = retriever or HybridRetriever()
@@ -124,6 +127,7 @@ class DevChatAgent:
         self.query_processor = query_processor or QueryProcessor()
         self.synthesizer = synthesizer or Synthesizer()
         self.context_builder = context_builder or ContextBuilder()
+        self.hyde_enhancer = hyde_enhancer or HyDEEnhancer()
         
         # Conversation memory (optional)
         self.conversation_history: List[Dict] = []
@@ -134,6 +138,7 @@ class DevChatAgent:
         include_citations: bool = True,
         stream: bool = False,
         search_settings: Optional[SearchSettings] = None,
+        session_id: Optional[str] = None,
     ) -> DevChatResponse:
         """
         Process a user query and generate a response.
@@ -143,6 +148,7 @@ class DevChatAgent:
             include_citations: Whether to append reference list
             stream: Whether to stream the response (not implemented yet)
             search_settings: Optional settings from frontend (relevance, max studies, etc.)
+            session_id: Optional session ID for conversation memory
             
         Returns:
             DevChatResponse with answer and metadata
@@ -153,6 +159,17 @@ class DevChatAgent:
         user_settings = search_settings or SearchSettings()
         
         total_start = time.time()
+        
+        # Get conversation context if session provided
+        conversation_context = ""
+        if session_id and settings.conversation_memory_enabled:
+            try:
+                memory = get_conversation_memory()
+                conversation_context = await memory.get_context_for_prompt(session_id)
+                if conversation_context:
+                    logger.info(f"Loaded {len(conversation_context)} chars of conversation context")
+            except Exception as e:
+                logger.warning(f"Failed to load conversation context: {e}")
         
         # Check cache first (skip for streaming)
         cache = get_response_cache()
@@ -183,7 +200,7 @@ class DevChatAgent:
             f"expanded_len={len(processed_query.expanded_query)}"
         )
         
-        # Step 2: Hybrid Retrieval
+        # Step 2: HyDE Enhancement + Hybrid Retrieval
         retrieval_start = time.time()
         # Apply filters if explicitly extracted from query
         active_filters = processed_query.filters if processed_query.filters.has_filters() else None
@@ -193,8 +210,22 @@ class DevChatAgent:
         # Use maxStudies from settings for top_k (retrieve more, then filter)
         retrieval_top_k = min(user_settings.max_studies * 3, settings.retrieval_top_k)
         
+        # Apply HyDE enhancement if enabled
+        retrieval_query = processed_query.primary_query
+        hyde_used = False
+        
+        if settings.hyde_enabled:
+            try:
+                hyde_result = await self.hyde_enhancer.enhance(query)
+                if hyde_result.hyde_used:
+                    retrieval_query = hyde_result.hypothetical_document
+                    hyde_used = True
+                    logger.info(f"HyDE: Using hypothetical document ({len(retrieval_query)} chars)")
+            except Exception as e:
+                logger.warning(f"HyDE enhancement failed, using original query: {e}")
+        
         results = await self.retriever.retrieve(
-            query=processed_query.primary_query,
+            query=retrieval_query,
             top_k=retrieval_top_k,
             filters=active_filters,
         )
@@ -323,16 +354,18 @@ class DevChatAgent:
         synthesis_time = (time.time() - synthesis_start) * 1000
         
         # Check if answer indicates no relevant information found
+        # These must be at the start of sentences or the whole answer to avoid false positives
         no_info_indicators = [
-            "does not contain",
-            "no relevant",
-            "no information",
-            "unable to",
-            "cannot find",
-            "no studies found",
-            "no evidence found",
-            "i don't have",
-            "i do not have",
+            "i could not find",
+            "i couldn't find",
+            "no relevant studies",
+            "no relevant information",
+            "no studies were found",
+            "no evidence was found",
+            "i don't have information",
+            "i do not have information",
+            "the documents do not contain",
+            "i was unable to find",
         ]
         answer_lower = answer.lower()
         has_useful_content = not any(indicator in answer_lower for indicator in no_info_indicators)
@@ -369,7 +402,7 @@ class DevChatAgent:
             reranked_count=reranked_count,
         )
         
-        # Update conversation history
+        # Update conversation history (in-memory)
         self.conversation_history.append({
             "role": "user",
             "content": query,
@@ -380,6 +413,31 @@ class DevChatAgent:
             "content": answer,
             "timestamp": datetime.now().isoformat(),
         })
+        
+        # Save to persistent memory if session provided
+        if session_id and settings.conversation_memory_enabled:
+            try:
+                memory = get_conversation_memory()
+                # Save user message
+                await memory.add_message(
+                    session_id=session_id,
+                    role="user",
+                    content=query,
+                )
+                # Save assistant message with metadata
+                await memory.add_message(
+                    session_id=session_id,
+                    role="assistant",
+                    content=answer,
+                    query_type=processed_query.query_type.value,
+                    model_used=model_used,
+                    num_sources=len(final_citations),
+                    citations=final_citations,
+                    total_time_ms=total_time,
+                )
+                logger.debug(f"Saved messages to session: {session_id}")
+            except Exception as e:
+                logger.warning(f"Failed to save messages to memory: {e}")
         
         logger.info(
             f"Response generated in {total_time:.0f}ms "

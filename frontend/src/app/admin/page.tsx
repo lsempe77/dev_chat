@@ -1,5 +1,10 @@
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { AdminAuthGuard } from "@/components/admin/AdminAuthGuard";
 
 export default function AdminPage() {
-  return <AdminLayout />;
+  return (
+    <AdminAuthGuard>
+      <AdminLayout />
+    </AdminAuthGuard>
+  );
 }

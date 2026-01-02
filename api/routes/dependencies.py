@@ -5,13 +5,18 @@ Common dependencies, singletons, and utilities used across route modules.
 """
 
 import asyncio
+import hashlib
+import hmac
 import os
+import secrets
+import time
 from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException, Request, Security, status
+from fastapi.security import APIKeyHeader
 
 from src.agents.devchat_agent import DevChatAgent
 from src.config.settings import settings
@@ -22,6 +27,206 @@ from src.utils.logging import get_logger
 load_dotenv()
 
 logger = get_logger(__name__)
+
+# =============================================================================
+# Admin Authentication
+# =============================================================================
+
+# API Key header scheme (for programmatic access)
+api_key_header = APIKeyHeader(name="X-Admin-API-Key", auto_error=False)
+
+# Session token header (for browser-based access after login)
+session_header = APIKeyHeader(name="X-Admin-Session", auto_error=False)
+
+# In-memory session store (for production, use Redis or database)
+# Format: {token: {"expires": timestamp, "created": timestamp}}
+_admin_sessions: dict[str, dict] = {}
+
+# Session duration: 24 hours
+SESSION_DURATION_SECONDS = 24 * 60 * 60
+
+
+def _generate_session_token() -> str:
+    """Generate a cryptographically secure session token."""
+    return secrets.token_urlsafe(32)
+
+
+def _clean_expired_sessions():
+    """Remove expired sessions from memory."""
+    now = time.time()
+    expired = [token for token, data in _admin_sessions.items() if data["expires"] < now]
+    for token in expired:
+        del _admin_sessions[token]
+
+
+def create_admin_session() -> tuple[str, int]:
+    """
+    Create a new admin session.
+    
+    Returns:
+        Tuple of (session_token, expires_in_seconds)
+    """
+    _clean_expired_sessions()
+    
+    token = _generate_session_token()
+    expires = time.time() + SESSION_DURATION_SECONDS
+    
+    _admin_sessions[token] = {
+        "expires": expires,
+        "created": time.time(),
+    }
+    
+    logger.info(f"Created admin session (expires in {SESSION_DURATION_SECONDS}s)")
+    return token, SESSION_DURATION_SECONDS
+
+
+def verify_session_token(token: str) -> bool:
+    """Check if a session token is valid and not expired."""
+    if not token or token not in _admin_sessions:
+        return False
+    
+    session = _admin_sessions[token]
+    if session["expires"] < time.time():
+        del _admin_sessions[token]
+        return False
+    
+    return True
+
+
+def invalidate_session(token: str) -> bool:
+    """Invalidate (logout) a session token."""
+    if token in _admin_sessions:
+        del _admin_sessions[token]
+        return True
+    return False
+
+
+async def verify_admin_auth(
+    api_key: str = Security(api_key_header),
+    session_token: str = Security(session_header),
+) -> str:
+    """
+    Verify admin authentication via API key OR session token.
+    
+    Supports two authentication methods:
+    1. X-Admin-API-Key header (for programmatic/CI access)
+    2. X-Admin-Session header (for browser access after login)
+    
+    Raises HTTPException 401 if neither method succeeds.
+    
+    If ADMIN_PASSWORD is not set, authentication is disabled (development mode).
+    """
+    admin_password = settings.admin_password
+    admin_api_key = settings.admin_api_key
+    
+    # If no admin password configured, allow access (development mode)
+    if not admin_password and not admin_api_key:
+        logger.warning("ADMIN_PASSWORD not set - admin routes are unprotected!")
+        return "development"
+    
+    # Check session token first (browser login)
+    if session_token and verify_session_token(session_token):
+        return "session"
+    
+    # Check API key (programmatic access)
+    if api_key and admin_api_key and api_key == admin_api_key:
+        return "api_key"
+    
+    # Neither method worked
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required. Please log in at /admin/login",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+# Alias for backward compatibility
+verify_admin_api_key = verify_admin_auth
+
+
+# =============================================================================
+# Multi-Tenant Authentication (Supabase)
+# =============================================================================
+
+from src.auth import is_multi_tenant_enabled, get_current_user as supabase_get_current_user, AuthenticatedUser
+
+
+async def get_current_user_or_legacy(
+    api_key: str = Security(api_key_header),
+    session_token: str = Security(session_header),
+) -> Optional[AuthenticatedUser]:
+    """
+    Get current authenticated user.
+    
+    In multi-tenant mode (Supabase configured):
+        - Returns AuthenticatedUser from JWT token
+        
+    In legacy mode (single-tenant):
+        - Falls back to API key / session token auth
+        - Returns None (caller should use legacy indexer)
+    """
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    
+    if is_multi_tenant_enabled():
+        # Import here to avoid circular imports
+        from src.auth.supabase_auth import bearer_scheme, verify_supabase_token
+        # We need to get the bearer token from the request
+        # For now, check if session_token looks like a JWT (Supabase tokens are JWTs)
+        if session_token and "." in session_token:
+            user = verify_supabase_token(session_token)
+            if user:
+                return user
+    
+    # Legacy mode - verify with API key or session
+    admin_password = settings.admin_password
+    admin_api_key = settings.admin_api_key
+    
+    if not admin_password and not admin_api_key:
+        return None  # Development mode
+    
+    if session_token and verify_session_token(session_token):
+        return None  # Legacy session - no user object
+    
+    if api_key and admin_api_key and api_key == admin_api_key:
+        return None  # Legacy API key - no user object
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def get_indexer_for_user(user: Optional[AuthenticatedUser], rag_project_id: Optional[str] = None) -> QdrantIndexer:
+    """
+    Get an indexer for the user's context.
+    
+    In multi-tenant mode:
+        - Requires rag_project_id to determine which collection to use
+        - Validates user owns the project
+        
+    In legacy mode:
+        - Uses the default collection from settings
+    """
+    if user and rag_project_id and is_multi_tenant_enabled():
+        # Multi-tenant: get collection from database
+        from src.auth import get_supabase_client
+        client = get_supabase_client()
+        
+        result = client.table("rag_projects").select("qdrant_collection").eq("id", rag_project_id).eq("user_id", user.id).single().execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="RAG project not found"
+            )
+        
+        collection_name = result.data["qdrant_collection"]
+        return QdrantIndexer(collection_name=collection_name)
+    
+    # Legacy mode: use default collection
+    return get_indexer()
+
 
 # =============================================================================
 # Global Singletons
