@@ -1302,7 +1302,7 @@ async def enrich_document_metadata(
             import re
             search_title = re.sub(r'^[a-f0-9]{10,}_', '', search_title)
             
-            works = await openalex.search(search_title, limit=1)
+            works = await openalex.search(title=search_title, per_page=1)
             if works and len(works) > 0:
                 oa_work = works[0]
                 enriched.update({
@@ -1421,7 +1421,7 @@ async def enrich_all_documents(
                 search_title = original_filename.replace('.pdf', '').replace('_', ' ')
                 search_title = re.sub(r'^[a-f0-9]{10,}_', '', search_title)
                 
-                works = await openalex.search(search_title, limit=1)
+                works = await openalex.search(title=search_title, per_page=1)
                 if works and len(works) > 0:
                     oa_work = works[0]
                     enriched.update({
