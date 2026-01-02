@@ -1287,7 +1287,8 @@ async def enrich_document_metadata(
                 if oa_work.abstract and not enriched.get("abstract"):
                     enriched["abstract"] = oa_work.abstract
                 if oa_work.concepts:
-                    enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                    # concepts are dicts with 'name' key
+                    enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
                 if oa_work.is_open_access is not None:
                     enriched["is_open_access"] = oa_work.is_open_access
                 if not source:
@@ -1313,7 +1314,8 @@ async def enrich_document_metadata(
                     "abstract": oa_work.abstract or enriched.get("abstract"),
                 })
                 if oa_work.concepts:
-                    enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                    # concepts are dicts with 'name' key
+                    enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
                 source = "openalex"
             else:
                 raise HTTPException(status_code=404, detail="Could not find metadata. Try adding a DOI manually.")
@@ -1413,7 +1415,8 @@ async def enrich_all_documents(
                     if oa_work.abstract and not enriched.get("abstract"):
                         enriched["abstract"] = oa_work.abstract
                     if oa_work.concepts:
-                        enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                        # concepts are dicts with 'name' key
+                        enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
                     if not source:
                         source = "openalex"
             else:
@@ -1431,7 +1434,8 @@ async def enrich_all_documents(
                         "doi": oa_work.doi or enriched.get("doi"),
                     })
                     if oa_work.concepts:
-                        enriched["keywords"] = [c.display_name for c in oa_work.concepts[:10]]
+                        # concepts are dicts with 'name' key
+                        enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
                     source = "openalex"
             
             if source:
