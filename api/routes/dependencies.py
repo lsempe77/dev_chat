@@ -21,6 +21,7 @@ from fastapi.security import APIKeyHeader
 from src.agents.devchat_agent import DevChatAgent
 from src.config.settings import settings
 from src.ingestion.indexer import QdrantIndexer
+from src.retrieval.hybrid_retriever import HybridRetriever
 from src.utils.logging import get_logger
 
 # Load environment variables from .env file
@@ -249,7 +250,10 @@ def get_agent(collection_name: Optional[str] = None) -> DevChatAgent:
     if collection_name:
         # Multi-tenant: create/cache agent per collection
         if collection_name not in _collection_agents:
-            _collection_agents[collection_name] = DevChatAgent.create_with_custom_collection(collection_name)
+            # Create agent with custom collection retriever
+            _collection_agents[collection_name] = DevChatAgent(
+                retriever=HybridRetriever(collection_name=collection_name),
+            )
         return _collection_agents[collection_name]
     
     # Default single-tenant agent
