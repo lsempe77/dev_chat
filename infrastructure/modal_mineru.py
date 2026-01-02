@@ -1646,8 +1646,8 @@ def run_mineru(pdf_path: Path) -> dict:
             "formulas": formulas,
             "page_count": page_count,
             "title": extract_title(md_content if isinstance(md_content, str) else ""),
-            "authors": [],
-            "year": None,
+            "authors": extract_authors_from_text(md_content if isinstance(md_content, str) else ""),
+            "year": extract_year_from_text(md_content if isinstance(md_content, str) else ""),
             "abstract": extract_abstract(md_content if isinstance(md_content, str) else ""),
         }
         
@@ -1660,11 +1660,113 @@ def run_mineru(pdf_path: Path) -> dict:
 
 def extract_title(content: str) -> Optional[str]:
     """Extract title from first lines of content."""
+    import re
+    
     lines = content.strip().split("\n")
-    for line in lines[:5]:
+    
+    # Strategy 1: Look for markdown header
+    for line in lines[:10]:
+        line = line.strip()
+        if line.startswith("# "):
+            title = line[2:].strip()
+            if 10 < len(title) < 300:
+                return title
+    
+    # Strategy 2: First substantive line that looks like a title
+    # (longer than 10 chars, shorter than 300, doesn't look like an abstract/copyright)
+    skip_patterns = [
+        r'^abstract', r'^introduction', r'^copyright', r'^©',
+        r'^doi:', r'^https?://', r'^table of contents', r'^contents',
+        r'^\d+\.', r'^vol\.?\s*\d', r'^issue\s*\d',
+    ]
+    
+    for line in lines[:15]:
         line = line.strip().strip("#").strip()
-        if len(line) > 10 and len(line) < 200:
-            return line
+        if not line or len(line) < 10 or len(line) > 300:
+            continue
+        
+        # Skip if matches unwanted patterns
+        line_lower = line.lower()
+        if any(re.match(p, line_lower) for p in skip_patterns):
+            continue
+        
+        # Likely a title if it's title-cased or all caps
+        return line
+    
+    return None
+
+
+def extract_authors_from_text(content: str) -> list:
+    """Extract author names from content using patterns."""
+    import re
+    
+    authors = []
+    lines = content.split("\n")[:30]  # Check first 30 lines
+    
+    # Common patterns for author sections
+    author_patterns = [
+        r'^(?:by|authors?|written by)[:\s]+(.+)',
+        r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+(?:\s*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)*)',
+    ]
+    
+    for line in lines:
+        line = line.strip()
+        if not line or len(line) < 5:
+            continue
+        
+        # Skip certain lines
+        if any(skip in line.lower() for skip in ['abstract', 'introduction', 'university', 'department', '@']):
+            continue
+        
+        # Pattern 1: Explicit "by" or "authors:"
+        for pattern in author_patterns[:1]:
+            match = re.match(pattern, line, re.IGNORECASE)
+            if match:
+                author_str = match.group(1)
+                # Split by comma or "and"
+                parts = re.split(r',\s*|\s+and\s+', author_str)
+                for part in parts:
+                    part = part.strip()
+                    # Validate: looks like a name (2-4 words, no special chars)
+                    if 2 <= len(part.split()) <= 5 and not re.search(r'[@\d\(\)]', part):
+                        authors.append(part)
+                if authors:
+                    return authors[:10]  # Limit
+    
+    return authors
+
+
+def extract_year_from_text(content: str) -> Optional[int]:
+    """Extract publication year from content using patterns."""
+    import re
+    
+    lines = content.split("\n")[:50]  # Check first 50 lines
+    text = " ".join(lines)
+    
+    # Common year patterns in academic documents
+    year_patterns = [
+        # Explicit date mentions
+        r'(?:published|publication date|date)[:\s]+(?:\w+\s+)?(\d{4})',
+        r'(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})',
+        # Copyright notice
+        r'©\s*(\d{4})',
+        r'copyright\s+(\d{4})',
+        # Working paper style: "WP 2023" or "Working Paper No. 123, 2023"
+        r'working paper[^,]*,?\s*(\d{4})',
+        # Year in parentheses often near beginning
+        r'\((\d{4})\)',
+        # Standalone 4-digit year (less reliable, use last)
+        r'\b(20[0-2]\d|19[89]\d)\b',
+    ]
+    
+    for pattern in year_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            year = int(match.group(1))
+            # Validate year is reasonable (1980-2030)
+            if 1980 <= year <= 2030:
+                return year
+    
     return None
 
 
