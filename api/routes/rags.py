@@ -345,10 +345,25 @@ async def delete_rag_project(
         logger.warning(f"Failed to delete Qdrant collection {collection_name}: {e}")
         # Continue anyway - collection might not exist
     
-    # TODO: Delete R2 files for this project
-    # This would require listing and deleting all files with prefix:
-    # - input-pdfs/{project_id}/
-    # - output-markdown/{project_id}/
+    # Delete R2 files for this project
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        prefix = f"rags/{project_id}/"
+        paginator = r2_client.get_paginator("list_objects_v2")
+        
+        deleted_count = 0
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                try:
+                    r2_client.delete_object(Bucket=bucket_name, Key=obj["Key"])
+                    deleted_count += 1
+                except Exception:
+                    pass
+        logger.info(f"Deleted {deleted_count} R2 files for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Failed to delete R2 files for {project_id}: {e}")
+        # Continue anyway
     
     # Delete database record (cascade will delete documents and jobs)
     client.table("rag_projects").delete().eq("id", project_id).execute()
