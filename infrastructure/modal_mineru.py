@@ -69,6 +69,7 @@ base_image = (
         "httpx",
         "pydantic>=2.0.0",
         "pydantic-settings>=2.0.0",
+        "supabase>=2.0.0",
     )
 )
 
@@ -80,7 +81,7 @@ r2_secret = modal.Secret.from_name("r2-credentials")
 qdrant_secret = modal.Secret.from_name("qdrant-credentials")
 cohere_secret = modal.Secret.from_name("cohere-credentials")
 openrouter_secret = modal.Secret.from_name("openrouter-credentials")
-supabase_secret = modal.Secret.from_name("supabase-credentials")
+supabase_secret = modal.Secret.from_name("SUPABASE")
 
 
 # ============================================================================
@@ -905,9 +906,9 @@ def orchestrate_rag(
 
 
 @app.function(
-    image=mineru_image,
+    image=base_image,
     secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret],
-    volumes={"/root/.cache/huggingface": model_cache},
+    volumes={"/cache": model_cache},
     gpu="T4",
     timeout=1800,
     retries=2,
