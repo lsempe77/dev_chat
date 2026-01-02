@@ -16,6 +16,7 @@ from src.auth import AuthenticatedUser, get_current_user, get_supabase_client, i
 from src.utils.logging import get_logger
 from src.ingestion.indexer import QdrantIndexer
 from src.config.settings import settings
+from .dependencies import get_r2_client
 
 logger = get_logger(__name__)
 
@@ -890,7 +891,6 @@ async def get_document_pdf_url(
     """
     import os
     from botocore.exceptions import ClientError
-    from src.ingestion.r2_client import R2Client
     
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
@@ -904,7 +904,7 @@ async def get_document_pdf_url(
     doc = result.data
     
     try:
-        r2_client = R2Client()
+        r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
         
         # The R2 key could be in different formats
@@ -918,7 +918,7 @@ async def get_document_pdf_url(
         r2_key = None
         for key in possible_keys:
             try:
-                r2_client.client.head_object(Bucket=bucket_name, Key=key)
+                r2_client.head_object(Bucket=bucket_name, Key=key)
                 r2_key = key
                 break
             except ClientError:
@@ -928,7 +928,7 @@ async def get_document_pdf_url(
             raise HTTPException(status_code=404, detail="PDF not found in storage")
         
         # Generate presigned URL (valid for 1 hour)
-        presigned_url = r2_client.client.generate_presigned_url(
+        presigned_url = r2_client.generate_presigned_url(
             'get_object',
             Params={
                 'Bucket': bucket_name,
@@ -998,7 +998,6 @@ async def clear_project_storage(
     Delete all PDFs and processed outputs for this project from R2.
     """
     import os
-    from src.ingestion.r2_client import R2Client
     
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
@@ -1007,7 +1006,7 @@ async def clear_project_storage(
     result = client.table("documents").select("filename, original_filename").eq("rag_project_id", project_id).execute()
     
     try:
-        r2_client = R2Client()
+        r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
         deleted_count = 0
         
@@ -1015,7 +1014,7 @@ async def clear_project_storage(
             # Delete input PDF
             for key in [f"input-pdfs/{doc['filename']}", f"input-pdfs/{doc['original_filename']}"]:
                 try:
-                    r2_client.client.delete_object(Bucket=bucket_name, Key=key)
+                    r2_client.delete_object(Bucket=bucket_name, Key=key)
                     deleted_count += 1
                 except Exception:
                     pass
@@ -1024,9 +1023,9 @@ async def clear_project_storage(
             # Output files are typically in outputs/{doc_id}/
             try:
                 prefix = f"outputs/{doc['filename'].replace('.pdf', '')}/"
-                response = r2_client.client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+                response = r2_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
                 for obj in response.get('Contents', []):
-                    r2_client.client.delete_object(Bucket=bucket_name, Key=obj['Key'])
+                    r2_client.delete_object(Bucket=bucket_name, Key=obj['Key'])
                     deleted_count += 1
             except Exception:
                 pass
