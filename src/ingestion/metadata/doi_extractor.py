@@ -9,12 +9,28 @@ Extract DOI from PDF documents using multiple methods:
 
 import re
 from pathlib import Path
-from typing import Optional, List
-import fitz  # PyMuPDF
+from typing import Optional, List, TYPE_CHECKING
+
+# Lazy import fitz - it's heavy and not available in production API
+# Only used in Modal workers for PDF processing
+if TYPE_CHECKING:
+    import fitz
 
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _get_fitz():
+    """Lazy import PyMuPDF."""
+    try:
+        import fitz
+        return fitz
+    except ImportError:
+        raise ImportError(
+            "PyMuPDF (fitz) is required for PDF DOI extraction. "
+            "Install with: pip install pymupdf"
+        )
 
 
 class DOIExtractor:
@@ -52,6 +68,7 @@ class DOIExtractor:
         Returns:
             DOI string if found, None otherwise
         """
+        fitz = _get_fitz()
         try:
             doc = fitz.open(pdf_path)
             
