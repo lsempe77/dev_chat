@@ -402,7 +402,7 @@ export function MetadataEditDialog({
                     className="col-span-3"
                     type="number"
                     value={editForm.num_pages || ""}
-                    onChange={(e) => setEditForm({ ...editForm, num_pages: parseInt(e.target.value) || undefined })}
+                    onChange={(e) => setEditForm({ ...editForm, num_pages: e.target.value || undefined })}
                     placeholder="Total pages"
                   />
                 </div>
