@@ -763,7 +763,7 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
 @app.function(
     image=base_image,
     secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret],
-    timeout=600,
+    timeout=3600,  # 1 hour for large batches
 )
 def orchestrate_rag(
     project_id: str,
