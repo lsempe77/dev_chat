@@ -151,6 +151,19 @@ export interface TriggerProcessingResponse {
 }
 
 // =============================================================================
+// Bibliography Export Types
+// =============================================================================
+
+export type ExportFormat = "bibtex" | "ris";
+
+export interface ExportResponse {
+  format: string;
+  count: number;
+  data: string;
+  filename: string;
+}
+
+// =============================================================================
 // Metadata Review Types (Zotero-Compatible)
 // =============================================================================
 

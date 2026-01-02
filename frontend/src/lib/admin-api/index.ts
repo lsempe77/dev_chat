@@ -549,8 +549,8 @@ export async function getPDFUrl(documentId: string): Promise<PDFUrlResponse> {
 // Bibliography Import
 // =============================================================================
 
-import type { ImportPreviewResponse, ImportConfirmResponse, ImportedEntry } from "./types";
-export type { ImportedEntry, ImportPreviewResponse, ImportConfirmResponse };
+import type { ImportPreviewResponse, ImportConfirmResponse, ImportedEntry, ExportFormat, ExportResponse } from "./types";
+export type { ImportedEntry, ImportPreviewResponse, ImportConfirmResponse, ExportFormat, ExportResponse };
 
 /**
  * Preview a bibliography file before importing
@@ -607,6 +607,38 @@ export async function confirmBibliographyImport(
   if (!response.ok) {
     const error = await response.text();
     throw new Error(`Failed to import bibliography: ${error}`);
+  }
+
+  return response.json();
+}
+
+// =============================================================================
+// Bibliography Export
+// =============================================================================
+
+/**
+ * Download bibliography in BibTeX or RIS format
+ */
+export async function downloadBibliography(
+  format: ExportFormat = "bibtex",
+  docIds?: string[]
+): Promise<ExportResponse> {
+  const params = new URLSearchParams();
+  params.append("format", format);
+  if (docIds && docIds.length > 0) {
+    params.append("doc_ids", docIds.join(","));
+  }
+
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/bibliography/export?${params.toString()}`,
+    {
+      method: "GET",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to export bibliography: ${error}`);
   }
 
   return response.json();
