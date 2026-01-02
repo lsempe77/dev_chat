@@ -359,6 +359,7 @@ export interface ImportPreviewResponse {
   valid_entries: number;
   entries: ImportedEntry[];
   errors: string[];
+  duplicates: string[];  // Titles that already exist in the database
 }
 
 export interface ImportConfirmResponse {
