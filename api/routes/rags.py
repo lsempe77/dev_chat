@@ -381,10 +381,17 @@ async def get_public_rag_project(project_id: str) -> PublicRAGResponse:
     
     client = get_supabase_client()
     
-    # Try to find by ID first, then by slug
-    result = client.table("rag_projects").select("*").eq("id", project_id).execute()
+    # Check if project_id looks like a UUID
+    import re
+    uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+    is_uuid = bool(uuid_pattern.match(project_id))
     
-    if not result.data:
+    result = None
+    if is_uuid:
+        # Try to find by ID first
+        result = client.table("rag_projects").select("*").eq("id", project_id).execute()
+    
+    if not result or not result.data:
         # Try by slug
         result = client.table("rag_projects").select("*").eq("slug", project_id).execute()
     
