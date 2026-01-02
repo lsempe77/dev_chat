@@ -22,6 +22,8 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 | **Metadata Pipeline** | ✅ Working | CrossRef → OpenAlex → LLM (item_type, volume, issue, pages) |
 | **Admin Metadata UI** | ✅ Working | Side-by-side editing with PDF viewer |
 | **Settings Wiring** | ✅ Done | Frontend settings sent to backend |
+| **Multi-Tenant RAG** | ✅ Done | Per-user RAG projects with Supabase auth |
+| **Per-RAG Dashboard** | ✅ Done | Upload, Documents, Processing, Metadata, Settings tabs |
 
 **Live Demo:** https://dev-chat-frontend.vercel.app/
 
@@ -35,6 +37,8 @@ This is the **production-grade implementation** featuring state-of-the-art RAG t
 - [x] **Admin Metadata Review UI** - Edit & verify document metadata ✅
 - [x] **PostgreSQL Dual-Store** - Instant admin queries via dedicated metadata DB ✅
 - [x] **MiniCheck Citation Evaluator** - NLI-based faithfulness + ALCE-style citation metrics ✅
+- [x] **Multi-Tenant RAG** - Per-user RAG projects with Supabase auth, isolated Qdrant collections ✅
+- [x] **Per-RAG Dashboard** - Full-featured Upload, Documents, Processing, Metadata, Settings tabs ✅
 
 ### Medium Priority  
 - [ ] **Admin Authentication** - Protect `/admin` routes with API key or OAuth

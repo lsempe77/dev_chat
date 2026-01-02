@@ -25,6 +25,9 @@
 | **Query Caching** | ✅ Done | LRU cache with 1hr TTL for identical queries |
 | **Parallel Query Processing** | ✅ Done | Classify+expand+filters run concurrently |
 | **Proportional Context** | ✅ Done | SOTA per-study allocation (all studies cited) |
+| **Multi-Tenant RAG** | ✅ Done | Per-user RAG projects with isolated collections |
+| **Per-RAG Upload** | ✅ Done | Drag-drop, folder upload, batch (10 at a time), duplicate detection |
+| **Per-RAG Dashboard** | ✅ Done | Documents, Metadata, Processing, Settings tabs |
 
 ---
 
@@ -69,6 +72,9 @@ Branch: main
 | **Duplicate Processing Prevention** | R2 lock mechanism prevents parallel processing | ✅ Done |
 | **256-word Chunks** | Smaller chunks for better RAG precision | ✅ Done |
 | **item_type Extraction** | Extract volume, issue, pages from CrossRef/OpenAlex | ✅ Done |
+| **Multi-Tenant RAG** | Per-user RAG projects with Supabase auth | ✅ Done |
+| **Per-RAG Upload** | Batch uploads with content-hash deduplication | ✅ Done |
+| **Per-RAG Dashboard** | Full-featured Documents, Processing, Metadata, Settings tabs | ✅ Done |
 
 ### P1 - Important (This Month)
 
@@ -116,7 +122,8 @@ Branch: main
 | **Google OAuth authentication with tier sync** | see other folder where i've developed already evidence_synthesis_LLM_newsletter | ⬜ TODO |
 | **Usage Analytics** | Track queries, latency, user engagement | ⬜ TODO |
 | **Zotero Integration** | Allow user to add Zotero API for integrating library -> then triggers **Bibliography Import**| ⬜ TODO |
-| **Multi-tenant architecture** | Frontend and backend | ⬜ TODO |
+| **Multi-tenant architecture** | Frontend and backend | ✅ Done |
+| **Per-RAG Dashboard** | Upload, Documents, Processing, Metadata, Settings tabs | ✅ Done |
 | **Teams architecture** | Role-based team access; Frontend and backend | ⬜ TODO |
 
 ### 🐛 Known Test Failures (For Review)
