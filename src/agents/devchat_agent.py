@@ -621,8 +621,8 @@ class DevChatAgentFactory:
         )
     
     @staticmethod
-    def create_with_custom_collection(collection_name: str) -> DevChatAgent:
-        """Create agent for a specific Qdrant collection."""
+    def create_with_custom_collection(collection_name: str) -> "DevChatAgent":
+        """Create agent for a specific Qdrant collection (multi-tenant support)."""
         return DevChatAgent(
             retriever=HybridRetriever(collection_name=collection_name),
         )
