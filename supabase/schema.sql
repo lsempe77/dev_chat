@@ -82,6 +82,9 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_rag_project_id ON documents(rag_project_id);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 
+-- Unique constraint for upsert on filename + project
+CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_filename_project ON documents(filename, rag_project_id);
+
 -- =============================================================================
 -- Processing Jobs Table
 -- =============================================================================

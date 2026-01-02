@@ -604,14 +604,15 @@ async def upload_document(
         # Create document record in database
         client = get_supabase_client()
         client.table("documents").upsert({
-            "id": doc_id,
             "rag_project_id": project_id,
             "filename": doc_id,
             "original_filename": file.filename,
+            "file_size_bytes": size_bytes,
+            "mime_type": file.content_type or "application/pdf",
             "status": "pending",
-            "r2_key": r2_key,
-            "metadata": {},
-        }, on_conflict="id").execute()
+            "r2_input_key": r2_key,
+            "metadata": {"content_hash": content_hash},
+        }, on_conflict="filename,rag_project_id").execute()
         
         return UploadResponse(
             success=True,
