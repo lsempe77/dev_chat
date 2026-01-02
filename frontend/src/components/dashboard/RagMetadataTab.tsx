@@ -215,13 +215,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     }
   };
 
-  // Enrich from CrossRef
+  // Enrich from CrossRef/OpenAlex
   const handleEnrich = async (doc: MetadataDetail) => {
-    if (!doc.doi) {
-      setError("Document has no DOI for enrichment");
-      return;
-    }
-    
     setIsEnriching(doc.id);
     try {
       await enrichRagDocumentMetadata(ragId, doc.id);
@@ -427,21 +422,20 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                               <Edit2 className="h-4 w-4 mr-1" />
                               Edit
                             </Button>
-                            {doc.doi && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEnrich(doc)}
-                                disabled={isEnriching === doc.id}
-                              >
-                                {isEnriching === doc.id ? (
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                ) : (
-                                  <Sparkles className="h-4 w-4 mr-1" />
-                                )}
-                                Enrich
-                              </Button>
-                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEnrich(doc)}
+                              disabled={isEnriching === doc.id}
+                              title="Auto-fetch metadata from CrossRef/OpenAlex"
+                            >
+                              {isEnriching === doc.id ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-4 w-4 mr-1" />
+                              )}
+                              Enrich
+                            </Button>
                             {doc.needs_review && (
                               <Button
                                 variant="ghost"
