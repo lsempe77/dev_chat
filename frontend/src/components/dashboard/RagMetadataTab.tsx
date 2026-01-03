@@ -350,7 +350,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={`flex flex-col ${editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}`}>
+        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col" : "w-full flex flex-col"}>
           <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -381,8 +381,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <div className="flex gap-4 mb-4 shrink-0">
+          <CardContent className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex gap-4 mb-4 flex-shrink-0">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -403,7 +403,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 mb-4 text-red-600 bg-red-50 rounded-lg shrink-0">
+              <div className="flex items-center gap-2 p-3 mb-4 text-red-600 bg-red-50 rounded-lg flex-shrink-0">
                 <AlertCircle className="h-4 w-4" />
                 {error}
                 <Button variant="ghost" size="sm" onClick={() => setError(null)}>
@@ -413,7 +413,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             )}
 
             {enrichAllResult && (
-              <div className="flex items-center gap-2 p-3 mb-4 text-green-600 bg-green-50 rounded-lg shrink-0">
+              <div className="flex items-center gap-2 p-3 mb-4 text-green-600 bg-green-50 rounded-lg flex-shrink-0">
                 <CheckCircle className="h-4 w-4" />
                 {enrichAllResult}
                 <Button variant="ghost" size="sm" onClick={() => setEnrichAllResult(null)}>
@@ -422,12 +422,13 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             )}
 
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <ScrollArea className="flex-1 min-h-0">
+            <div className="flex-1 overflow-hidden">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <ScrollArea className="h-full">
                 <div className="space-y-3 pr-2">
                   {documents.map((doc) => (
                     <Card 
@@ -569,9 +570,10 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                   )}
                 </div>
               </ScrollArea>
-            )}
+              )}
+            </div>
             
-            <div className="flex items-center justify-between pt-4 border-t mt-2 shrink-0">
+            <div className="flex items-center justify-between pt-4 border-t mt-2 flex-shrink-0">
                <div className="text-sm text-muted-foreground">
                  Page {page} of {totalPages}
                </div>
