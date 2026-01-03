@@ -376,6 +376,7 @@ class ContextBuilder:
                 "country": country,
                 "url": meta.get("url"),
                 "doi": meta.get("doi"),
+                "source": meta.get("source"),  # R2 path for PDF URL generation
                 "snippet": best_snippet,
                 "full_text": combined_text,  # Full text for NLI evaluation
                 "score": chunks[0].score if chunks else 0.0,

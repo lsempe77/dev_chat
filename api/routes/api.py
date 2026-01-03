@@ -33,8 +33,13 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["Frontend API"])
 
 
-def _generate_pdf_url(document_id: str) -> str | None:
+def _generate_pdf_url(document_id: str, source_path: str = None) -> str | None:
     """Generate a presigned R2 URL for a PDF document.
+    
+    Args:
+        document_id: The document/study ID (filename stem)
+        source_path: Optional R2 key path (e.g., "rags/{project_id}/input-pdfs/{file}.pdf")
+                     If provided, uses this path directly instead of old format.
     
     Optimized: Skip file existence check - generate URL directly.
     Frontend will handle 404s gracefully.
@@ -42,7 +47,13 @@ def _generate_pdf_url(document_id: str) -> str | None:
     try:
         r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
-        r2_key = f"input-pdfs/{document_id}.pdf"
+        
+        # If source path is provided, use it directly (for per-RAG projects)
+        if source_path:
+            r2_key = source_path
+        else:
+            # Fallback to old format for legacy collections
+            r2_key = f"input-pdfs/{document_id}.pdf"
         
         # Generate presigned URL directly (valid for 1 hour)
         # Skip head_object check for performance
@@ -189,7 +200,9 @@ async def query_evidence(request: QueryRequest):
                     
                     # Get study ID and generate PDF URL
                     study_id = c.get("study_id", f"STUDY{i+1:03d}")
-                    pdf_url = c.get("url") or _generate_pdf_url(study_id)
+                    # Use source path (R2 key) if available for per-RAG projects
+                    source_path = c.get("source")
+                    pdf_url = c.get("url") or _generate_pdf_url(study_id, source_path)
                     
                     study = StudyResponse(
                         id=study_id,
