@@ -163,12 +163,13 @@ devchat_v2_sota/
 - [x] Manual matching UI for unmatched items
 - [ ] Options: skip, upload missing PDFs, create placeholder (future)
 
-#### Phase 3: Zotero Integration
-- [ ] Zotero OAuth connection
-- [ ] Browse user's collections
-- [ ] Select items to import
-- [ ] Fetch PDFs via Zotero API
-- [ ] Auto-create documents with metadata
+#### Phase 3: Zotero Integration ✅ DONE
+- [x] Zotero API key connection (Settings tab UI)
+- [x] Browse user's collections
+- [x] Select collection to sync from
+- [x] Fetch PDFs via Zotero API
+- [x] Upload PDFs to R2 with metadata
+- [x] Match existing docs by DOI/title
 
 #### Phase 4: Smart Enrichment
 - [ ] Extract DOI from PDF text during processing
