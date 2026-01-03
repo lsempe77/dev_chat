@@ -48,6 +48,9 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
   const [documents, setDocuments] = useState<MetadataDetail[]>([]);
   const [filterType, setFilterType] = useState<"all" | "needs_review">("needs_review");
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
+  const [totalPages, setTotalPages] = useState(1);
   const [stats, setStats] = useState({
     needsReview: 0,
     total: 0,
@@ -95,29 +98,27 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     try {
       const response = await getRagMetadata(ragId, {
         filter: filterType,
+        page,
+        limit,
+        search: searchQuery,
       });
       setDocuments(response.documents);
       setStats({
         needsReview: response.needs_review_count,
         total: response.total_count,
       });
+      setTotalPages(Math.ceil(response.total_count / limit));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load documents");
     } finally {
       setIsLoading(false);
     }
-  }, [ragId, filterType]);
+  }, [ragId, filterType, page, limit, searchQuery]);
 
   // Initial load
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
-
-  // Filter by search
-  const filteredDocs = documents.filter(doc => 
-    doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   // Convert MetadataDetail to DocumentMetadataDetail for edit panel compatibility
   const toDocumentMetadataDetail = (doc: MetadataDetail): DocumentMetadataDetail => ({
@@ -349,7 +350,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col" : "w-full"}>
+        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col min-h-0" : "w-full flex flex-col min-h-0"}>
           <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -380,7 +381,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 overflow-hidden">
+          <CardContent className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="flex gap-4 mb-4">
               <div className="flex-1">
                 <div className="relative">
@@ -388,12 +389,12 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                   <Input
                     placeholder="Search documents..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                     className="pl-10"
                   />
                 </div>
               </div>
-              <Tabs value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
+              <Tabs value={filterType} onValueChange={(v) => { setFilterType(v as typeof filterType); setPage(1); }}>
                 <TabsList>
                   <TabsTrigger value="needs_review">Needs Review</TabsTrigger>
                   <TabsTrigger value="all">All</TabsTrigger>
@@ -426,9 +427,9 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <ScrollArea className="h-full">
+              <ScrollArea className="flex-1 min-h-0">
                 <div className="space-y-3 pr-2">
-                  {filteredDocs.map((doc) => (
+                  {documents.map((doc) => (
                     <Card 
                       key={doc.id} 
                       className={`hover:bg-muted/50 ${editingDoc?.id === doc.id ? 'ring-2 ring-primary' : ''} ${viewingPdfDoc?.id === doc.id ? 'ring-2 ring-blue-400' : ''}`}
@@ -560,7 +561,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                     </Card>
                   ))}
 
-                  {filteredDocs.length === 0 && !isLoading && (
+                  {documents.length === 0 && !isLoading && (
                     <div className="text-center py-12 text-muted-foreground">
                       <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500" />
                       <p>No documents {filterType === "needs_review" ? "need review" : "found"}!</p>
@@ -569,6 +570,20 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                 </div>
               </ScrollArea>
             )}
+            
+            <div className="flex items-center justify-between pt-4 border-t mt-2 shrink-0">
+               <div className="text-sm text-muted-foreground">
+                 Page {page} of {totalPages}
+               </div>
+               <div className="flex gap-2">
+                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                   Previous
+                 </Button>
+                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                   Next
+                 </Button>
+               </div>
+            </div>
           </CardContent>
         </Card>
 

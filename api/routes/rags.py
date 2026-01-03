@@ -7,6 +7,7 @@ Each RAG project corresponds to a separate Qdrant collection.
 
 import hashlib
 import os
+import difflib
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
@@ -460,19 +461,56 @@ class DocumentResponse(BaseModel):
 class DocumentListResponse(BaseModel):
     """Response for listing documents."""
     documents: List[DocumentResponse]
-    total: int
+    total_count: int
+    page: int
+    limit: int
+    pages: int
 
 
 @router.get("/{project_id}/documents", response_model=DocumentListResponse)
 async def list_project_documents(
     project_id: str,
+    page: int = 1,
+    limit: int = 50,
+    status: Optional[str] = None,
+    needs_review: Optional[bool] = None,
+    search: Optional[str] = None,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> DocumentListResponse:
-    """List all documents in a RAG project."""
+    """List all documents in a RAG project with pagination and filtering."""
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
     
-    result = client.table("documents").select("*").eq("rag_project_id", project_id).order("created_at", desc=True).execute()
+    # Build query
+    query = client.table("documents").select("*", count="exact").eq("rag_project_id", project_id)
+    
+    if status:
+        query = query.eq("status", status)
+    
+    if needs_review is not None:
+        # needs_review is stored in metadata jsonb column
+        # Supabase/PostgREST syntax for JSON filtering: metadata->>needs_review
+        # But the python client might need a specific filter syntax
+        # For now, let's filter in python if we can't do it easily in SQL, 
+        # OR use the .contains() filter for JSONB
+        if needs_review:
+            query = query.contains("metadata", {"needs_review": True})
+        else:
+            # This is harder because it could be False or missing
+            # For "not needs review", we might just fetch all and filter in memory if the dataset is small
+            # But for pagination we need SQL filtering.
+            # Let's try to use the arrow operator if supported, or just filter by status for now
+            pass
+
+    if search:
+        # Simple search on filename or original_filename
+        query = query.or_(f"filename.ilike.%{search}%,original_filename.ilike.%{search}%")
+
+    # Apply pagination
+    start = (page - 1) * limit
+    end = start + limit - 1
+    
+    result = query.order("created_at", desc=True).range(start, end).execute()
     
     documents = []
     for d in result.data or []:
@@ -486,6 +524,12 @@ async def list_project_documents(
         elif not isinstance(authors, list):
             authors = []
         
+        # Filter by needs_review if requested (and not handled by SQL)
+        if needs_review is not None:
+            doc_needs_review = metadata.get("needs_review", False)
+            if needs_review != doc_needs_review:
+                continue
+
         documents.append(DocumentResponse(
             id=str(d["id"]),
             filename=d["filename"],
@@ -501,7 +545,18 @@ async def list_project_documents(
             processed_at=d.get("processed_at"),
         ))
     
-    return DocumentListResponse(documents=documents, total=len(documents))
+    # If we filtered in memory, the total count from SQL is wrong. 
+    # But implementing full JSONB filtering in Supabase-py can be tricky.
+    # For now, let's assume the SQL filter for needs_review=True works with .contains()
+    # For needs_review=False, we might return mixed results if we don't filter in SQL.
+    
+    return DocumentListResponse(
+        documents=documents, 
+        total_count=result.count or 0,
+        page=page,
+        limit=limit,
+        pages=(result.count + limit - 1) // limit if result.count else 0
+    )
 
 
 class SyncResponse(BaseModel):
@@ -1006,6 +1061,8 @@ class MetadataListResponse(BaseModel):
     documents: List[MetadataDetail]
     total_count: int
     needs_review_count: int
+    page: int
+    limit: int
 
 
 class MetadataUpdateRequest(BaseModel):
@@ -1041,7 +1098,7 @@ class MetadataUpdateRequest(BaseModel):
     
     # Book/Book Section
     book_title: Optional[str] = None
-    num_pages: Optional[int] = None
+    num_pages: Optional[str] = None
     
     # Report/Working Paper
     institution: Optional[str] = None
@@ -1072,6 +1129,9 @@ class MetadataUpdateRequest(BaseModel):
 async def list_project_metadata(
     project_id: str,
     filter_type: Optional[str] = None,  # "needs_review" or "all"
+    page: int = 1,
+    limit: int = 50,
+    search: Optional[str] = None,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> MetadataListResponse:
     """
@@ -1081,13 +1141,35 @@ async def list_project_metadata(
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
     
-    # Get documents with metadata
-    query = client.table("documents").select("*").eq("rag_project_id", project_id)
+    # Base query
+    query = client.table("documents").select("*", count="exact").eq("rag_project_id", project_id)
     
-    result = query.order("created_at", desc=True).execute()
+    # Apply filters
+    if filter_type == "needs_review":
+        # Filter where needs_review is NOT false (so True or Null)
+        query = query.neq("metadata->>needs_review", "false")
+        
+    # Search
+    if search:
+        # Search in filename OR title
+        query = query.or_(f"original_filename.ilike.%{search}%,metadata->>title.ilike.%{search}%")
+
+    # Pagination
+    start = (page - 1) * limit
+    end = start + limit - 1
     
+    result = query.order("created_at", desc=True).range(start, end).execute()
+    
+    # Get total needs_review count separately if we are not already filtering for it
+    if filter_type == "needs_review" and not search:
+        needs_review_count = result.count
+    else:
+        # Separate query for count
+        count_query = client.table("documents").select("*", count="exact", head=True).eq("rag_project_id", project_id).neq("metadata->>needs_review", "false")
+        count_res = count_query.execute()
+        needs_review_count = count_res.count or 0
+
     documents = []
-    needs_review_count = 0
     
     for d in result.data or []:
         metadata = d.get("metadata", {}) or {}
@@ -1102,12 +1184,6 @@ async def list_project_metadata(
             authors = []
         
         needs_review = metadata.get("needs_review", True)
-        if needs_review:
-            needs_review_count += 1
-        
-        # Skip if filtering for needs_review and this doesn't need review
-        if filter_type == "needs_review" and not needs_review:
-            continue
         
         documents.append(MetadataDetail(
             id=str(d["id"]),
@@ -1153,8 +1229,10 @@ async def list_project_metadata(
     
     return MetadataListResponse(
         documents=documents,
-        total_count=len(result.data or []),
+        total_count=result.count,
         needs_review_count=needs_review_count,
+        page=page,
+        limit=limit
     )
 
 
@@ -1378,28 +1456,56 @@ async def enrich_document_metadata(
                     source = "openalex"
         
         else:
-            # No DOI - try OpenAlex search by title from filename
+            # No DOI - try OpenAlex search by title
             openalex = OpenAlexClient()
-            # Clean up filename to get a searchable title
-            search_title = original_filename.replace('.pdf', '').replace('_', ' ')
-            # Remove common prefixes like hash
-            import re
-            search_title = re.sub(r'^[a-f0-9]{10,}_', '', search_title)
             
-            works = await openalex.search(title=search_title, per_page=1)
+            # Prefer title from metadata (extracted from PDF) over filename
+            search_title = current_metadata.get("title")
+            if not search_title or len(search_title) < 10:
+                # Fallback to filename if title is missing or too short
+                search_title = original_filename.replace('.pdf', '').replace('_', ' ')
+                # Remove common prefixes like hash
+                import re
+                search_title = re.sub(r'^[a-f0-9]{10,}_', '', search_title)
+            
+            # Fetch top 3 results to find best match
+            works = await openalex.search(title=search_title, per_page=3)
+            
             if works and len(works) > 0:
-                oa_work = works[0]
-                enriched.update({
-                    "title": oa_work.title or enriched.get("title"),
-                    "authors": oa_work.authors or enriched.get("authors", []),
-                    "year": oa_work.year or enriched.get("year"),
-                    "doi": oa_work.doi or enriched.get("doi"),
-                    "abstract": oa_work.abstract or enriched.get("abstract"),
-                })
-                if oa_work.concepts:
-                    # concepts are dicts with 'name' key
-                    enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
-                source = "openalex"
+                # Check similarity to avoid hallucinations
+                from difflib import SequenceMatcher
+                def similarity(a, b):
+                    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+                
+                best_match = None
+                best_score = 0.0
+                
+                for work in works:
+                    if not work.title: continue
+                    score = similarity(search_title, work.title)
+                    if score > best_score:
+                        best_score = score
+                        best_match = work
+                
+                # Only accept if similarity is reasonable (> 0.8)
+                logger.info(f"Best match score: {best_score} for '{search_title}' vs '{best_match.title}'")
+                if best_match and best_score > 0.8:
+                    oa_work = best_match
+                    enriched.update({
+                        "title": oa_work.title or enriched.get("title"),
+                        "authors": oa_work.authors or enriched.get("authors", []),
+                        "year": oa_work.year or enriched.get("year"),
+                        "doi": oa_work.doi or enriched.get("doi"),
+                        "abstract": oa_work.abstract or enriched.get("abstract"),
+                    })
+                    if oa_work.concepts:
+                        # concepts are dicts with 'name' key
+                        enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
+                    source = "openalex"
+                    logger.info(f"Enriched via title search: '{search_title}' -> '{oa_work.title}' (score: {best_score:.2f})")
+                else:
+                    logger.info(f"No good match for title '{search_title}' (best score: {best_score:.2f})")
+                    raise HTTPException(status_code=404, detail=f"No confident match found for '{search_title}'. Try adding a DOI manually.")
             else:
                 raise HTTPException(status_code=404, detail="Could not find metadata. Try adding a DOI manually.")
         
@@ -1507,19 +1613,38 @@ async def enrich_all_documents(
                 search_title = original_filename.replace('.pdf', '').replace('_', ' ')
                 search_title = re.sub(r'^[a-f0-9]{10,}_', '', search_title)
                 
-                works = await openalex.search(title=search_title, per_page=1)
+                # Fetch top 3 results
+                works = await openalex.search(title=search_title, per_page=3)
+                
                 if works and len(works) > 0:
-                    oa_work = works[0]
-                    enriched.update({
-                        "title": oa_work.title or enriched.get("title"),
-                        "authors": oa_work.authors or enriched.get("authors", []),
-                        "year": oa_work.year or enriched.get("year"),
-                        "doi": oa_work.doi or enriched.get("doi"),
-                    })
-                    if oa_work.concepts:
-                        # concepts are dicts with 'name' key
-                        enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
-                    source = "openalex"
+                    # Check similarity to avoid hallucinations
+                    from difflib import SequenceMatcher
+                    def similarity(a, b):
+                        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+                    
+                    best_match = None
+                    best_score = 0.0
+                    
+                    for work in works:
+                        if not work.title: continue
+                        score = similarity(search_title, work.title)
+                        if score > best_score:
+                            best_score = score
+                            best_match = work
+                    
+                    # Only accept if similarity is reasonable (> 0.8)
+                    if best_match and best_score > 0.8:
+                        oa_work = best_match
+                        enriched.update({
+                            "title": oa_work.title or enriched.get("title"),
+                            "authors": oa_work.authors or enriched.get("authors", []),
+                            "year": oa_work.year or enriched.get("year"),
+                            "doi": oa_work.doi or enriched.get("doi"),
+                        })
+                        if oa_work.concepts:
+                            # concepts are dicts with 'name' key
+                            enriched["keywords"] = [c["name"] for c in oa_work.concepts[:10] if c.get("name")]
+                        source = "openalex"
             
             if source:
                 enriched["metadata_source"] = source

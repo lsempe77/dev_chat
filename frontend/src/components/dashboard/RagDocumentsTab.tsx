@@ -47,6 +47,10 @@ interface RagDocumentsTabProps {
 export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagDocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -59,33 +63,30 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents`, {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      });
+      if (searchQuery) params.set("search", searchQuery);
+
+      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents?${params.toString()}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!response.ok) throw new Error("Failed to fetch documents");
       const data = await response.json();
       setDocuments(data.documents || []);
+      setTotalCount(data.total_count || 0);
+      setTotalPages(data.pages || Math.ceil((data.total_count || 0) / limit));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load documents");
     } finally {
       setIsLoading(false);
     }
-  }, [ragId, accessToken]);
+  }, [ragId, accessToken, page, limit, searchQuery]);
 
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
-
-  // Filter documents
-  const filteredDocs = documents.filter(doc => {
-    const query = searchQuery.toLowerCase();
-    return (
-      doc.original_filename.toLowerCase().includes(query) ||
-      doc.filename.toLowerCase().includes(query) ||
-      (doc.title && doc.title.toLowerCase().includes(query)) ||
-      (doc.authors && doc.authors.some(a => a.toLowerCase().includes(query)))
-    );
-  });
 
   // Toggle selection
   const toggleSelect = (id: string) => {
@@ -102,10 +103,10 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
 
   // Select all
   const selectAll = () => {
-    if (selectedDocs.size === filteredDocs.length) {
+    if (selectedDocs.size === documents.length) {
       setSelectedDocs(new Set());
     } else {
-      setSelectedDocs(new Set(filteredDocs.map(d => d.id)));
+      setSelectedDocs(new Set(documents.map(d => d.id)));
     }
   };
 
@@ -334,7 +335,7 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
               <Input
                 placeholder="Search documents..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                 className="pl-9"
               />
             </div>
@@ -368,12 +369,13 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
               <p className="text-xs mt-1">Upload PDFs to get started</p>
             </div>
           ) : (
+            <>
             <ScrollArea className="h-[400px]">
               <div className="space-y-2">
                 {/* Header Row */}
                 <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg text-sm font-medium">
                   <Checkbox
-                    checked={selectedDocs.size === filteredDocs.length && filteredDocs.length > 0}
+                    checked={selectedDocs.size === documents.length && documents.length > 0}
                     onCheckedChange={selectAll}
                   />
                   <span className="flex-1">Document</span>
@@ -384,7 +386,7 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
                 </div>
                 
                 {/* Document Rows */}
-                {filteredDocs.map(doc => (
+                {documents.map(doc => (
                   <div
                     key={doc.id}
                     className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
@@ -432,6 +434,20 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
                 ))}
               </div>
             </ScrollArea>
+            <div className="flex items-center justify-between pt-4 border-t mt-2">
+               <div className="text-sm text-muted-foreground">
+                 Page {page} of {totalPages}
+               </div>
+               <div className="flex gap-2">
+                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                   Previous
+                 </Button>
+                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                   Next
+                 </Button>
+               </div>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

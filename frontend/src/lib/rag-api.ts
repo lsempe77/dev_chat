@@ -193,10 +193,16 @@ export async function getRagMetadata(
   ragId: string,
   params?: {
     filter?: "all" | "needs_review";
+    page?: number;
+    limit?: number;
+    search?: string;
   }
 ): Promise<MetadataListResponse> {
   const searchParams = new URLSearchParams();
   if (params?.filter) searchParams.set("filter_type", params.filter);
+  if (params?.page) searchParams.set("page", params.page.toString());
+  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.search) searchParams.set("search", params.search);
   
   const response = await fetchWithAuth(
     `${API_BASE_URL}/rags/${ragId}/metadata?${searchParams.toString()}`
