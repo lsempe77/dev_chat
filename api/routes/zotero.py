@@ -89,6 +89,7 @@ class ZoteroSyncRequest(BaseModel):
     """Request to sync items from Zotero."""
     collection_key: Optional[str] = None  # If None, sync all items
     sync_pdfs: bool = True
+    start: int = 0  # Pagination offset for fetching items
 
 
 class ZoteroSyncResponse(BaseModel):
@@ -104,6 +105,7 @@ class ZoteroSyncResponse(BaseModel):
     has_more: bool = False  # True if more items available to sync
     total_in_library: int = 0  # Total items in Zotero library/collection
     total_synced_so_far: int = 0  # Total items synced to this project
+    next_start: int = 0  # Next offset for pagination
 
 
 # =============================================================================
@@ -458,14 +460,15 @@ async def sync_from_zotero(
         
         # Get items with attachment info (paginated)
         # Limited to 50 items per sync to avoid timeout (each item needs API call for attachments)
-        logger.info(f"Fetching items from Zotero for project {project_id}")
+        logger.info(f"Fetching items from Zotero for project {project_id}, start={request.start}")
         items = zotero_client.get_items_with_attachments(
             collection_key=request.collection_key,
             limit=50,  # Items per API call
+            start=request.start,  # Pagination offset
             max_items=50  # Total max items per sync (keep low to avoid timeout)
         )
         
-        logger.info(f"Found {len(items)} items in Zotero")
+        logger.info(f"Found {len(items)} items in Zotero (offset {request.start})")
         
         # Get existing documents for matching
         existing_docs = supabase.table("documents").select(
@@ -475,18 +478,29 @@ async def sync_from_zotero(
         # Build lookup maps for matching
         doi_map = {}  # DOI -> document
         title_map = {}  # lowercase title -> document
+        zotero_key_set = set()  # Already synced Zotero keys
         for doc in existing_docs.data:
             meta = doc.get("metadata", {}) or {}
             if meta.get("doi"):
                 doi_map[meta["doi"].lower().strip()] = doc
             if meta.get("title"):
                 title_map[meta["title"].lower().strip()] = doc
+            if meta.get("zotero_key"):
+                zotero_key_set.add(meta["zotero_key"])
+        
+        items_skipped = 0
         
         for item in items:
             try:
                 item_key = item["key"]
                 item_title = item.get("title", "")
                 item_doi = item.get("doi", "")
+                
+                # Skip if this Zotero item was already synced
+                if item_key in zotero_key_set:
+                    items_skipped += 1
+                    logger.debug(f"Skipping already-synced Zotero item: {item_key}")
+                    continue
                 
                 # Try to match with existing document
                 matched_doc = None
@@ -671,7 +685,7 @@ async def sync_from_zotero(
             "last_sync_error": errors[0] if errors else None,
         }).eq("id", connection["id"]).execute()
         
-        logger.info(f"Zotero sync complete: {items_synced} synced, {items_updated} updated, {pdfs_downloaded} PDFs downloaded, {items_failed} failed")
+        logger.info(f"Zotero sync complete: {items_synced} synced, {items_updated} updated, {pdfs_downloaded} PDFs, {items_skipped} skipped, {items_failed} failed")
         
         # Get total items in library and total synced so far
         total_in_library = zotero_client.zot.num_items()
@@ -680,8 +694,12 @@ async def sync_from_zotero(
         ).execute()
         total_synced_so_far = total_synced_docs.count or 0
         
+        # Calculate next offset for pagination
+        next_start = request.start + len(items)
+        
         # Check if there are more items to sync
-        has_more = len(items) >= 50  # We fetched the max batch size, likely more available
+        # has_more if we got a full batch
+        has_more = len(items) >= 50
         
         return ZoteroSyncResponse(
             success=items_failed == 0,
@@ -694,6 +712,7 @@ async def sync_from_zotero(
             has_more=has_more,
             total_in_library=total_in_library,
             total_synced_so_far=total_synced_so_far,
+            next_start=next_start,
         )
         
     except Exception as e:

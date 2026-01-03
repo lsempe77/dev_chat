@@ -403,6 +403,7 @@ export interface ZoteroSyncResponse {
   has_more: boolean;
   total_in_library: number;
   total_synced_so_far: number;
+  next_start: number;
 }
 
 /**
@@ -541,7 +542,8 @@ export async function getZoteroCollections(ragId: string): Promise<ZoteroCollect
 export async function syncFromZotero(
   ragId: string,
   collectionKey?: string,
-  syncPdfs: boolean = true
+  syncPdfs: boolean = true,
+  start: number = 0
 ): Promise<ZoteroSyncResponse> {
   const response = await fetchWithAuth(
     `${API_BASE_URL}/rags/${ragId}/zotero/sync`,
@@ -550,6 +552,7 @@ export async function syncFromZotero(
       body: JSON.stringify({
         collection_key: collectionKey || null,
         sync_pdfs: syncPdfs,
+        start: start,
       }),
     }
   );

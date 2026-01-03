@@ -269,28 +269,33 @@ export function ConnectZoteroModal({
     let totalUpdated = 0;
     let batchNumber = 0;
     let hasMore = true;
+    let currentStart = 0;  // Track pagination offset
     
     try {
       while (hasMore && !shouldStopSync) {
         batchNumber++;
         
-        const result = await syncFromZotero(ragId, selectedCollection || undefined, syncPdfs);
+        const result = await syncFromZotero(ragId, selectedCollection || undefined, syncPdfs, currentStart);
         
         totalItemsSynced += result.items_synced;
         totalPdfsDownloaded += result.pdfs_downloaded;
         totalUpdated += result.items_updated;
         hasMore = result.has_more;
+        currentStart = result.next_start;  // Use next_start for pagination
+        
+        // Cap current at total for display
+        const displayCurrent = Math.min(currentStart, initialTotal);
         
         setSyncProgress((prev) => ({
-          current: totalItemsSynced,
+          current: displayCurrent,
           total: prev?.total || initialTotal,  // Keep using initial collection count
           batchNumber,
           itemsSynced: totalItemsSynced,
           pdfsDownloaded: totalPdfsDownloaded,
         }));
         
-        // If no new items were synced in this batch, we're done
-        if (result.items_synced === 0) {
+        // If no items returned in this batch, we're done
+        if (result.items_synced === 0 && result.items_updated === 0) {
           hasMore = false;
         }
       }
@@ -501,7 +506,7 @@ export function ConnectZoteroModal({
                 onCheckedChange={(checked) => setSyncPdfs(checked === true)}
               />
               <Label htmlFor="syncPdfs" className="text-sm font-normal cursor-pointer">
-                Download PDF attachments when syncing
+                Upload PDF attachments to R2 cloud for further processing
               </Label>
             </div>
 
