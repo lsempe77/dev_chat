@@ -578,7 +578,8 @@ export function ConnectZoteroModal({
                   const itemCount = selectedColl 
                     ? selectedColl.num_items 
                     : (libraryInfo?.num_items || 0);
-                  const label = selectedColl ? selectedColl.name : "All";
+                  // Use short labels to prevent overflow
+                  const label = selectedColl ? "Collection" : "All";
                   
                   return itemCount > 50 ? (
                     // For large libraries/collections, show Sync All button
