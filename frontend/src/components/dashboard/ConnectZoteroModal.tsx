@@ -189,18 +189,21 @@ export function ConnectZoteroModal({
   };
 
   const handleSaveSettings = async () => {
-    // Update connection with selected collection
     try {
-      await connectZotero(
-        ragId, 
-        apiKey || existingConnection?.zotero_user_id || "", // Re-use existing if not changed
-        userId,
-        libraryType,
-        selectedCollection || undefined,
-        syncPdfs
-      );
+      // Only update connection if we have a new API key
+      // Otherwise, just sync with existing connection
+      if (apiKey) {
+        await connectZotero(
+          ragId, 
+          apiKey,
+          userId,
+          libraryType,
+          selectedCollection || undefined,
+          syncPdfs
+        );
+      }
       
-      // Auto-sync after connecting
+      // Auto-sync after connecting/saving
       setSyncing(true);
       setSyncResult(null);
       try {
