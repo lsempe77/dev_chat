@@ -1868,14 +1868,18 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
             raise Exception("Recreate collection")
             
     except Exception as e:
-        print(f"  Creating collection with Cohere 1536-dim vectors...")
+        print(f"  Creating collection with Cohere 1536-dim dense + sparse vectors...")
+        from qdrant_client.models import SparseVectorParams
         qdrant.create_collection(
             collection_name=collection_name,
             vectors_config={
                 vector_name: VectorParams(size=1536, distance=Distance.COSINE)
             },
+            sparse_vectors_config={
+                "sparse": SparseVectorParams()
+            },
         )
-        print(f"  Created collection '{collection_name}' with named vector '{vector_name}'")
+        print(f"  Created collection '{collection_name}' with dense + sparse vectors")
     
     # Ensure payload index exists for efficient filtering by doc_id
     try:
@@ -1929,23 +1933,31 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
     except Exception as e:
         print(f"  Note: Could not clear existing chunks: {e}")
     
-    # Generate embeddings in batches
+    # Generate embeddings in batches (both dense and sparse)
+    from qdrant_client.models import SparseVector
     batch_size = 96
     points = []
     
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i:i + batch_size]
         
+        # Get both dense (float) and sparse embeddings from Cohere
         response = co.embed(
             texts=batch,
             model="embed-v4.0",
             input_type="search_document",
-            embedding_types=["float"],
+            embedding_types=["float", "ubinary"],  # ubinary for sparse-like compression
         )
         
-        embeddings = response.embeddings.float_
+        dense_embeddings = response.embeddings.float_
         
-        for j, (chunk, embedding) in enumerate(zip(batch, embeddings)):
+        # Generate BM25-style sparse vectors for hybrid search
+        # Using simple word frequency approach (Cohere doesn't provide native sparse)
+        sparse_vectors = []
+        for text in batch:
+            sparse_vectors.append(_generate_sparse_vector(text))
+        
+        for j, (chunk, dense_emb, sparse_vec) in enumerate(zip(batch, dense_embeddings, sparse_vectors)):
             chunk_idx = i + j
             # Use deterministic point ID based on doc_id and chunk_index
             # This ensures upsert properly deduplicates on re-runs
@@ -1964,7 +1976,10 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
             points.append(
                 PointStruct(
                     id=point_id,
-                    vector={vector_name: embedding},  # Named vector
+                    vector={
+                        vector_name: dense_emb,  # Dense vector
+                        "sparse": sparse_vec,    # Sparse vector for hybrid search
+                    },
                     payload={
                         # Core fields
                         "text": chunk,
@@ -2006,6 +2021,58 @@ def embed_and_index(content: str, metadata: dict, doc_id: str, content_list: lis
     qdrant.upsert(collection_name=collection_name, points=points)
     
     return len(points)
+
+
+def _generate_sparse_vector(text: str) -> "SparseVector":
+    """
+    Generate a BM25-style sparse vector for text.
+    
+    Uses simple term frequency with basic preprocessing.
+    This enables hybrid search combining semantic (dense) and keyword (sparse) matching.
+    """
+    import re
+    from collections import Counter
+    from qdrant_client.models import SparseVector
+    
+    # Basic preprocessing: lowercase, remove punctuation, split
+    text_clean = re.sub(r'[^\w\s]', ' ', text.lower())
+    words = text_clean.split()
+    
+    # Filter stopwords (basic English stopwords)
+    stopwords = {
+        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+        'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+        'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
+        'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their',
+        'we', 'our', 'you', 'your', 'he', 'she', 'his', 'her', 'i', 'me', 'my',
+        'which', 'who', 'whom', 'what', 'where', 'when', 'why', 'how',
+        'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
+        'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
+        'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there',
+    }
+    
+    words = [w for w in words if w not in stopwords and len(w) > 2]
+    
+    if not words:
+        return SparseVector(indices=[], values=[])
+    
+    # Count term frequencies
+    term_counts = Counter(words)
+    
+    # Convert to sparse vector using hash for term indices
+    indices = []
+    values = []
+    
+    for term, count in term_counts.items():
+        # Use hash to get a stable index for each term
+        # Modulo to keep indices in reasonable range
+        term_idx = abs(hash(term)) % 1000000
+        indices.append(term_idx)
+        # TF score (could add IDF but would need corpus stats)
+        values.append(float(count))
+    
+    return SparseVector(indices=indices, values=values)
 
 
 def chunk_content(text: str, chunk_size: int = 256, overlap: int = 50) -> list[str]:
