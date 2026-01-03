@@ -40,6 +40,7 @@ import {
   disconnectZotero,
   getZoteroCollections,
   getZoteroLibraryInfo,
+  syncFromZotero,
 } from "@/lib/rag-api";
 
 interface ConnectZoteroModalProps {
@@ -76,6 +77,10 @@ export function ConnectZoteroModal({
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
   const [syncPdfs, setSyncPdfs] = useState(true);
   const [loadingCollections, setLoadingCollections] = useState(false);
+  
+  // Sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Check for existing connection on open
   useEffect(() => {
@@ -194,8 +199,29 @@ export function ConnectZoteroModal({
         selectedCollection || undefined,
         syncPdfs
       );
-      onSuccess?.();
-      onOpenChange(false);
+      
+      // Auto-sync after connecting
+      setSyncing(true);
+      setSyncResult(null);
+      try {
+        const result = await syncFromZotero(ragId, selectedCollection || undefined, syncPdfs);
+        const message = `Synced ${result.items_synced} items. ${result.items_updated} updated, ${result.pdfs_downloaded} PDFs downloaded.`;
+        setSyncResult({ success: result.success, message });
+        
+        // Close modal after showing result briefly
+        setTimeout(() => {
+          onSuccess?.();
+          onOpenChange(false);
+        }, 2000);
+      } catch (syncErr) {
+        console.error("Sync failed:", syncErr);
+        setSyncResult({ 
+          success: false, 
+          message: syncErr instanceof Error ? syncErr.message : "Sync failed" 
+        });
+      } finally {
+        setSyncing(false);
+      }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to save settings");
     }
@@ -388,12 +414,24 @@ export function ConnectZoteroModal({
               </Label>
             </div>
 
+            {/* Sync result feedback */}
+            {syncResult && (
+              <Alert variant={syncResult.success ? "default" : "destructive"}>
+                {syncResult.success ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <AlertDescription>{syncResult.message}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="flex justify-between pt-4">
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={handleDisconnect}
-                disabled={disconnecting}
+                disabled={disconnecting || syncing}
               >
                 {disconnecting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -406,11 +444,18 @@ export function ConnectZoteroModal({
               </Button>
               
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleClose}>
+                <Button variant="outline" onClick={handleClose} disabled={syncing}>
                   Cancel
                 </Button>
-                <Button onClick={handleSaveSettings}>
-                  Save Settings
+                <Button onClick={handleSaveSettings} disabled={syncing}>
+                  {syncing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    "Save & Sync"
+                  )}
                 </Button>
               </div>
             </div>
