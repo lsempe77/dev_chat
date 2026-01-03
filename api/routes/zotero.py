@@ -120,8 +120,9 @@ async def get_user_project(user: AuthenticatedUser, project_id: str):
 async def get_zotero_connection(project_id: str):
     """Get existing Zotero connection for a project."""
     client = get_supabase_client()
-    result = client.table("zotero_connections").select("*").eq("rag_project_id", project_id).single().execute()
-    return result.data if result.data else None
+    result = client.table("zotero_connections").select("*").eq("rag_project_id", project_id).execute()
+    # Return first result or None (don't use .single() which throws on 0 rows)
+    return result.data[0] if result.data else None
 
 
 # =============================================================================
