@@ -53,6 +53,13 @@
 - [x] Side-by-side metadata editor with PDF viewer
 - [x] "Mark as reviewed" checkbox
 - [x] Compact panel layout when narrow
+- [x] Chat history persistence (Supabase)
+- [x] Compare modal (side-by-side study comparison)
+- [x] View PDF in citations (correct R2 paths)
+
+### Backend
+- [x] Processing jobs tracking with progress
+- [x] Admin authentication (API key + session)
 
 ---
 
@@ -108,10 +115,10 @@ devchat_v2_sota/
 ## 🚧 TODO (Future)
 
 ### High Priority
-- [ ] Admin authentication (protect `/admin` routes)
+- [x] Admin authentication (protect `/admin` routes) ✅ Done
 - [ ] Processing status WebSocket (real-time updates)
 - [ ] Bulk import (RIS/BibTeX/CSV)
-- [ ] General 3ie admin panel (costs, metrics, users/rags, prompts quality)
+- [ ] General 3ie admin panel (costs, metrics, users/rags, prompts quality, observability)
 
 
 ### Medium Priority
