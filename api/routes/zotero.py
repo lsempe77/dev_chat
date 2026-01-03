@@ -452,12 +452,13 @@ async def sync_from_zotero(
         r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
         
-        # Get items with attachment info (paginated, up to 500 items)
+        # Get items with attachment info (paginated)
+        # Limited to 50 items per sync to avoid timeout (each item needs API call for attachments)
         logger.info(f"Fetching items from Zotero for project {project_id}")
         items = zotero_client.get_items_with_attachments(
             collection_key=request.collection_key,
-            limit=100,  # Items per API call
-            max_items=500  # Total max items to sync
+            limit=50,  # Items per API call
+            max_items=50  # Total max items per sync (keep low to avoid timeout)
         )
         
         logger.info(f"Found {len(items)} items in Zotero")
