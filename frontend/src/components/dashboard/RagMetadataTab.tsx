@@ -349,8 +349,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}>
-          <CardHeader className="py-2 px-3">
+        <Card className={`${editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"} flex flex-col overflow-hidden`}>
+          <CardHeader className="py-2 px-3 flex-shrink-0">
             <div className="flex items-center justify-between gap-1">
               <CardTitle className="text-sm font-medium">Metadata</CardTitle>
               <div className="flex gap-1">
@@ -374,8 +374,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="px-3 pt-0 pb-2">
-            <div className="flex gap-1 mb-2">
+          <CardContent className="px-3 pt-0 pb-3 flex-1 flex flex-col overflow-hidden">
+            <div className="flex gap-1 mb-2 flex-shrink-0">
               <div className="flex-1 min-w-0">
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -420,7 +420,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div style={{ height: 'calc(100vh - 420px)', overflowY: 'auto' }}>
+              <div className="flex-1 overflow-y-auto min-h-0">
                 <div className="space-y-2 pr-1">
                   {filteredDocs.map((doc) => (
                     <Card 
