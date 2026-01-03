@@ -350,86 +350,77 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
         <Card className={editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}>
-          <CardHeader className="py-3 px-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <CardTitle className="text-base">Metadata Review</CardTitle>
-                {!(editingDoc || viewingPdfDoc) && (
-                  <CardDescription className="text-xs">
-                    Review and correct document metadata
-                  </CardDescription>
-                )}
-              </div>
-              <div className="flex gap-1 flex-shrink-0">
+          <CardHeader className="py-2 px-3">
+            <div className="flex items-center justify-between gap-1">
+              <CardTitle className="text-sm font-medium">Metadata</CardTitle>
+              <div className="flex gap-1">
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={handleEnrichAll}
                   disabled={isEnrichingAll || stats.total === 0}
-                  title="Auto-fetch metadata for all documents from CrossRef/OpenAlex"
-                  className="h-8 px-2"
+                  title="Auto-fetch metadata for all documents"
+                  className="h-7 w-7 p-0"
                 >
                   {isEnrichingAll ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Sparkles className="h-4 w-4" />
+                    <Sparkles className="h-3.5 w-3.5" />
                   )}
-                  {!(editingDoc || viewingPdfDoc) && <span className="ml-1">Enrich</span>}
                 </Button>
-                <Button variant="outline" size="sm" onClick={fetchDocuments} className="h-8 px-2">
-                  <RefreshCw className="h-4 w-4" />
-                  {!(editingDoc || viewingPdfDoc) && <span className="ml-1">Refresh</span>}
+                <Button variant="outline" size="sm" onClick={fetchDocuments} className="h-7 w-7 p-0" title="Refresh">
+                  <RefreshCw className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="px-4 pt-0">
-            <div className="flex gap-2 mb-3">
+          <CardContent className="px-3 pt-0 pb-2">
+            <div className="flex gap-1 mb-2">
               <div className="flex-1 min-w-0">
                 <div className="relative">
-                  <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 h-8 text-sm"
+                    className="pl-7 h-7 text-xs"
                   />
                 </div>
               </div>
               <Tabs value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
-                <TabsList className="h-8">
-                  <TabsTrigger value="needs_review" className="text-xs px-2 h-7">Review</TabsTrigger>
-                  <TabsTrigger value="all" className="text-xs px-2 h-7">All</TabsTrigger>
+                <TabsList className="h-7">
+                  <TabsTrigger value="needs_review" className="text-xs px-2 h-6">⚠️</TabsTrigger>
+                  <TabsTrigger value="all" className="text-xs px-2 h-6">All</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-2 mb-3 text-red-600 bg-red-50 rounded-lg text-sm">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{error}</span>
-                <Button variant="ghost" size="sm" onClick={() => setError(null)} className="h-6 w-6 p-0 flex-shrink-0">
+              <div className="flex items-center gap-1 p-1.5 mb-2 text-red-600 bg-red-50 rounded text-xs">
+                <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate flex-1">{error}</span>
+                <Button variant="ghost" size="sm" onClick={() => setError(null)} className="h-5 w-5 p-0">
                   <X className="h-3 w-3" />
                 </Button>
               </div>
             )}
 
             {enrichAllResult && (
-              <div className="flex items-center gap-2 p-2 mb-3 text-green-600 bg-green-50 rounded-lg text-sm">
-                <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{enrichAllResult}</span>
-                <Button variant="ghost" size="sm" onClick={() => setEnrichAllResult(null)} className="h-6 w-6 p-0 flex-shrink-0">
+              <div className="flex items-center gap-1 p-1.5 mb-2 text-green-600 bg-green-50 rounded text-xs">
+                <CheckCircle className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate flex-1">{enrichAllResult}</span>
+                <Button variant="ghost" size="sm" onClick={() => setEnrichAllResult(null)} className="h-5 w-5 p-0">
                   <X className="h-3 w-3" />
                 </Button>
               </div>
             )}
 
             {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div style={{ height: 'calc(100vh - 480px)', overflowY: 'auto' }}>
+              <div style={{ height: 'calc(100vh - 420px)', overflowY: 'auto' }}>
                 <div className="space-y-2 pr-1">
                   {filteredDocs.map((doc) => (
                     <Card 
