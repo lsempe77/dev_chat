@@ -53,6 +53,14 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
   const [limit, setLimit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState({
+    total_documents: 0,
+    completed: 0,
+    pending: 0,
+    processing: 0,
+    failed: 0,
+    total_chunks: 0,
+  });
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -80,6 +88,9 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
       setDocuments(data.documents || []);
       setTotalCount(data.total_count || 0);
       setTotalPages(data.pages || Math.ceil((data.total_count || 0) / limit));
+      if (data.stats) {
+        setStats(data.stats);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load documents");
     } finally {
@@ -204,11 +215,8 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
     });
   };
 
-  // Stats
-  const completedCount = documents.filter(d => d.status === "completed").length;
-  const pendingCount = documents.filter(d => d.status === "pending").length;
-  const failedCount = documents.filter(d => d.status === "failed").length;
-  const totalChunks = documents.reduce((sum, d) => sum + d.chunk_count, 0);
+  // Use stats from API (unfiltered totals)
+  const { total_documents, completed, pending, processing, failed, total_chunks } = stats;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -260,7 +268,7 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
               <div>
                 <p className="text-sm text-muted-foreground">Total Documents</p>
                 <p className="text-2xl font-bold">
-                  {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : documents.length}
+                  {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : total_documents}
                 </p>
               </div>
               <FileText className="h-8 w-8 text-muted-foreground" />
@@ -272,7 +280,7 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Completed</p>
-                <p className="text-2xl font-bold">{completedCount}</p>
+                <p className="text-2xl font-bold">{completed}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
@@ -283,7 +291,7 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold">{pendingCount}</p>
+                <p className="text-2xl font-bold">{pending + processing}</p>
               </div>
               <Clock className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -294,7 +302,7 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Vector Chunks</p>
-                <p className="text-2xl font-bold">{totalChunks.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{total_chunks.toLocaleString()}</p>
               </div>
               <Hash className="h-8 w-8 text-muted-foreground" />
             </div>

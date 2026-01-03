@@ -175,15 +175,6 @@ devchat_v2_sota/
 - [ ] Auto-match imported bibliography to uploaded PDFs
 - [ ] Suggest matches for review
 
-### Database Changes (Phase 1) ✅ APPLIED
-```sql
--- Track import source and matching
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS import_source TEXT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS match_confidence FLOAT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS external_id TEXT;
-```
-
----
 
 ## 📝 Recent Changes
 

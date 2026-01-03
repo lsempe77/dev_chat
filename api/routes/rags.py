@@ -458,6 +458,16 @@ class DocumentResponse(BaseModel):
     processed_at: Optional[datetime]
 
 
+class DocumentStats(BaseModel):
+    """Summary stats for documents (unfiltered totals)."""
+    total_documents: int
+    completed: int
+    pending: int
+    processing: int
+    failed: int
+    total_chunks: int
+
+
 class DocumentListResponse(BaseModel):
     """Response for listing documents."""
     documents: List[DocumentResponse]
@@ -465,6 +475,7 @@ class DocumentListResponse(BaseModel):
     page: int
     limit: int
     pages: int
+    stats: Optional[DocumentStats] = None
 
 
 @router.get("/{project_id}/documents", response_model=DocumentListResponse)
@@ -545,17 +556,28 @@ async def list_project_documents(
             processed_at=d.get("processed_at"),
         ))
     
-    # If we filtered in memory, the total count from SQL is wrong. 
-    # But implementing full JSONB filtering in Supabase-py can be tricky.
-    # For now, let's assume the SQL filter for needs_review=True works with .contains()
-    # For needs_review=False, we might return mixed results if we don't filter in SQL.
+    # Get summary stats (unfiltered totals for this project)
+    stats_query = client.table("documents").select(
+        "status, chunk_count"
+    ).eq("rag_project_id", project_id).execute()
+    
+    stats_data = stats_query.data or []
+    stats = DocumentStats(
+        total_documents=len(stats_data),
+        completed=sum(1 for d in stats_data if d.get("status") == "completed"),
+        pending=sum(1 for d in stats_data if d.get("status") == "pending"),
+        processing=sum(1 for d in stats_data if d.get("status") == "processing"),
+        failed=sum(1 for d in stats_data if d.get("status") == "failed"),
+        total_chunks=sum(d.get("chunk_count", 0) or 0 for d in stats_data),
+    )
     
     return DocumentListResponse(
         documents=documents, 
         total_count=result.count or 0,
         page=page,
         limit=limit,
-        pages=(result.count + limit - 1) // limit if result.count else 0
+        pages=(result.count + limit - 1) // limit if result.count else 0,
+        stats=stats,
     )
 
 
@@ -1439,7 +1461,12 @@ async def list_project_metadata(
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
     
-    # Base query
+    # Get unfiltered total count first
+    total_query = client.table("documents").select("*", count="exact", head=True).eq("rag_project_id", project_id)
+    total_res = total_query.execute()
+    unfiltered_total = total_res.count or 0
+    
+    # Base query with potential filters
     query = client.table("documents").select("*", count="exact").eq("rag_project_id", project_id)
     
     # Apply filters
@@ -1527,7 +1554,7 @@ async def list_project_metadata(
     
     return MetadataListResponse(
         documents=documents,
-        total_count=result.count,
+        total_count=unfiltered_total,  # Always return unfiltered total for stats cards
         needs_review_count=needs_review_count,
         page=page,
         limit=limit
