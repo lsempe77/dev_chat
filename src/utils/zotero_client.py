@@ -326,16 +326,9 @@ class ZoteroClient:
                 normalized = self._normalize_items(items)
                 
                 for item in normalized:
-                    # Check for PDF attachment
-                    try:
-                        children = self.zot.children(item["key"])
-                        has_pdf = any(
-                            c.get("data", {}).get("contentType") == "application/pdf"
-                            for c in children
-                        )
-                        item["has_pdf"] = has_pdf
-                    except Exception:
-                        item["has_pdf"] = False
+                    # Don't check for PDF here - it's slow (1 API call per item)
+                    # Instead, set has_pdf=None and check lazily when downloading
+                    item["has_pdf"] = None  # Unknown until we try to download
                     all_items.append(item)
                     
                     if len(all_items) >= max_items:

@@ -548,8 +548,8 @@ async def sync_from_zotero(
                     items_updated += 1
                     logger.debug(f"Updated metadata for document {matched_doc['id']} from Zotero item {item_key} (matched by {match_method})")
                     
-                elif request.sync_pdfs and item.get("has_pdf"):
-                    # No match but has PDF - download PDF and create new document
+                elif request.sync_pdfs:
+                    # No match - try to download PDF (this checks for attachments lazily)
                     pdf_result = zotero_client.download_pdf_bytes(item_key)
                     
                     if pdf_result:
@@ -623,6 +623,45 @@ async def sync_from_zotero(
                         
                         pdfs_downloaded += 1
                         logger.info(f"Downloaded and uploaded PDF from Zotero: {original_filename}")
+                    else:
+                        # No PDF found - create metadata-only record
+                        doc_id = f"zotero_{item_key}"
+                        safe_title = (item.get("title") or "Untitled")[:100].replace(" ", "_").replace("/", "_")
+                        
+                        # Check if this zotero item already exists
+                        existing_zotero = supabase.table("documents").select("id").eq(
+                            "rag_project_id", project_id
+                        ).eq("filename", doc_id).execute()
+                        
+                        if not existing_zotero.data:
+                            doc_metadata = {
+                                "zotero_key": item_key,
+                                "zotero_synced_at": datetime.utcnow().isoformat(),
+                                "title": item.get("title"),
+                                "item_type": item.get("item_type"),
+                                "authors": item.get("authors", []),
+                                "year": item.get("year"),
+                                "journal": item.get("journal"),
+                                "volume": item.get("volume"),
+                                "issue": item.get("issue"),
+                                "pages": item.get("pages"),
+                                "abstract": item.get("abstract"),
+                                "doi": item.get("doi"),
+                                "url": item.get("url"),
+                                "metadata_source": "zotero",
+                                "has_pdf": False,
+                            }
+                            
+                            supabase.table("documents").insert({
+                                "rag_project_id": project_id,
+                                "filename": doc_id,
+                                "original_filename": f"{safe_title}.pdf",
+                                "file_size_bytes": 0,
+                                "mime_type": "application/pdf",
+                                "status": "no_pdf",
+                                "metadata": doc_metadata,
+                            }).execute()
+                            logger.debug(f"Created metadata-only record for: {item.get('title')}")
                 
                 else:
                     # No match and no PDF - still create a metadata-only record
