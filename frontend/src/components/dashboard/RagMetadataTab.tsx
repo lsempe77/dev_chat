@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -48,9 +48,6 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
   const [documents, setDocuments] = useState<MetadataDetail[]>([]);
   const [filterType, setFilterType] = useState<"all" | "needs_review">("needs_review");
   const [searchQuery, setSearchQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const limit = 20;
   const [stats, setStats] = useState({
     needsReview: 0,
     total: 0,
@@ -98,29 +95,29 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     try {
       const response = await getRagMetadata(ragId, {
         filter: filterType,
-        page,
-        limit,
-        search: searchQuery || undefined,
       });
       setDocuments(response.documents);
       setStats({
         needsReview: response.needs_review_count,
         total: response.total_count,
       });
-      // Calculate total pages from response
-      const total = filterType === "needs_review" ? response.needs_review_count : response.total_count;
-      setTotalPages(Math.max(1, Math.ceil(total / limit)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load documents");
     } finally {
       setIsLoading(false);
     }
-  }, [ragId, filterType, page, searchQuery]);
+  }, [ragId, filterType]);
 
   // Initial load
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
+
+  // Filter by search
+  const filteredDocs = documents.filter(doc => 
+    doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Convert MetadataDetail to DocumentMetadataDetail for edit panel compatibility
   const toDocumentMetadataDetail = (doc: MetadataDetail): DocumentMetadataDetail => ({
@@ -391,12 +388,12 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                   <Input
                     placeholder="Search documents..."
                     value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
                   />
                 </div>
               </div>
-              <Tabs value={filterType} onValueChange={(v) => { setFilterType(v as typeof filterType); setPage(1); }}>
+              <Tabs value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
                 <TabsList>
                   <TabsTrigger value="needs_review">Needs Review</TabsTrigger>
                   <TabsTrigger value="all">All</TabsTrigger>
@@ -431,7 +428,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             ) : (
               <ScrollArea className="h-full">
                 <div className="space-y-3 pr-2">
-                  {documents.map((doc) => (
+                  {filteredDocs.map((doc) => (
                     <Card 
                       key={doc.id} 
                       className={`hover:bg-muted/50 ${editingDoc?.id === doc.id ? 'ring-2 ring-primary' : ''} ${viewingPdfDoc?.id === doc.id ? 'ring-2 ring-blue-400' : ''}`}
@@ -563,7 +560,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                     </Card>
                   ))}
 
-                  {documents.length === 0 && !isLoading && (
+                  {filteredDocs.length === 0 && !isLoading && (
                     <div className="text-center py-12 text-muted-foreground">
                       <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500" />
                       <p>No documents {filterType === "needs_review" ? "need review" : "found"}!</p>
@@ -573,21 +570,6 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </ScrollArea>
             )}
           </CardContent>
-          <CardFooter className="flex-shrink-0 border-t py-3">
-            <div className="flex items-center justify-between w-full">
-              <div className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          </CardFooter>
         </Card>
 
         {/* Center Panel: Metadata Edit */}
