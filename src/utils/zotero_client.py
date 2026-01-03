@@ -294,40 +294,62 @@ class ZoteroClient:
         self,
         collection_key: Optional[str] = None,
         limit: int = 100,
-        start: int = 0
+        start: int = 0,
+        max_items: int = 500
     ) -> List[Dict[str, Any]]:
         """
         Get items and check which have PDF attachments.
+        Uses pagination to fetch more items.
 
         Args:
             collection_key: Optional collection to fetch from
-            limit: Number of items per page
+            limit: Number of items per API call
             start: Starting offset for pagination
+            max_items: Maximum total items to fetch (for safety)
 
         Returns:
             List of normalized items with has_pdf flag
         """
         try:
-            if collection_key:
-                items = self.zot.collection_items(collection_key, limit=limit, start=start)
-            else:
-                items = self.zot.items(limit=limit, start=start)
+            all_items = []
+            current_start = start
             
-            normalized = []
-            for item in self._normalize_items(items):
-                # Check for PDF attachment
-                try:
-                    children = self.zot.children(item["key"])
-                    has_pdf = any(
-                        c.get("data", {}).get("contentType") == "application/pdf"
-                        for c in children
-                    )
-                    item["has_pdf"] = has_pdf
-                except Exception:
-                    item["has_pdf"] = False
-                normalized.append(item)
+            while len(all_items) < max_items:
+                if collection_key:
+                    items = self.zot.collection_items(collection_key, limit=limit, start=current_start)
+                else:
+                    items = self.zot.top(limit=limit, start=current_start)  # top-level items only
+                
+                if not items:
+                    break  # No more items
+                
+                normalized = self._normalize_items(items)
+                
+                for item in normalized:
+                    # Check for PDF attachment
+                    try:
+                        children = self.zot.children(item["key"])
+                        has_pdf = any(
+                            c.get("data", {}).get("contentType") == "application/pdf"
+                            for c in children
+                        )
+                        item["has_pdf"] = has_pdf
+                    except Exception:
+                        item["has_pdf"] = False
+                    all_items.append(item)
+                    
+                    if len(all_items) >= max_items:
+                        break
+                
+                current_start += len(items)
+                
+                if len(items) < limit:
+                    break  # Reached the end
+                
+                logger.info(f"Fetched {len(all_items)} items so far...")
             
-            return normalized
+            logger.info(f"Total items fetched: {len(all_items)}")
+            return all_items
         except Exception as e:
             logger.error(f"Failed to get items with attachments: {e}")
             raise
