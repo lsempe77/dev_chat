@@ -19,7 +19,9 @@ import {
   Loader2,
   AlertCircle,
   Clock,
+  BookOpen,
 } from "lucide-react";
+import { BibliographyImportDialog } from "./BibliographyImportDialog";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -57,6 +59,7 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   // Fetch documents
   const fetchDocuments = useCallback(async () => {
@@ -313,6 +316,10 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowImportDialog(true)}>
+                <BookOpen className="h-4 w-4 mr-1" />
+                Import Bibliography
+              </Button>
               <Button variant="outline" size="sm" onClick={syncDocuments} disabled={isSyncing}>
                 <RefreshCw className={`h-4 w-4 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
                 {isSyncing ? "Syncing..." : "Sync R2"}
@@ -451,6 +458,19 @@ export function RagDocumentsTab({ ragId, accessToken, onDocumentsChanged }: RagD
           )}
         </CardContent>
       </Card>
+
+      {/* Bibliography Import Dialog */}
+      <BibliographyImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        ragId={ragId}
+        accessToken={accessToken}
+        documents={documents}
+        onImportComplete={() => {
+          fetchDocuments();
+          onDocumentsChanged?.();
+        }}
+      />
     </div>
   );
 }

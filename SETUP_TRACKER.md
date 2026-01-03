@@ -146,22 +146,22 @@ devchat_v2_sota/
 
 ### Implementation Phases
 
-#### Phase 1: Matching Engine ⏳ IN PROGRESS
-- [ ] Matching service with multiple strategies:
-  - [ ] DOI matching (most reliable)
-  - [ ] Title fuzzy matching (>85% similarity)
-  - [ ] Author+Year combo
-  - [ ] Filename pattern (author_year.pdf)
-- [ ] Parse RIS/BibTeX files into structured data
-- [ ] Match confidence scoring (0.0-1.0)
+#### Phase 1: Matching Engine ✅ DONE
+- [x] Matching service with multiple strategies:
+  - [x] DOI matching (most reliable)
+  - [x] Title fuzzy matching (>85% similarity)
+  - [x] Author+Year combo
+  - [x] Filename pattern (author_year.pdf)
+- [x] Parse RIS/BibTeX files into structured data
+- [x] Match confidence scoring (0.0-1.0)
 
-#### Phase 2: Import UI + Manual Matching
-- [ ] Import dialog with file upload (RIS/BibTeX/CSV)
-- [ ] Preview table with parsed entries
-- [ ] Auto-match against existing documents
-- [ ] Status display: ✅ Matched | ⚠️ Unmatched
-- [ ] Manual matching UI for unmatched items
-- [ ] Options: skip, upload missing PDFs, create placeholder
+#### Phase 2: Import UI + Manual Matching ✅ DONE
+- [x] Import dialog with file upload (RIS/BibTeX/CSV)
+- [x] Preview table with parsed entries
+- [x] Auto-match against existing documents
+- [x] Status display: ✅ Matched | ⚠️ Unmatched
+- [x] Manual matching UI for unmatched items
+- [ ] Options: skip, upload missing PDFs, create placeholder (future)
 
 #### Phase 3: Zotero Integration
 - [ ] Zotero OAuth connection
