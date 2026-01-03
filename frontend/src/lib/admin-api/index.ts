@@ -34,7 +34,7 @@ export * from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "";
-const ADMIN_TIMEOUT_MS = 60_000; // 60 seconds
+const ADMIN_TIMEOUT_MS = 120_000; // 120 seconds (metadata enrichment can be slow)
 
 // Storage key for session token
 const SESSION_TOKEN_KEY = "devchat_admin_session";

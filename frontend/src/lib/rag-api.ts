@@ -14,7 +14,7 @@ import { createBrowserClient } from '@supabase/ssr'
 // =============================================================================
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const TIMEOUT_MS = 60_000; // 60 seconds
+const TIMEOUT_MS = 120_000; // 120 seconds (metadata enrichment can be slow)
 
 // =============================================================================
 // Types
