@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -49,8 +49,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
   const [filterType, setFilterType] = useState<"all" | "needs_review">("needs_review");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
+  const limit = 20;
   const [stats, setStats] = useState({
     needsReview: 0,
     total: 0,
@@ -100,20 +100,22 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
         filter: filterType,
         page,
         limit,
-        search: searchQuery,
+        search: searchQuery || undefined,
       });
       setDocuments(response.documents);
       setStats({
         needsReview: response.needs_review_count,
         total: response.total_count,
       });
-      setTotalPages(Math.ceil(response.total_count / limit));
+      // Calculate total pages from response
+      const total = filterType === "needs_review" ? response.needs_review_count : response.total_count;
+      setTotalPages(Math.max(1, Math.ceil(total / limit)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load documents");
     } finally {
       setIsLoading(false);
     }
-  }, [ragId, filterType, page, limit, searchQuery]);
+  }, [ragId, filterType, page, searchQuery]);
 
   // Initial load
   useEffect(() => {
@@ -350,7 +352,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col" : "w-full flex flex-col"}>
+        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col" : "w-full"}>
           <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -381,8 +383,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex gap-4 mb-4 flex-shrink-0">
+          <CardContent className="flex-1 overflow-hidden">
+            <div className="flex gap-4 mb-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -403,7 +405,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 mb-4 text-red-600 bg-red-50 rounded-lg flex-shrink-0">
+              <div className="flex items-center gap-2 p-3 mb-4 text-red-600 bg-red-50 rounded-lg">
                 <AlertCircle className="h-4 w-4" />
                 {error}
                 <Button variant="ghost" size="sm" onClick={() => setError(null)}>
@@ -413,7 +415,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             )}
 
             {enrichAllResult && (
-              <div className="flex items-center gap-2 p-3 mb-4 text-green-600 bg-green-50 rounded-lg flex-shrink-0">
+              <div className="flex items-center gap-2 p-3 mb-4 text-green-600 bg-green-50 rounded-lg">
                 <CheckCircle className="h-4 w-4" />
                 {enrichAllResult}
                 <Button variant="ghost" size="sm" onClick={() => setEnrichAllResult(null)}>
@@ -422,13 +424,12 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             )}
 
-            <div className="flex-1 overflow-hidden">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <ScrollArea className="h-full">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ScrollArea className="h-full">
                 <div className="space-y-3 pr-2">
                   {documents.map((doc) => (
                     <Card 
@@ -570,23 +571,23 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                   )}
                 </div>
               </ScrollArea>
-              )}
-            </div>
-            
-            <div className="flex items-center justify-between pt-4 border-t mt-2 flex-shrink-0">
-               <div className="text-sm text-muted-foreground">
-                 Page {page} of {totalPages}
-               </div>
-               <div className="flex gap-2">
-                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-                   Previous
-                 </Button>
-                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-                   Next
-                 </Button>
-               </div>
-            </div>
+            )}
           </CardContent>
+          <CardFooter className="flex-shrink-0 border-t py-3">
+            <div className="flex items-center justify-between w-full">
+              <div className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          </CardFooter>
         </Card>
 
         {/* Center Panel: Metadata Edit */}
