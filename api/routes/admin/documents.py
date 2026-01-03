@@ -431,6 +431,15 @@ async def sync_document(request: DocumentSyncRequest):
             existing = await DocumentRepository.get_by_id(db, request.doc_id)
             action = "updated" if existing else "created"
             
+            # Preserve needs_review if document was already reviewed
+            # Don't reset reviewed documents back to needs_review
+            preserve_needs_review = False
+            if existing:
+                existing_needs_review = getattr(existing, 'needs_review', None)
+                # If it was explicitly set to False (reviewed), keep it
+                if existing_needs_review is False:
+                    preserve_needs_review = True
+            
             # Prepare document data
             doc_data = {
                 "id": request.doc_id,
@@ -458,7 +467,8 @@ async def sync_document(request: DocumentSyncRequest):
                 "page_count": request.page_count,
                 "metadata_source": request.metadata_source,
                 "metadata_confidence": request.metadata_confidence,
-                "needs_review": request.needs_review,
+                # Preserve reviewed status if already reviewed
+                "needs_review": False if preserve_needs_review else request.needs_review,
                 "status": "indexed",
             }
             

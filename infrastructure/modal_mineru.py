@@ -1280,24 +1280,33 @@ def sync_to_supabase_rag(
         if existing_result.data and existing_result.data[0].get("metadata"):
             existing_metadata = existing_result.data[0]["metadata"]
         
+        # CRITICAL: Preserve needs_review=False (reviewed documents stay reviewed)
+        # This prevents reprocessing from resetting reviewed documents
+        was_reviewed = existing_metadata.get("needs_review") is False
+        
         # Merge: preserve user edits (fields that were manually changed)
         # User-editable fields that should be preserved if they were manually set
         user_editable_fields = [
             "title", "authors", "year", "abstract", "doi", "item_type",
             "journal", "volume", "issue", "pages", "publisher", "place",
             "institution", "series", "countries", "sectors", "study_type",
-            "intervention_type", "needs_review",
+            "intervention_type",
+            # NOTE: needs_review handled separately above
         ]
         
         merged_metadata = {**metadata}  # Start with new enriched metadata
+        
+        # Preserve reviewed status (most important!)
+        if was_reviewed:
+            merged_metadata["needs_review"] = False
         
         # Only preserve user edits if metadata_source was already set (not first processing)
         if existing_metadata.get("metadata_source"):
             for field in user_editable_fields:
                 # If existing has a value and new doesn't, keep existing
                 if field in existing_metadata and existing_metadata[field] is not None:
-                    # Keep user edits unless they're the default extraction values
-                    if existing_metadata.get("metadata_source") in ["crossref", "openalex", "user"]:
+                    # Keep user edits if from enriched source or if it's a verified source
+                    if existing_metadata.get("metadata_source") in ["crossref", "openalex", "user", "bibliography_manual"]:
                         merged_metadata[field] = existing_metadata[field]
         
         # Update the document
