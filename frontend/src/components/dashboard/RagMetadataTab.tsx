@@ -426,7 +426,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <ScrollArea className="flex-1">
+              <div className="flex-1 overflow-y-auto min-h-0">
                 <div className="space-y-3 pr-2">
                   {filteredDocs.map((doc) => (
                     <Card 
@@ -567,7 +567,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                     </div>
                   )}
                 </div>
-              </ScrollArea>
+              </div>
             )}
           </CardContent>
         </Card>
