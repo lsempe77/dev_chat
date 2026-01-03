@@ -281,13 +281,13 @@ export function ConnectZoteroModal({
         totalUpdated += result.items_updated;
         hasMore = result.has_more;
         
-        setSyncProgress({
-          current: result.total_synced_so_far,
-          total: result.total_in_library,
+        setSyncProgress((prev) => ({
+          current: totalItemsSynced,
+          total: prev?.total || initialTotal,  // Keep using initial collection count
           batchNumber,
           itemsSynced: totalItemsSynced,
           pdfsDownloaded: totalPdfsDownloaded,
-        });
+        }));
         
         // If no new items were synced in this batch, we're done
         if (result.items_synced === 0) {
