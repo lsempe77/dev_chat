@@ -349,8 +349,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={`flex flex-col h-full ${editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}`}>
-          <CardHeader className="flex-shrink-0">
+        <Card className={editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}>
+          <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Metadata Review</CardTitle>
@@ -380,8 +380,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 min-h-0 flex flex-col">
-            <div className="flex gap-4 mb-4 flex-shrink-0">
+          <CardContent>
+            <div className="flex gap-4 mb-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -422,14 +422,13 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             )}
 
             {isLoading ? (
-              <div className="flex items-center justify-center py-12 flex-1">
+              <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div className="flex-1 relative min-h-0">
-                <div className="absolute inset-0 overflow-y-auto">
-                  <div className="space-y-3 pr-2">
-                    {filteredDocs.map((doc) => (
+              <div style={{ height: 'calc(100vh - 520px)', overflowY: 'auto' }}>
+                <div className="space-y-3 pr-2">
+                  {filteredDocs.map((doc) => (
                     <Card 
                       key={doc.id} 
                       className={`hover:bg-muted/50 ${editingDoc?.id === doc.id ? 'ring-2 ring-primary' : ''} ${viewingPdfDoc?.id === doc.id ? 'ring-2 ring-blue-400' : ''}`}
@@ -561,7 +560,6 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                       <p>No documents {filterType === "needs_review" ? "need review" : "found"}!</p>
                     </div>
                   )}
-                  </div>
                 </div>
               </div>
             )}
