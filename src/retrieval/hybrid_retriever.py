@@ -80,6 +80,27 @@ class HybridRetriever:
         self.client = client
         self.collection_name = collection_name
         self.embedding_generator = embedding_generator or EmbeddingGenerator()
+        self._has_sparse_vectors: Optional[bool] = None  # Cached check
+    
+    def _check_sparse_support(self) -> bool:
+        """Check if the collection has sparse vector support."""
+        if self._has_sparse_vectors is not None:
+            return self._has_sparse_vectors
+        
+        try:
+            collection_info = self.client.get_collection(self.collection_name)
+            # Check if sparse vectors are configured
+            vectors_config = collection_info.config.params.vectors
+            if isinstance(vectors_config, dict):
+                self._has_sparse_vectors = "sparse" in vectors_config
+            else:
+                self._has_sparse_vectors = False
+            logger.info(f"Collection {self.collection_name} sparse support: {self._has_sparse_vectors}")
+        except Exception as e:
+            logger.warning(f"Could not check sparse support: {e}")
+            self._has_sparse_vectors = False
+        
+        return self._has_sparse_vectors
     
     async def retrieve(
         self,
@@ -107,7 +128,10 @@ class HybridRetriever:
         qdrant_filter = filters.to_qdrant_filter() if filters else None
         
         # Perform hybrid search
-        if settings.hybrid_enabled and alpha < 1.0:
+        # Only use hybrid if enabled, alpha < 1, AND collection supports sparse vectors
+        use_hybrid = settings.hybrid_enabled and alpha < 1.0 and self._check_sparse_support()
+        
+        if use_hybrid:
             results = await self._hybrid_search(
                 query=query,
                 query_embedding=query_embedding,
