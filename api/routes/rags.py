@@ -802,6 +802,250 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
+# =============================================================================
+# Bibliography Import - Match RIS/BibTeX/CSV to Documents
+# =============================================================================
+
+class BibliographyMatchResult(BaseModel):
+    """Result of matching a single bibliography entry."""
+    entry_id: str
+    entry_title: str
+    entry_authors: Optional[str]
+    entry_year: Optional[int]
+    document_id: Optional[str] = None
+    document_filename: Optional[str] = None
+    confidence: float
+    match_method: str
+    match_details: str
+
+
+class BibliographyImportResponse(BaseModel):
+    """Response for bibliography import."""
+    total_entries: int
+    matched: List[BibliographyMatchResult]
+    unmatched: List[BibliographyMatchResult]
+    auto_applied: int = 0
+    message: str
+
+
+@router.post("/{project_id}/documents/import-bibliography", response_model=BibliographyImportResponse)
+async def import_bibliography(
+    project_id: str,
+    file: UploadFile = File(...),
+    auto_apply: bool = False,
+    min_confidence: float = 0.8,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> BibliographyImportResponse:
+    """
+    Import bibliography from RIS, BibTeX, or CSV file and match to existing documents.
+    
+    The system will try to match each entry to existing documents using:
+    1. DOI matching (most reliable)
+    2. Title similarity (>85%)
+    3. Author+Year combination
+    4. Filename pattern (author_year.pdf)
+    
+    Args:
+        file: RIS, BibTeX, or CSV file
+        auto_apply: If True, automatically apply metadata from matched entries
+        min_confidence: Minimum confidence threshold for auto_apply (0.0-1.0)
+    
+    Returns:
+        List of matched and unmatched entries for review
+    """
+    from src.ingestion.bibliography_parser import parse_bibliography
+    from src.ingestion.bibliography_matcher import match_entries, BibliographyEntry
+    
+    project = await get_user_project(user, project_id)
+    
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    
+    allowed_extensions = ['.ris', '.bib', '.csv', '.txt']
+    file_ext = os.path.splitext(file.filename.lower())[1]
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+    
+    try:
+        # Read and parse file
+        content = await file.read()
+        content_str = content.decode('utf-8', errors='ignore')
+        
+        entries = parse_bibliography(content_str, file.filename)
+        
+        if not entries:
+            return BibliographyImportResponse(
+                total_entries=0,
+                matched=[],
+                unmatched=[],
+                message="No bibliography entries found in file"
+            )
+        
+        # Get existing documents for this project
+        client = get_supabase_client()
+        docs_result = client.table("documents").select(
+            "id, filename, original_filename, metadata"
+        ).eq("rag_project_id", project_id).execute()
+        
+        documents = docs_result.data or []
+        
+        # Match entries to documents
+        matched_results, unmatched_results = match_entries(entries, documents)
+        
+        # Format results for response
+        def format_result(result) -> BibliographyMatchResult:
+            doc_filename = None
+            if result.document_id:
+                doc = next((d for d in documents if d['id'] == result.document_id), None)
+                if doc:
+                    doc_filename = doc.get('original_filename') or doc.get('filename')
+            
+            return BibliographyMatchResult(
+                entry_id=result.entry.id,
+                entry_title=result.entry.title,
+                entry_authors=", ".join(result.entry.authors) if result.entry.authors else None,
+                entry_year=result.entry.year,
+                document_id=result.document_id,
+                document_filename=doc_filename,
+                confidence=result.confidence,
+                match_method=result.method.value,
+                match_details=result.match_details,
+            )
+        
+        matched = [format_result(r) for r in matched_results]
+        unmatched = [format_result(r) for r in unmatched_results]
+        
+        # Auto-apply metadata if requested
+        auto_applied = 0
+        if auto_apply:
+            for result in matched_results:
+                if result.confidence >= min_confidence and result.document_id:
+                    entry = result.entry
+                    # Build metadata update from entry
+                    metadata_update = {}
+                    if entry.title:
+                        metadata_update['title'] = entry.title
+                    if entry.authors:
+                        metadata_update['authors'] = ", ".join(entry.authors)
+                    if entry.year:
+                        metadata_update['year'] = entry.year
+                    if entry.doi:
+                        metadata_update['doi'] = entry.doi
+                    if entry.journal:
+                        metadata_update['journal'] = entry.journal
+                    if entry.abstract:
+                        metadata_update['abstract'] = entry.abstract
+                    
+                    metadata_update['metadata_source'] = f'bibliography_{entry.source_format}'
+                    
+                    try:
+                        # Get existing metadata and merge
+                        doc = next((d for d in documents if d['id'] == result.document_id), None)
+                        existing_meta = doc.get('metadata', {}) if doc else {}
+                        merged_meta = {**existing_meta, **metadata_update}
+                        
+                        client.table("documents").update({
+                            "metadata": merged_meta,
+                            "import_source": entry.source_format,
+                            "match_confidence": result.confidence,
+                            "external_id": entry.doi or entry.id,
+                        }).eq("id", result.document_id).execute()
+                        
+                        auto_applied += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to apply metadata to {result.document_id}: {e}")
+        
+        return BibliographyImportResponse(
+            total_entries=len(entries),
+            matched=matched,
+            unmatched=unmatched,
+            auto_applied=auto_applied,
+            message=f"Found {len(matched)} matches, {len(unmatched)} unmatched"
+            + (f", applied {auto_applied} metadata updates" if auto_applied else "")
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Bibliography import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+
+
+class ApplyMatchRequest(BaseModel):
+    """Request to apply a manual match."""
+    entry_data: dict  # The bibliography entry data
+    document_id: str  # Document to apply metadata to
+
+
+class ApplyMatchResponse(BaseModel):
+    """Response for applying a match."""
+    success: bool
+    message: str
+
+
+@router.post("/{project_id}/documents/apply-match", response_model=ApplyMatchResponse)
+async def apply_bibliography_match(
+    project_id: str,
+    request: ApplyMatchRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> ApplyMatchResponse:
+    """
+    Apply metadata from a bibliography entry to a document (manual matching).
+    """
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Verify document belongs to project
+    doc_result = client.table("documents").select("id, metadata").eq(
+        "id", request.document_id
+    ).eq("rag_project_id", project_id).single().execute()
+    
+    if not doc_result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    existing_meta = doc_result.data.get('metadata', {})
+    entry = request.entry_data
+    
+    # Build metadata from entry
+    metadata_update = {}
+    if entry.get('title'):
+        metadata_update['title'] = entry['title']
+    if entry.get('authors'):
+        metadata_update['authors'] = entry['authors'] if isinstance(entry['authors'], str) else ", ".join(entry['authors'])
+    if entry.get('year'):
+        metadata_update['year'] = entry['year']
+    if entry.get('doi'):
+        metadata_update['doi'] = entry['doi']
+    if entry.get('journal'):
+        metadata_update['journal'] = entry['journal']
+    if entry.get('abstract'):
+        metadata_update['abstract'] = entry['abstract']
+    
+    metadata_update['metadata_source'] = 'bibliography_manual'
+    
+    merged_meta = {**existing_meta, **metadata_update}
+    
+    try:
+        client.table("documents").update({
+            "metadata": merged_meta,
+            "import_source": "manual",
+            "match_confidence": 1.0,
+            "external_id": entry.get('doi') or entry.get('id'),
+        }).eq("id", request.document_id).execute()
+        
+        return ApplyMatchResponse(
+            success=True,
+            message=f"Applied metadata to document"
+        )
+    except Exception as e:
+        logger.error(f"Failed to apply match: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class JobResponse(BaseModel):
     """Response for a processing job."""
     id: str

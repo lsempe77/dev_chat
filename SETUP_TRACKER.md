@@ -117,23 +117,71 @@ devchat_v2_sota/
 ### High Priority
 - [x] Admin authentication (protect `/admin` routes) ✅ Done
 - [x] Processing status WebSocket (real-time updates) ✅ Code ready (polling fallback works)
-- [ ] Bulk import (RIS/BibTeX/CSV)
+- [ ] **Bibliography Import System** (see detailed plan below)
 - [ ] General 3ie admin panel (costs, metrics, users/rags, prompts quality, observability)
 
 ### Waiting on External
 - [ ] Enable Supabase Realtime when beta access granted (run SQL: `ALTER PUBLICATION supabase_realtime ADD TABLE processing_jobs, documents;`)
 
-
 ### Medium Priority
-- [ ] Zotero OAuth integration
 - [ ] Advanced search filters in chat
-- [] Export citations (RIS, Bibtext)
-- [x] Export citations (CSV, JSON) ✅ Done
+- [x] Export citations (CSV, JSON, BibTeX) ✅ Done
 
 ### Future Exploration
 - [ ] RAPTOR hierarchical summarization
 - [ ] GraphRAG for complex relationships
 - [ ] ColBERTv2 for better retrieval
+
+---
+
+## 📚 Bibliography Import System (Detailed Plan)
+
+### User Types & Workflows
+| User Type | Has PDFs | Has Metadata | Ideal Route |
+|-----------|----------|--------------|-------------|
+| Zotero power user | In Zotero | In Zotero | Zotero sync |
+| Researcher with files | Local folder | RIS/BibTeX | Upload + match |
+| Systematic reviewer | Bulk PDFs | None | Auto-enrich |
+| Evidence map team | Uploaded | Spreadsheet | CSV match |
+
+### Implementation Phases
+
+#### Phase 1: Matching Engine ⏳ IN PROGRESS
+- [ ] Matching service with multiple strategies:
+  - [ ] DOI matching (most reliable)
+  - [ ] Title fuzzy matching (>85% similarity)
+  - [ ] Author+Year combo
+  - [ ] Filename pattern (author_year.pdf)
+- [ ] Parse RIS/BibTeX files into structured data
+- [ ] Match confidence scoring (0.0-1.0)
+
+#### Phase 2: Import UI + Manual Matching
+- [ ] Import dialog with file upload (RIS/BibTeX/CSV)
+- [ ] Preview table with parsed entries
+- [ ] Auto-match against existing documents
+- [ ] Status display: ✅ Matched | ⚠️ Unmatched
+- [ ] Manual matching UI for unmatched items
+- [ ] Options: skip, upload missing PDFs, create placeholder
+
+#### Phase 3: Zotero Integration
+- [ ] Zotero OAuth connection
+- [ ] Browse user's collections
+- [ ] Select items to import
+- [ ] Fetch PDFs via Zotero API
+- [ ] Auto-create documents with metadata
+
+#### Phase 4: Smart Enrichment
+- [ ] Extract DOI from PDF text during processing
+- [ ] Auto-match imported bibliography to uploaded PDFs
+- [ ] Suggest matches for review
+
+### Database Changes (Phase 1)
+```sql
+-- Track import source and matching
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS import_source TEXT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS match_confidence FLOAT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS external_id TEXT;
+```
 
 ---
 
