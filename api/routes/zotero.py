@@ -100,6 +100,10 @@ class ZoteroSyncResponse(BaseModel):
     pdfs_downloaded: int = 0
     errors: Optional[List[str]] = None
     library_version: Optional[int] = None
+    # For incremental sync support
+    has_more: bool = False  # True if more items available to sync
+    total_in_library: int = 0  # Total items in Zotero library/collection
+    total_synced_so_far: int = 0  # Total items synced to this project
 
 
 # =============================================================================
@@ -669,6 +673,16 @@ async def sync_from_zotero(
         
         logger.info(f"Zotero sync complete: {items_synced} synced, {items_updated} updated, {pdfs_downloaded} PDFs downloaded, {items_failed} failed")
         
+        # Get total items in library and total synced so far
+        total_in_library = zotero_client.zot.num_items()
+        total_synced_docs = supabase.table("documents").select("id", count="exact").eq(
+            "rag_project_id", project_id
+        ).execute()
+        total_synced_so_far = total_synced_docs.count or 0
+        
+        # Check if there are more items to sync
+        has_more = len(items) >= 50  # We fetched the max batch size, likely more available
+        
         return ZoteroSyncResponse(
             success=items_failed == 0,
             items_synced=items_synced,
@@ -677,6 +691,9 @@ async def sync_from_zotero(
             pdfs_downloaded=pdfs_downloaded,
             errors=errors if errors else None,
             library_version=None,
+            has_more=has_more,
+            total_in_library=total_in_library,
+            total_synced_so_far=total_synced_so_far,
         )
         
     except Exception as e:

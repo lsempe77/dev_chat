@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Check, AlertCircle, ExternalLink, Trash2, Library, FolderTree } from "lucide-react";
+import { Loader2, Check, AlertCircle, ExternalLink, Trash2, Library, FolderTree, RefreshCw } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 import {
   type ZoteroConnection,
@@ -81,6 +82,17 @@ export function ConnectZoteroModal({
   // Sync state
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Bulk sync progress state
+  const [bulkSyncing, setBulkSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    current: number;
+    total: number;
+    batchNumber: number;
+    itemsSynced: number;
+    pdfsDownloaded: number;
+  } | null>(null);
+  const [shouldStopSync, setShouldStopSync] = useState(false);
 
   // Check for existing connection on open
   useEffect(() => {
@@ -228,6 +240,73 @@ export function ConnectZoteroModal({
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to save settings");
     }
+  };
+
+  // Bulk sync - keep calling sync until has_more is false
+  const handleBulkSync = async () => {
+    setBulkSyncing(true);
+    setSyncResult(null);
+    setSyncProgress({
+      current: 0,
+      total: libraryInfo?.num_items || 0,
+      batchNumber: 0,
+      itemsSynced: 0,
+      pdfsDownloaded: 0,
+    });
+    setShouldStopSync(false);
+    
+    let totalItemsSynced = 0;
+    let totalPdfsDownloaded = 0;
+    let totalUpdated = 0;
+    let batchNumber = 0;
+    let hasMore = true;
+    
+    try {
+      while (hasMore && !shouldStopSync) {
+        batchNumber++;
+        
+        const result = await syncFromZotero(ragId, selectedCollection || undefined, syncPdfs);
+        
+        totalItemsSynced += result.items_synced;
+        totalPdfsDownloaded += result.pdfs_downloaded;
+        totalUpdated += result.items_updated;
+        hasMore = result.has_more;
+        
+        setSyncProgress({
+          current: result.total_synced_so_far,
+          total: result.total_in_library,
+          batchNumber,
+          itemsSynced: totalItemsSynced,
+          pdfsDownloaded: totalPdfsDownloaded,
+        });
+        
+        // If no new items were synced in this batch, we're done
+        if (result.items_synced === 0) {
+          hasMore = false;
+        }
+      }
+      
+      const message = shouldStopSync 
+        ? `Sync stopped. Synced ${totalItemsSynced} items total (${totalPdfsDownloaded} PDFs).`
+        : `Sync complete! Synced ${totalItemsSynced} items (${totalUpdated} updated, ${totalPdfsDownloaded} PDFs).`;
+      
+      setSyncResult({ success: true, message });
+      onSuccess?.();
+      
+    } catch (err) {
+      console.error("Bulk sync failed:", err);
+      setSyncResult({ 
+        success: false, 
+        message: err instanceof Error ? err.message : "Sync failed" 
+      });
+    } finally {
+      setBulkSyncing(false);
+      setSyncProgress(null);
+    }
+  };
+
+  const handleStopSync = () => {
+    setShouldStopSync(true);
   };
 
   const handleClose = () => {
@@ -417,8 +496,40 @@ export function ConnectZoteroModal({
               </Label>
             </div>
 
+            {/* Bulk sync progress */}
+            {bulkSyncing && syncProgress && (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Syncing batch {syncProgress.batchNumber}...
+                  </span>
+                  <span className="text-muted-foreground">
+                    {syncProgress.current.toLocaleString()} / {syncProgress.total.toLocaleString()} items
+                  </span>
+                </div>
+                <Progress 
+                  value={syncProgress.total > 0 ? (syncProgress.current / syncProgress.total) * 100 : 0} 
+                  className="h-2"
+                />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {syncProgress.itemsSynced} synced • {syncProgress.pdfsDownloaded} PDFs
+                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleStopSync}
+                    className="h-6 text-xs"
+                  >
+                    Stop
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Sync result feedback */}
-            {syncResult && (
+            {syncResult && !bulkSyncing && (
               <Alert variant={syncResult.success ? "default" : "destructive"}>
                 {syncResult.success ? (
                   <Check className="h-4 w-4" />
@@ -434,7 +545,7 @@ export function ConnectZoteroModal({
                 variant="destructive"
                 size="sm"
                 onClick={handleDisconnect}
-                disabled={disconnecting || syncing}
+                disabled={disconnecting || syncing || bulkSyncing}
               >
                 {disconnecting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -447,19 +558,37 @@ export function ConnectZoteroModal({
               </Button>
               
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleClose} disabled={syncing}>
-                  Cancel
+                <Button variant="outline" onClick={handleClose} disabled={syncing || bulkSyncing}>
+                  {bulkSyncing ? "Close" : "Cancel"}
                 </Button>
-                <Button onClick={handleSaveSettings} disabled={syncing}>
-                  {syncing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    "Save & Sync"
-                  )}
-                </Button>
+                {libraryInfo && libraryInfo.num_items > 50 ? (
+                  // For large libraries, show Sync All button
+                  <Button onClick={handleBulkSync} disabled={syncing || bulkSyncing}>
+                    {bulkSyncing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Sync All ({libraryInfo.num_items.toLocaleString()})
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  // For small libraries, use single sync
+                  <Button onClick={handleSaveSettings} disabled={syncing || bulkSyncing}>
+                    {syncing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      "Save & Sync"
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

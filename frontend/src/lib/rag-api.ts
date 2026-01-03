@@ -399,6 +399,10 @@ export interface ZoteroSyncResponse {
   pdfs_downloaded: number;
   errors?: string[];
   library_version?: number;
+  // For incremental sync support
+  has_more: boolean;
+  total_in_library: number;
+  total_synced_so_far: number;
 }
 
 /**
