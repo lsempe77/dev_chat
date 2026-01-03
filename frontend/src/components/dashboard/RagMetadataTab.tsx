@@ -216,7 +216,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     try {
       await updateRagDocumentMetadata(ragId, editingDoc.id, {
         ...editForm,
-        // Don't auto-remove from review - user can explicitly mark as reviewed
+        needs_review: false,
       });
       setEditingDoc(null);
       fetchDocuments();
@@ -349,7 +349,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={`h-full flex flex-col ${editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}`}>
+        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col" : "w-full"}>
           <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -380,8 +380,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex gap-4 mb-4 flex-shrink-0">
+          <CardContent className="flex-1 overflow-hidden">
+            <div className="flex gap-4 mb-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -422,11 +422,11 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             )}
 
             {isLoading ? (
-              <div className="flex items-center justify-center py-12 flex-1">
+              <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto min-h-0">
+              <ScrollArea className="h-full">
                 <div className="space-y-3 pr-2">
                   {filteredDocs.map((doc) => (
                     <Card 
@@ -454,12 +454,6 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                             </div>
 
                             <div className="flex flex-wrap gap-2 mb-2">
-                              {doc.needs_reprocessing && (
-                                <Badge variant="destructive" className="gap-1">
-                                  <AlertCircle className="h-3 w-3" />
-                                  Needs Reprocessing
-                                </Badge>
-                              )}
                               {getConfidenceBadge(doc.metadata_confidence)}
                               {getSourceBadge(doc.metadata_source)}
                               {doc.doi && (
@@ -567,7 +561,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </ScrollArea>
             )}
           </CardContent>
         </Card>
