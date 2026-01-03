@@ -38,13 +38,13 @@ const CompareField = ({ label, values, gridCols }: { label: string; values: (str
 export function CompareModal({ isOpen, onClose, studies, onRemoveStudy }: CompareModalProps) {
   if (studies.length === 0) return null;
 
-  // Calculate min width per study column (200px min, but responsive)
-  const minColWidth = Math.max(180, Math.floor(800 / Math.max(studies.length, 1)));
-  const gridCols = `120px repeat(${studies.length}, minmax(${minColWidth}px, 1fr))`;
+  // Calculate min width per study column (250px min for better readability)
+  const minColWidth = Math.max(250, Math.floor(1000 / Math.max(studies.length, 1)));
+  const gridCols = `140px repeat(${studies.length}, minmax(${minColWidth}px, 1fr))`;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[98vw] h-[90vh] w-full flex flex-col overflow-hidden">
+      <DialogContent className="max-w-[99vw] h-[92vh] w-full flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             Compare Studies
