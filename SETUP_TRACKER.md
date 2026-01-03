@@ -116,7 +116,7 @@ devchat_v2_sota/
 
 ### High Priority
 - [x] Admin authentication (protect `/admin` routes) ✅ Done
-- [ ] Processing status WebSocket (real-time updates)
+- [x] Processing status WebSocket (real-time updates) ✅ Done (Supabase Realtime)
 - [ ] Bulk import (RIS/BibTeX/CSV)
 - [ ] General 3ie admin panel (costs, metrics, users/rags, prompts quality, observability)
 
@@ -124,7 +124,8 @@ devchat_v2_sota/
 ### Medium Priority
 - [ ] Zotero OAuth integration
 - [ ] Advanced search filters in chat
-- [ ] Export citations (BibTeX format)
+- [] Export citations (RIS, Bibtext)
+- [x] Export citations (CSV, JSON) ✅ Done
 
 ### Future Exploration
 - [ ] RAPTOR hierarchical summarization

@@ -17,7 +17,10 @@ import {
   RefreshCw,
   Unlock,
   RotateCcw,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
+import { useProcessingRealtime, type ProcessingJob as RealtimeJob } from "@/hooks/useProcessingRealtime";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -59,14 +62,65 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
 
+  // Fetch documents (for realtime refresh callback)
+  const refreshDocuments = useCallback(async () => {
+    setIsRefreshing(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch documents");
+      const data = await response.json();
+      setDocuments(data.documents || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch documents");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [ragId, accessToken]);
+
+  // Real-time updates via Supabase Realtime
+  const { 
+    activeJob: realtimeJob, 
+    isConnected: realtimeConnected,
+    connectionError: realtimeError,
+  } = useProcessingRealtime({
+    ragId,
+    onJobUpdate: (job) => {
+      // Convert realtime job to local ProcessingJob type
+      // progress is already a percentage (0-100) from the database
+      setActiveJob({
+        id: job.id,
+        job_type: job.job_type,
+        status: job.status === "processing" ? "running" : job.status,
+        progress: job.progress,
+        message: job.message,
+        error_message: job.error_message,
+        created_at: job.created_at,
+      });
+    },
+    onDocumentUpdate: () => {
+      // Refresh document list when any document status changes
+      refreshDocuments();
+    },
+    onProcessingComplete: () => {
+      refreshDocuments();
+      onProcessingComplete?.();
+    },
+  });
+
   // Calculate stats from documents
   const pendingCount = documents.filter(d => d.status === "pending").length;
   const processingCount = documents.filter(d => d.status === "processing").length;
   const completedCount = documents.filter(d => d.status === "completed").length;
   const failedCount = documents.filter(d => d.status === "failed").length;
 
-  // Fetch processing jobs
+  // Fetch processing jobs (fallback when realtime not available)
   const fetchJobs = useCallback(async () => {
+    // Skip polling if realtime is connected
+    if (realtimeConnected) return;
+    
     try {
       const response = await fetch(`${API_BASE_URL}/rags/${ragId}/jobs`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -90,25 +144,7 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
     } catch (err) {
       console.error("Failed to fetch jobs:", err);
     }
-  }, [ragId, accessToken]);
-
-  // Fetch documents (not jobs)
-  const refreshDocuments = useCallback(async () => {
-    setIsRefreshing(true);
-    setError(null);
-    try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!response.ok) throw new Error("Failed to fetch documents");
-      const data = await response.json();
-      setDocuments(data.documents || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch documents");
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [ragId, accessToken]);
+  }, [ragId, accessToken, realtimeConnected]);
 
   // Initial load
   useEffect(() => {
@@ -116,17 +152,24 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
     fetchJobs();
   }, [refreshDocuments, fetchJobs]);
 
-  // Auto-refresh documents every 5 seconds
+  // Auto-refresh documents - less frequent when realtime is connected
   useEffect(() => {
-    const interval = setInterval(refreshDocuments, 5000);
+    // When realtime is connected, just refresh every 30s as a fallback
+    // When not connected, poll every 5s
+    const interval = setInterval(
+      refreshDocuments, 
+      realtimeConnected ? 30000 : 5000
+    );
     return () => clearInterval(interval);
-  }, [refreshDocuments]);
+  }, [refreshDocuments, realtimeConnected]);
 
-  // Poll jobs more frequently when there's an active job
+  // Poll jobs - only when realtime is not connected
   useEffect(() => {
+    if (realtimeConnected) return; // No polling needed
+    
     const interval = setInterval(fetchJobs, activeJob?.status === "running" ? 2000 : 10000);
     return () => clearInterval(interval);
-  }, [fetchJobs, activeJob?.status]);
+  }, [fetchJobs, activeJob?.status, realtimeConnected]);
 
   // Trigger processing
   const triggerProcessing = async () => {
@@ -357,6 +400,18 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
               <CardTitle className="flex items-center gap-2">
                 <Activity className="h-5 w-5" />
                 Document Processing Status
+                {/* Realtime connection indicator */}
+                {realtimeConnected ? (
+                  <span className="flex items-center gap-1 text-xs font-normal text-green-600 dark:text-green-400" title="Live updates enabled">
+                    <Wifi className="h-3 w-3" />
+                    Live
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground" title={realtimeError || "Polling for updates"}>
+                    <WifiOff className="h-3 w-3" />
+                    Polling
+                  </span>
+                )}
               </CardTitle>
               <CardDescription>
                 {lastTriggeredAt && (
