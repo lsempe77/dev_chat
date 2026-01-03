@@ -258,6 +258,80 @@ class ZoteroClient:
             logger.error(f"Failed to download PDF for item {item_key}: {e}")
             return False
 
+    def download_pdf_bytes(self, item_key: str) -> Optional[Tuple[bytes, str]]:
+        """
+        Download PDF attachment for an item and return bytes directly.
+
+        Args:
+            item_key: Zotero item key
+
+        Returns:
+            Tuple of (pdf_bytes, filename) if PDF available, None otherwise
+        """
+        try:
+            # Get children (attachments) of the item
+            children = self.zot.children(item_key)
+            
+            for child in children:
+                data = child.get("data", {})
+                if data.get("contentType") == "application/pdf":
+                    attachment_key = child["key"]
+                    filename = data.get("filename", f"{item_key}.pdf")
+                    
+                    # Download the file
+                    pdf_content = self.zot.file(attachment_key)
+                    
+                    logger.info(f"Downloaded PDF for item {item_key}: {filename} ({len(pdf_content)} bytes)")
+                    return pdf_content, filename
+            
+            logger.debug(f"No PDF attachment found for item {item_key}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to download PDF for item {item_key}: {e}")
+            return None
+
+    def get_items_with_attachments(
+        self,
+        collection_key: Optional[str] = None,
+        limit: int = 100,
+        start: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        Get items and check which have PDF attachments.
+
+        Args:
+            collection_key: Optional collection to fetch from
+            limit: Number of items per page
+            start: Starting offset for pagination
+
+        Returns:
+            List of normalized items with has_pdf flag
+        """
+        try:
+            if collection_key:
+                items = self.zot.collection_items(collection_key, limit=limit, start=start)
+            else:
+                items = self.zot.items(limit=limit, start=start)
+            
+            normalized = []
+            for item in self._normalize_items(items):
+                # Check for PDF attachment
+                try:
+                    children = self.zot.children(item["key"])
+                    has_pdf = any(
+                        c.get("data", {}).get("contentType") == "application/pdf"
+                        for c in children
+                    )
+                    item["has_pdf"] = has_pdf
+                except Exception:
+                    item["has_pdf"] = False
+                normalized.append(item)
+            
+            return normalized
+        except Exception as e:
+            logger.error(f"Failed to get items with attachments: {e}")
+            raise
+
     def _normalize_items(self, items: List[Dict]) -> List[Dict[str, Any]]:
         """
         Normalize Zotero items to a consistent format.

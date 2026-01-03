@@ -4,6 +4,8 @@ Zotero Integration API Routes for RAG Projects
 Handles Zotero account connection, collection listing, and item sync.
 """
 
+import hashlib
+import os
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
@@ -14,6 +16,7 @@ from pydantic import BaseModel, Field
 from src.auth import AuthenticatedUser, get_current_user, get_supabase_client
 from src.utils.logging import get_logger
 from src.utils.zotero_client import ZoteroClient, validate_zotero_credentials
+from .dependencies import get_r2_client
 
 logger = get_logger(__name__)
 
@@ -419,9 +422,7 @@ async def sync_from_zotero(
     1. Fetch items from Zotero (optionally from a specific collection)
     2. Match with existing documents by DOI/title
     3. Update metadata for matched documents
-    4. Optionally download PDFs for new items
-    
-    Note: This is a placeholder for full sync implementation.
+    4. Optionally download PDFs for new items and upload to R2
     """
     # Verify project ownership
     project = await get_user_project(user, project_id)
@@ -434,41 +435,197 @@ async def sync_from_zotero(
             detail="No Zotero connection found. Please connect Zotero first."
         )
     
+    errors: List[str] = []
+    items_synced = 0
+    items_updated = 0
+    items_failed = 0
+    pdfs_downloaded = 0
+    
     try:
-        client = ZoteroClient(
+        zotero_client = ZoteroClient(
             connection["api_key"],
             connection["zotero_user_id"],
             connection["library_type"]
         )
         
-        # Get items (from collection or entire library)
-        version = None
-        if request.collection_key:
-            items, total = client.get_collection_items(request.collection_key)
-        else:
-            items, total, version = client.get_all_items()
-        
-        # TODO: Implement full sync logic:
-        # 1. Match items with existing documents by DOI
-        # 2. Update metadata for matched documents
-        # 3. Create new documents for unmatched items (if PDFs available)
-        # 4. Download PDFs if sync_pdfs is True
-        
-        # For now, just update the sync metadata
         supabase = get_supabase_client()
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # Get items with attachment info
+        logger.info(f"Fetching items from Zotero for project {project_id}")
+        items = zotero_client.get_items_with_attachments(
+            collection_key=request.collection_key,
+            limit=100  # Fetch up to 100 items
+        )
+        
+        logger.info(f"Found {len(items)} items in Zotero")
+        
+        # Get existing documents for matching
+        existing_docs = supabase.table("documents").select(
+            "id, filename, original_filename, metadata"
+        ).eq("rag_project_id", project_id).execute()
+        
+        # Build lookup maps for matching
+        doi_map = {}  # DOI -> document
+        title_map = {}  # lowercase title -> document
+        for doc in existing_docs.data:
+            meta = doc.get("metadata", {}) or {}
+            if meta.get("doi"):
+                doi_map[meta["doi"].lower().strip()] = doc
+            if meta.get("title"):
+                title_map[meta["title"].lower().strip()] = doc
+        
+        for item in items:
+            try:
+                item_key = item["key"]
+                item_title = item.get("title", "")
+                item_doi = item.get("doi", "")
+                
+                # Try to match with existing document
+                matched_doc = None
+                match_method = None
+                
+                if item_doi:
+                    normalized_doi = item_doi.lower().strip()
+                    if normalized_doi in doi_map:
+                        matched_doc = doi_map[normalized_doi]
+                        match_method = "doi"
+                
+                if not matched_doc and item_title:
+                    normalized_title = item_title.lower().strip()
+                    if normalized_title in title_map:
+                        matched_doc = title_map[normalized_title]
+                        match_method = "title"
+                
+                if matched_doc:
+                    # Update metadata for matched document
+                    zotero_metadata = {
+                        "zotero_key": item_key,
+                        "zotero_synced_at": datetime.utcnow().isoformat(),
+                        "item_type": item.get("item_type"),
+                        "authors": item.get("authors", []),
+                        "year": item.get("year"),
+                        "journal": item.get("journal"),
+                        "volume": item.get("volume"),
+                        "issue": item.get("issue"),
+                        "pages": item.get("pages"),
+                        "abstract": item.get("abstract"),
+                        "doi": item.get("doi") or matched_doc.get("metadata", {}).get("doi"),
+                        "url": item.get("url"),
+                        "metadata_source": "zotero",
+                    }
+                    
+                    # Merge with existing metadata
+                    existing_meta = matched_doc.get("metadata", {}) or {}
+                    merged_meta = {**existing_meta, **zotero_metadata}
+                    
+                    supabase.table("documents").update({
+                        "metadata": merged_meta
+                    }).eq("id", matched_doc["id"]).execute()
+                    
+                    items_updated += 1
+                    logger.debug(f"Updated metadata for document {matched_doc['id']} from Zotero item {item_key} (matched by {match_method})")
+                    
+                elif request.sync_pdfs and item.get("has_pdf"):
+                    # No match - download PDF and create new document
+                    pdf_result = zotero_client.download_pdf_bytes(item_key)
+                    
+                    if pdf_result:
+                        pdf_bytes, original_filename = pdf_result
+                        
+                        # Generate content hash
+                        content_hash = hashlib.sha256(pdf_bytes).hexdigest()[:16]
+                        safe_filename = original_filename.replace(" ", "_").replace("/", "_")
+                        base_name = os.path.splitext(safe_filename)[0]
+                        
+                        # Check if this exact content already exists
+                        existing_hash = supabase.table("documents").select("id").eq(
+                            "rag_project_id", project_id
+                        ).ilike("metadata->>content_hash", content_hash).execute()
+                        
+                        if existing_hash.data:
+                            logger.debug(f"Skipping {original_filename} - content already exists")
+                            continue
+                        
+                        # Upload to R2
+                        doc_id = f"{content_hash}_{base_name}"
+                        r2_key = f"rags/{project_id}/input-pdfs/{doc_id}.pdf"
+                        
+                        r2_client.put_object(
+                            Bucket=bucket_name,
+                            Key=r2_key,
+                            Body=pdf_bytes,
+                            ContentType="application/pdf",
+                            Metadata={
+                                "doc_id": doc_id,
+                                "content_hash": content_hash,
+                                "original_filename": original_filename,
+                                "upload_timestamp": datetime.utcnow().isoformat(),
+                                "project_id": project_id,
+                                "source": "zotero",
+                                "zotero_key": item_key,
+                            }
+                        )
+                        
+                        # Create document record
+                        doc_metadata = {
+                            "content_hash": content_hash,
+                            "zotero_key": item_key,
+                            "zotero_synced_at": datetime.utcnow().isoformat(),
+                            "title": item.get("title"),
+                            "item_type": item.get("item_type"),
+                            "authors": item.get("authors", []),
+                            "year": item.get("year"),
+                            "journal": item.get("journal"),
+                            "volume": item.get("volume"),
+                            "issue": item.get("issue"),
+                            "pages": item.get("pages"),
+                            "abstract": item.get("abstract"),
+                            "doi": item.get("doi"),
+                            "url": item.get("url"),
+                            "metadata_source": "zotero",
+                        }
+                        
+                        supabase.table("documents").upsert({
+                            "rag_project_id": project_id,
+                            "filename": doc_id,
+                            "original_filename": original_filename,
+                            "file_size_bytes": len(pdf_bytes),
+                            "mime_type": "application/pdf",
+                            "status": "pending",
+                            "r2_input_key": r2_key,
+                            "metadata": doc_metadata,
+                        }, on_conflict="filename,rag_project_id").execute()
+                        
+                        pdfs_downloaded += 1
+                        logger.info(f"Downloaded and uploaded PDF from Zotero: {original_filename}")
+                
+                items_synced += 1
+                
+            except Exception as item_error:
+                items_failed += 1
+                error_msg = f"Failed to sync item {item.get('key', 'unknown')}: {str(item_error)}"
+                errors.append(error_msg)
+                logger.warning(error_msg)
+        
+        # Update sync metadata
         supabase.table("zotero_connections").update({
             "last_synced_at": datetime.utcnow().isoformat(),
-            "total_items_synced": len(items),
-            "last_sync_error": None,
+            "total_items_synced": items_synced,
+            "last_sync_error": errors[0] if errors else None,
         }).eq("id", connection["id"]).execute()
         
+        logger.info(f"Zotero sync complete: {items_synced} synced, {items_updated} updated, {pdfs_downloaded} PDFs downloaded, {items_failed} failed")
+        
         return ZoteroSyncResponse(
-            success=True,
-            items_synced=len(items),
-            items_updated=0,  # TODO: track actual updates
-            items_failed=0,
-            pdfs_downloaded=0,
-            library_version=version if not request.collection_key else None,
+            success=items_failed == 0,
+            items_synced=items_synced,
+            items_updated=items_updated,
+            items_failed=items_failed,
+            pdfs_downloaded=pdfs_downloaded,
+            errors=errors if errors else None,
+            library_version=None,
         )
         
     except Exception as e:
