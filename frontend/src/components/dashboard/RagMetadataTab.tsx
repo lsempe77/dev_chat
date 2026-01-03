@@ -47,6 +47,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
   // State
   const [documents, setDocuments] = useState<MetadataDetail[]>([]);
   const [filterType, setFilterType] = useState<"all" | "needs_review">("needs_review");
+  const [confidenceFilter, setConfidenceFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [stats, setStats] = useState({
     needsReview: 0,
@@ -114,11 +115,25 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     fetchDocuments();
   }, [fetchDocuments]);
 
-  // Filter by search
-  const filteredDocs = documents.filter(doc => 
-    doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter by search and confidence
+  const filteredDocs = documents.filter(doc => {
+    // Search filter
+    const matchesSearch = 
+      doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      doc.filename.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    
+    // Confidence filter
+    if (confidenceFilter === "all") return true;
+    
+    const confidence = doc.metadata_confidence ?? 0;
+    if (confidenceFilter === "high") return confidence >= 0.8;
+    if (confidenceFilter === "medium") return confidence >= 0.5 && confidence < 0.8;
+    if (confidenceFilter === "low") return confidence < 0.5;
+    
+    return true;
+  });
 
   // Convert MetadataDetail to DocumentMetadataDetail for edit panel compatibility
   const toDocumentMetadataDetail = (doc: MetadataDetail): DocumentMetadataDetail => ({
@@ -220,9 +235,21 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
         updateData.needs_review = false;
       }
       await updateRagDocumentMetadata(ragId, editingDoc.id, updateData);
+      
+      // Update the document in-place in the list (so it doesn't disappear)
+      setDocuments(prev => prev.map(doc => 
+        doc.id === editingDoc.id 
+          ? { ...doc, ...editForm, needs_review: markAsReviewedOnSave ? false : doc.needs_review }
+          : doc
+      ));
+      
+      // Update stats if we marked as reviewed
+      if (markAsReviewedOnSave && editingDoc.needs_review) {
+        setStats(prev => ({ ...prev, needsReview: Math.max(0, prev.needsReview - 1) }));
+      }
+      
       setEditingDoc(null);
       setMarkAsReviewedOnSave(true); // Reset for next edit
-      fetchDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save changes");
     } finally {
@@ -378,24 +405,61 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
             </div>
           </CardHeader>
           <CardContent className="px-3 pt-0 pb-3 flex-1 flex flex-col overflow-hidden">
-            <div className="flex gap-1 mb-2 flex-shrink-0">
-              <div className="flex-1 min-w-0">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-7 h-7 text-xs"
-                  />
+            <div className="flex flex-col gap-1 mb-2 flex-shrink-0">
+              <div className="flex gap-1">
+                <div className="flex-1 min-w-0">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-7 h-7 text-xs"
+                    />
+                  </div>
                 </div>
+                <Tabs value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
+                  <TabsList className="h-7">
+                    <TabsTrigger value="needs_review" className="text-xs px-2 h-6">⚠️</TabsTrigger>
+                    <TabsTrigger value="all" className="text-xs px-2 h-6">All</TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
-              <Tabs value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
-                <TabsList className="h-7">
-                  <TabsTrigger value="needs_review" className="text-xs px-2 h-6">⚠️</TabsTrigger>
-                  <TabsTrigger value="all" className="text-xs px-2 h-6">All</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              {/* Confidence filter */}
+              <div className="flex gap-1">
+                <Button 
+                  variant={confidenceFilter === "all" ? "secondary" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setConfidenceFilter("all")}
+                  className="h-6 text-xs px-2 flex-1"
+                >
+                  All
+                </Button>
+                <Button 
+                  variant={confidenceFilter === "high" ? "secondary" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setConfidenceFilter("high")}
+                  className="h-6 text-xs px-2 flex-1 text-green-600"
+                >
+                  High
+                </Button>
+                <Button 
+                  variant={confidenceFilter === "medium" ? "secondary" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setConfidenceFilter("medium")}
+                  className="h-6 text-xs px-2 flex-1 text-yellow-600"
+                >
+                  Med
+                </Button>
+                <Button 
+                  variant={confidenceFilter === "low" ? "secondary" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setConfidenceFilter("low")}
+                  className="h-6 text-xs px-2 flex-1 text-red-600"
+                >
+                  Low
+                </Button>
+              </div>
             </div>
 
             {error && (
