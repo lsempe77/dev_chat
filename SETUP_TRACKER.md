@@ -116,9 +116,12 @@ devchat_v2_sota/
 
 ### High Priority
 - [x] Admin authentication (protect `/admin` routes) ✅ Done
-- [x] Processing status WebSocket (real-time updates) ✅ Done (Supabase Realtime)
+- [x] Processing status WebSocket (real-time updates) ✅ Code ready (polling fallback works)
 - [ ] Bulk import (RIS/BibTeX/CSV)
 - [ ] General 3ie admin panel (costs, metrics, users/rags, prompts quality, observability)
+
+### Waiting on External
+- [ ] Enable Supabase Realtime when beta access granted (run SQL: `ALTER PUBLICATION supabase_realtime ADD TABLE processing_jobs, documents;`)
 
 
 ### Medium Priority

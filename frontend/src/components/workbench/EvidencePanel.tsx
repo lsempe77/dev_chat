@@ -97,6 +97,32 @@ export function EvidencePanel({
     URL.revokeObjectURL(url);
   };
 
+  // Export as BibTeX format
+  const handleExportBibTeX = () => {
+    const entries = studies.map((s) => {
+      const citeKey = `${(s.authors || "unknown").split(",")[0].trim().toLowerCase().replace(/\s+/g, "")}${s.year || "nd"}`;
+      const authors = s.authors || "Unknown";
+      const title = s.title || "Untitled";
+      const year = s.year || "";
+      
+      return `@article{${citeKey},
+  title = {${title.replace(/[{}]/g, "")}},
+  author = {${authors.replace(/[{}]/g, "")}},
+  year = {${year}},
+  note = {Retrieved via DevChat evidence search}
+}`;
+    });
+    
+    const bibtex = entries.join("\n\n");
+    const blob = new Blob([bibtex], { type: "application/x-bibtex" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `evidence_results_${new Date().toISOString().split("T")[0]}.bib`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
@@ -125,6 +151,10 @@ export function EvidencePanel({
               <Button variant="outline" size="sm" onClick={handleExportJSON} title="Download as JSON">
                 <Download className="h-3 w-3 mr-1" />
                 JSON
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportBibTeX} title="Download as BibTeX">
+                <Download className="h-3 w-3 mr-1" />
+                BibTeX
               </Button>
             </div>
           )}
