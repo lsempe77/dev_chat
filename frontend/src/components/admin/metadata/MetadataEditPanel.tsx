@@ -34,6 +34,8 @@ interface MetadataEditPanelProps {
   onViewPdf: () => void;
   isSaving: boolean;
   isPdfOpen: boolean;
+  markAsReviewed?: boolean;
+  setMarkAsReviewed?: (value: boolean) => void;
 }
 
 export function MetadataEditPanel({
@@ -45,6 +47,8 @@ export function MetadataEditPanel({
   onViewPdf,
   isSaving,
   isPdfOpen,
+  markAsReviewed = true,
+  setMarkAsReviewed,
 }: MetadataEditPanelProps) {
   // Local state for authors string (allows spaces while typing)
   const [authorsText, setAuthorsText] = useState("");
@@ -492,7 +496,19 @@ export function MetadataEditPanel({
       </ScrollArea>
 
       {/* Footer with Save/Cancel */}
-      <div className="flex items-center justify-end gap-2 px-4 py-3 border-t bg-muted/30 flex-shrink-0">
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t bg-muted/30 flex-shrink-0">
+        {setMarkAsReviewed && (
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={markAsReviewed}
+              onChange={(e) => setMarkAsReviewed(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            <span className="text-muted-foreground">Mark as reviewed</span>
+          </label>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
         <Button variant="outline" size="sm" onClick={onClose}>
           Cancel
         </Button>
@@ -509,6 +525,7 @@ export function MetadataEditPanel({
             </>
           )}
         </Button>
+        </div>
       </div>
     </div>
   );

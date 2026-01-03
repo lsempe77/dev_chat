@@ -66,6 +66,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
   const [isEnrichingAll, setIsEnrichingAll] = useState(false);
   const [enrichAllResult, setEnrichAllResult] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [markAsReviewedOnSave, setMarkAsReviewedOnSave] = useState(true);
 
   // Open PDF viewer
   const openPdfViewer = async (doc: MetadataDetail) => {
@@ -214,11 +215,13 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     
     setIsSaving(true);
     try {
-      await updateRagDocumentMetadata(ragId, editingDoc.id, {
-        ...editForm,
-        needs_review: false,
-      });
+      const updateData: any = { ...editForm };
+      if (markAsReviewedOnSave) {
+        updateData.needs_review = false;
+      }
+      await updateRagDocumentMetadata(ragId, editingDoc.id, updateData);
       setEditingDoc(null);
+      setMarkAsReviewedOnSave(true); // Reset for next edit
       fetchDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save changes");
@@ -572,6 +575,8 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               onViewPdf={() => openPdfViewer(editingDoc)}
               isSaving={isSaving}
               isPdfOpen={viewingPdfDoc?.id === editingDoc.id}
+              markAsReviewed={markAsReviewedOnSave}
+              setMarkAsReviewed={setMarkAsReviewedOnSave}
             />
           </div>
         )}
