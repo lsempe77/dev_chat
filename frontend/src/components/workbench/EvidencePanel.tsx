@@ -107,11 +107,15 @@ export function EvidencePanel({
           </span>
         </h2>
         <div className="flex items-center gap-2">
-          {selectedStudies.length > 0 && (
+          {selectedStudies.length > 0 ? (
             <span className="text-sm text-purple-600 dark:text-purple-400">
               {selectedStudies.length} selected
             </span>
-          )}
+          ) : studies.length > 1 ? (
+            <span className="text-xs text-muted-foreground italic">
+              Select 2+ to compare
+            </span>
+          ) : null}
           {studies.length > 0 && (
             <div className="flex gap-1">
               <Button variant="outline" size="sm" onClick={handleExportCSV} title="Download as CSV">

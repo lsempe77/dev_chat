@@ -313,8 +313,22 @@ export function AnswerPanel({
             </Card>
           )}
 
-          {/* Query Coaching */}
-          {suggestions.length > 0 && (
+          {/* Query Coaching - show loading skeleton or suggestions */}
+          {isLoading ? (
+            <Card className="bg-muted/50">
+              <CardContent className="pt-4">
+                <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <Lightbulb className="h-4 w-4" />
+                  Try next
+                </h3>
+                <div className="space-y-2">
+                  <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
+                  <div className="h-4 bg-muted rounded w-2/3 animate-pulse"></div>
+                  <div className="h-4 bg-muted rounded w-4/5 animate-pulse"></div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : suggestions.length > 0 ? (
             <Card className="bg-muted/50">
               <CardContent className="pt-4">
                 <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
@@ -334,7 +348,7 @@ export function AnswerPanel({
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
 
         </div>

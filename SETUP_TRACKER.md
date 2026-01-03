@@ -111,6 +111,8 @@ devchat_v2_sota/
 - [ ] Admin authentication (protect `/admin` routes)
 - [ ] Processing status WebSocket (real-time updates)
 - [ ] Bulk import (RIS/BibTeX/CSV)
+- [ ] General 3ie admin panel (costs, metrics, users/rags, prompts quality)
+
 
 ### Medium Priority
 - [ ] Zotero OAuth integration

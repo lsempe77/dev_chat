@@ -229,14 +229,32 @@ async def query_evidence(request: QueryRequest):
                         seen_ids.add(s.id)
                         unique_studies.append(s)
                 
-                # Calculate evidence health
+                # Calculate evidence health with richer metrics
                 years = [s.year for s in unique_studies if s.year]
                 date_range = f"{min(years)}-{max(years)}" if years else "Unknown"
                 
                 gaps = []
-                countries_found = set(s.country for s in unique_studies)
+                
+                # Check geographic diversity
+                countries_found = set(s.country for s in unique_studies if s.country)
                 if len(countries_found) < 3:
-                    gaps.append(f"Limited geographic coverage ({len(countries_found)} countries)")
+                    gaps.append(f"Limited geographic coverage ({len(countries_found)} {'country' if len(countries_found) == 1 else 'countries'})")
+                
+                # Check methodology diversity
+                study_types = set(s.studyType for s in unique_studies if s.studyType)
+                if len(study_types) < 2:
+                    gaps.append(f"Limited methodology diversity ({len(study_types)} study type{'s' if len(study_types) != 1 else ''})")
+                
+                # Check recency (if most studies are old)
+                current_year = 2026
+                recent_studies = [s for s in unique_studies if s.year and s.year >= current_year - 5]
+                if len(unique_studies) > 0 and len(recent_studies) / len(unique_studies) < 0.3:
+                    gaps.append(f"Most studies are older than 5 years ({len(recent_studies)}/{len(unique_studies)} recent)")
+                
+                # Check confidence distribution
+                high_confidence = [s for s in unique_studies if s.confidence == "high"]
+                if len(unique_studies) > 2 and len(high_confidence) / len(unique_studies) < 0.3:
+                    gaps.append(f"Low proportion of high-confidence studies ({len(high_confidence)}/{len(unique_studies)})")
                 
                 evidence_health = EvidenceHealth(
                     studyCount=len(unique_studies),
