@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from api.qdrant_status import warm_up_qdrant_connection
 from api.routes import admin_router, api_router, chat_router, health_router, router
 from api.routes.rags import router as rags_router
+from api.routes.zotero import router as zotero_router
 from src.config.settings import settings
 
 # Note: Routes are now organized in api/routes/ package:
@@ -187,6 +188,7 @@ app.include_router(chat_router)
 app.include_router(admin_router)
 app.include_router(api_router)  # Frontend API endpoints
 app.include_router(rags_router)  # Multi-tenant RAG project management
+app.include_router(zotero_router)  # Zotero integration
 
 
 # Simple health endpoint that doesn't collide with the richer /health response

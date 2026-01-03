@@ -348,3 +348,212 @@ export async function deleteRagDocument(
   
   return response.json();
 }
+
+// =============================================================================
+// Zotero Integration API
+// =============================================================================
+
+export interface ZoteroConnection {
+  id: string;
+  rag_project_id: string;
+  zotero_user_id: string;
+  library_type: string;
+  selected_collection_key: string | null;
+  auto_sync_enabled: boolean;
+  sync_pdfs: boolean;
+  last_synced_at: string | null;
+  last_sync_version: number | null;
+  total_items_synced: number;
+  connected_at: string;
+  last_sync_error: string | null;
+}
+
+export interface ZoteroLibraryInfo {
+  library_id: string;
+  library_type: string;
+  name: string;
+  num_items: number;
+  num_collections: number;
+}
+
+export interface ZoteroCollection {
+  key: string;
+  name: string;
+  num_items: number;
+  parent_collection: string | null;
+}
+
+export interface ZoteroValidateResponse {
+  valid: boolean;
+  message?: string;
+  error?: string;
+  library_info?: ZoteroLibraryInfo;
+  suggestions?: string[];
+}
+
+export interface ZoteroSyncResponse {
+  success: boolean;
+  items_synced: number;
+  items_updated: number;
+  items_failed: number;
+  pdfs_downloaded: number;
+  errors?: string[];
+  library_version?: number;
+}
+
+/**
+ * Validate Zotero credentials without saving
+ */
+export async function validateZoteroCredentials(
+  ragId: string,
+  apiKey: string,
+  zoteroUserId: string,
+  libraryType: string = "user"
+): Promise<ZoteroValidateResponse> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/zotero/validate-credentials`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        api_key: apiKey,
+        zotero_user_id: zoteroUserId,
+        library_type: libraryType,
+      }),
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to validate credentials: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Connect Zotero to a RAG project
+ */
+export async function connectZotero(
+  ragId: string,
+  apiKey: string,
+  zoteroUserId: string,
+  libraryType: string = "user",
+  selectedCollectionKey?: string,
+  syncPdfs: boolean = true
+): Promise<ZoteroConnection> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/zotero/connect`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        api_key: apiKey,
+        zotero_user_id: zoteroUserId,
+        library_type: libraryType,
+        selected_collection_key: selectedCollectionKey || null,
+        sync_pdfs: syncPdfs,
+      }),
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to connect Zotero: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Get existing Zotero connection for a RAG project
+ */
+export async function getZoteroConnection(ragId: string): Promise<ZoteroConnection | null> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/zotero/connection`
+  );
+  
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to get connection: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Disconnect Zotero from a RAG project
+ */
+export async function disconnectZotero(ragId: string): Promise<void> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/zotero/disconnect`,
+    {
+      method: "DELETE",
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to disconnect: ${response.statusText}`);
+  }
+}
+
+/**
+ * Get Zotero library info
+ */
+export async function getZoteroLibraryInfo(ragId: string): Promise<ZoteroLibraryInfo> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/zotero/library-info`
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to get library info: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * List Zotero collections
+ */
+export async function getZoteroCollections(ragId: string): Promise<ZoteroCollection[]> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/zotero/collections`
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to get collections: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Sync items from Zotero
+ */
+export async function syncFromZotero(
+  ragId: string,
+  collectionKey?: string,
+  syncPdfs: boolean = true
+): Promise<ZoteroSyncResponse> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/rags/${ragId}/zotero/sync`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        collection_key: collectionKey || null,
+        sync_pdfs: syncPdfs,
+      }),
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to sync: ${response.statusText}`);
+  }
+  
+  return response.json();
+}

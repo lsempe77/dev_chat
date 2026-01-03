@@ -23,8 +23,11 @@ import {
   Lock,
   Copy,
   Check,
+  Library,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
+import { ConnectZoteroModal } from "./ConnectZoteroModal";
+import { getZoteroConnection, type ZoteroConnection } from "@/lib/rag-api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -98,6 +101,11 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   const [isResettingDocuments, setIsResettingDocuments] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [dangerConfirm, setDangerConfirm] = useState<string | null>(null);
+  
+  // Zotero state
+  const [zoteroModalOpen, setZoteroModalOpen] = useState(false);
+  const [zoteroConnection, setZoteroConnection] = useState<ZoteroConnection | null>(null);
+  const [loadingZotero, setLoadingZotero] = useState(true);
   
   // Connection status
   const [connections, setConnections] = useState<ConnectionStatus[]>([
@@ -183,6 +191,23 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+  
+  // Fetch Zotero connection status
+  const fetchZoteroStatus = useCallback(async () => {
+    setLoadingZotero(true);
+    try {
+      const connection = await getZoteroConnection(ragId);
+      setZoteroConnection(connection);
+    } catch (err) {
+      console.error("Failed to check Zotero connection:", err);
+    } finally {
+      setLoadingZotero(false);
+    }
+  }, [ragId]);
+  
+  useEffect(() => {
+    fetchZoteroStatus();
+  }, [fetchZoteroStatus]);
   
   // Update local state when project changes
   useEffect(() => {
@@ -407,6 +432,86 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
           </div>
         </CardContent>
       </Card>
+
+      {/* Zotero Integration */}
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Library className="h-5 w-5" />
+            Zotero Integration
+          </CardTitle>
+          <CardDescription>
+            Connect your Zotero library to sync references and PDFs
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingZotero ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking connection...
+            </div>
+          ) : zoteroConnection ? (
+            <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <span className="font-medium text-green-600">Connected to Zotero</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-muted-foreground">Library Type</div>
+                <div className="font-medium capitalize">{zoteroConnection.library_type}</div>
+                <div className="text-muted-foreground">User/Group ID</div>
+                <div className="font-medium">{zoteroConnection.zotero_user_id}</div>
+                <div className="text-muted-foreground">Items Synced</div>
+                <div className="font-medium">{zoteroConnection.total_items_synced}</div>
+                {zoteroConnection.last_synced_at && (
+                  <>
+                    <div className="text-muted-foreground">Last Synced</div>
+                    <div className="font-medium">
+                      {new Date(zoteroConnection.last_synced_at).toLocaleString()}
+                    </div>
+                  </>
+                )}
+                {zoteroConnection.last_sync_error && (
+                  <div className="col-span-2 text-red-600 text-xs mt-2">
+                    Error: {zoteroConnection.last_sync_error}
+                  </div>
+                )}
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setZoteroModalOpen(true)}
+                className="mt-2"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Manage Connection
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <Library className="h-12 w-12 text-muted-foreground mb-3" />
+              <h3 className="font-medium mb-1">No Zotero Connection</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Connect your Zotero account to sync your reference library
+              </p>
+              <Button onClick={() => setZoteroModalOpen(true)}>
+                <Library className="h-4 w-4 mr-2" />
+                Connect Zotero
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Zotero Modal */}
+      <ConnectZoteroModal
+        ragId={ragId}
+        open={zoteroModalOpen}
+        onOpenChange={setZoteroModalOpen}
+        onSuccess={() => {
+          fetchZoteroStatus();
+        }}
+      />
 
       {/* Project Settings */}
       <Card className="md:col-span-2">
