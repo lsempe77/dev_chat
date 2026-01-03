@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { 
   Activity, 
   Play, 
@@ -15,6 +16,7 @@ import {
   FileText,
   RefreshCw,
   Unlock,
+  RotateCcw,
 } from "lucide-react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -30,6 +32,16 @@ interface Document {
   processed_at: string | null;
 }
 
+interface ProcessingJob {
+  id: string;
+  job_type: string;
+  status: "pending" | "running" | "completed" | "failed";
+  progress: number;
+  message: string | null;
+  error_message?: string | null;
+  created_at: string;
+}
+
 interface RagProcessingTabProps {
   ragId: string;
   accessToken: string;
@@ -38,9 +50,11 @@ interface RagProcessingTabProps {
 
 export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: RagProcessingTabProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [activeJob, setActiveJob] = useState<ProcessingJob | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
   const [isClearingLocks, setIsClearingLocks] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
@@ -50,6 +64,33 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   const processingCount = documents.filter(d => d.status === "processing").length;
   const completedCount = documents.filter(d => d.status === "completed").length;
   const failedCount = documents.filter(d => d.status === "failed").length;
+
+  // Fetch processing jobs
+  const fetchJobs = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/jobs`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Find the most recent running job
+        const jobs: ProcessingJob[] = data.jobs || [];
+        const runningJob = jobs.find(j => j.status === "running");
+        const recentJob = jobs[0]; // Most recent
+        
+        // If there's a running job, or a recently completed one (within 10s), show it
+        if (runningJob) {
+          setActiveJob(runningJob);
+        } else if (recentJob && (Date.now() - new Date(recentJob.created_at).getTime()) < 60000) {
+          setActiveJob(recentJob);
+        } else {
+          setActiveJob(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch jobs:", err);
+    }
+  }, [ragId, accessToken]);
 
   // Fetch documents (not jobs)
   const refreshDocuments = useCallback(async () => {
@@ -72,13 +113,20 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   // Initial load
   useEffect(() => {
     refreshDocuments();
-  }, [refreshDocuments]);
+    fetchJobs();
+  }, [refreshDocuments, fetchJobs]);
 
-  // Auto-refresh every 5 seconds
+  // Auto-refresh documents every 5 seconds
   useEffect(() => {
     const interval = setInterval(refreshDocuments, 5000);
     return () => clearInterval(interval);
   }, [refreshDocuments]);
+
+  // Poll jobs more frequently when there's an active job
+  useEffect(() => {
+    const interval = setInterval(fetchJobs, activeJob?.status === "running" ? 2000 : 10000);
+    return () => clearInterval(interval);
+  }, [fetchJobs, activeJob?.status]);
 
   // Trigger processing
   const triggerProcessing = async () => {
@@ -118,6 +166,29 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
       setError(err instanceof Error ? err.message : "Failed to clear locks");
     } finally {
       setIsClearingLocks(false);
+    }
+  };
+
+  // Retry failed documents
+  const retryFailed = async () => {
+    setIsRetrying(true);
+    setError(null);
+    try {
+      // Reset failed documents to pending, then trigger processing
+      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/retry-failed`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) throw new Error("Failed to retry failed documents");
+      const data = await response.json();
+      setTriggerMessage(data.message || "Retrying failed documents...");
+      setLastTriggeredAt(new Date());
+      await refreshDocuments();
+      await fetchJobs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to retry failed documents");
+    } finally {
+      setIsRetrying(false);
     }
   };
 
@@ -183,6 +254,47 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
             Dismiss
           </Button>
         </div>
+      )}
+
+      {/* Active Job Progress */}
+      {activeJob && (
+        <Card className={
+          activeJob.status === "running" 
+            ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30"
+            : activeJob.status === "completed"
+            ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
+            : activeJob.status === "failed"
+            ? "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30"
+            : ""
+        }>
+          <CardContent className="pt-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {activeJob.status === "running" ? (
+                    <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                  ) : activeJob.status === "completed" ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                  )}
+                  <span className="font-medium">
+                    {activeJob.status === "running" ? "Processing Documents..." : 
+                     activeJob.status === "completed" ? "Processing Complete" : "Processing Failed"}
+                  </span>
+                </div>
+                <span className="text-sm font-medium">{activeJob.progress}%</span>
+              </div>
+              <Progress value={activeJob.progress} className="h-2" />
+              {activeJob.message && (
+                <p className="text-sm text-muted-foreground">{activeJob.message}</p>
+              )}
+              {activeJob.error_message && (
+                <p className="text-sm text-red-600 dark:text-red-400">{activeJob.error_message}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats Cards */}
@@ -291,6 +403,22 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
                 )}
                 Process Pending ({pendingCount})
               </Button>
+              {failedCount > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={retryFailed}
+                  disabled={isRetrying}
+                  className="text-red-600 hover:text-red-700 border-red-300"
+                >
+                  {isRetrying ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                  )}
+                  Retry Failed ({failedCount})
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

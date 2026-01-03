@@ -809,6 +809,7 @@ class JobResponse(BaseModel):
     status: str
     progress: int
     message: Optional[str]
+    error_message: Optional[str] = None
     created_at: datetime
 
 
@@ -835,6 +836,7 @@ async def list_project_jobs(
             status=j["status"],
             progress=j.get("progress", 0),
             message=j.get("message"),
+            error_message=j.get("error_message"),
             created_at=j["created_at"],
         )
         for j in result.data or []
@@ -981,6 +983,58 @@ async def clear_project_locks(
         }).eq("rag_project_id", project_id).eq("status", "processing").execute()
     
     return {"message": f"Cleared {stuck_count} stuck documents", "cleared": stuck_count}
+
+
+@router.post("/{project_id}/retry-failed")
+async def retry_failed_documents(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Retry processing failed documents.
+    Resets their status to 'pending' and triggers reprocessing.
+    """
+    import httpx
+    
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Find failed documents
+    failed_result = client.table("documents").select("id, original_filename").eq("rag_project_id", project_id).eq("status", "failed").execute()
+    failed_count = len(failed_result.data or [])
+    
+    if failed_count == 0:
+        return {"message": "No failed documents to retry", "retried": 0}
+    
+    # Reset to pending
+    doc_ids = [d["id"] for d in failed_result.data]
+    client.table("documents").update({
+        "status": "pending",
+        "error_message": None,
+        "updated_at": datetime.utcnow().isoformat(),
+    }).in_("id", doc_ids).execute()
+    
+    # Trigger Modal processing
+    modal_webhook_url = os.environ.get("MODAL_WEBHOOK_URL")
+    
+    if modal_webhook_url:
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as http_client:
+                response = await http_client.post(
+                    modal_webhook_url,
+                    json={
+                        "project_id": project_id,
+                        "force_reprocess": False,
+                        "max_documents": 0,
+                    },
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"Modal triggered for retry: {result}")
+        except Exception as e:
+            logger.error(f"Modal webhook error on retry: {e}")
+    
+    return {"message": f"Retrying {failed_count} failed documents", "retried": failed_count}
 
 
 # =============================================================================

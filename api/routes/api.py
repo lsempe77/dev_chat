@@ -384,7 +384,7 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
         session_id: Optional session ID for anonymous users
         limit: Maximum number of history items to return
     """
-    from src.database.supabase_client import get_supabase_client
+    from src.auth import get_supabase_client
     
     try:
         supabase = get_supabase_client()
@@ -428,7 +428,7 @@ async def add_chat_history(rag_id: str, body: dict):
         rag_id: The RAG project ID
         body: {query: str, studyCount: int, sessionId?: str}
     """
-    from src.database.supabase_client import get_supabase_client
+    from src.auth import get_supabase_client
     
     try:
         supabase = get_supabase_client()
@@ -461,7 +461,7 @@ async def delete_chat_history_item(rag_id: str, history_id: str):
     """
     Delete a specific chat history item.
     """
-    from src.database.supabase_client import get_supabase_client
+    from src.auth import get_supabase_client
     
     try:
         supabase = get_supabase_client()
@@ -484,7 +484,7 @@ async def clear_chat_history(rag_id: str, session_id: str = None):
     """
     Clear all chat history for a RAG project (or just for a session).
     """
-    from src.database.supabase_client import get_supabase_client
+    from src.auth import get_supabase_client
     
     try:
         supabase = get_supabase_client()

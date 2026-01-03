@@ -783,6 +783,7 @@ def orchestrate_rag(
     4. Process new PDFs with MinerU + metadata enrichment
     5. Embed to project-specific Qdrant collection
     6. Sync metadata back to Supabase documents table
+    7. Track progress in processing_jobs table
     
     Args:
         project_id: The RAG project UUID
@@ -797,14 +798,16 @@ def orchestrate_rag(
     import os
     import httpx
     from collections import Counter
+    from supabase import create_client
     
     s3 = get_r2_client()
     bucket = get_bucket_name()
     
+    # Initialize Supabase client for job tracking
+    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+    
     # Get the actual collection name from the database if not provided
     if not qdrant_collection:
-        from supabase import create_client
-        supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
         project_result = supabase.table("rag_projects").select("qdrant_collection").eq("id", project_id).single().execute()
         if project_result.data and project_result.data.get("qdrant_collection"):
             collection = project_result.data["qdrant_collection"]
@@ -968,30 +971,77 @@ def orchestrate_rag(
     
     print(f"\nProcessing {len(all_to_process)} PDFs ({len(to_process)} new, {len(to_reindex)} re-index)...")
     
+    # Create a processing job to track progress
+    job_id = None
+    try:
+        job_result = supabase.table("processing_jobs").insert({
+            "rag_project_id": project_id,
+            "job_type": "ingest",
+            "status": "running",
+            "progress": 0,
+            "message": f"Processing 0/{len(all_to_process)} documents",
+            "started_at": datetime.now().isoformat(),
+        }).execute()
+        if job_result.data:
+            job_id = job_result.data[0]["id"]
+            print(f"  Created processing job: {job_id}")
+    except Exception as e:
+        print(f"  ⚠ Failed to create processing job: {e}")
+    
+    # Helper to update job progress
+    def update_job_progress(completed: int, total: int, status: str = "running", error: str = None):
+        if not job_id:
+            return
+        try:
+            progress = int((completed / total) * 100) if total > 0 else 0
+            update_data = {
+                "progress": progress,
+                "message": f"Processed {completed}/{total} documents",
+                "status": status,
+            }
+            if status == "completed":
+                update_data["completed_at"] = datetime.now().isoformat()
+            if error:
+                update_data["error_message"] = error
+            supabase.table("processing_jobs").update(update_data).eq("id", job_id).execute()
+        except Exception as e:
+            print(f"  ⚠ Failed to update job progress: {e}")
+    
     # Use starmap to process all PDFs in parallel and WAIT for completion
     # This is the key fix - spawn() doesn't wait, but starmap() does
     results = []
     success = 0
     failed = 0
+    processed_count = 0
     
     for result in process_pdf_rag.starmap(
         [(pdf_key, project_id, collection) for pdf_key in all_to_process],
         return_exceptions=True,
     ):
+        processed_count += 1
         if isinstance(result, Exception):
             print(f"  ✗ Error: {result}")
             failed += 1
             results.append({"error": str(result)})
         else:
-            print(f"  ✓ Completed: {result.get('pdf_name', 'unknown')}")
+            print(f"  ✓ Completed: {result.get('pdf_name', result.get('doc_id', 'unknown'))}")
             success += 1
             results.append(result)
+        
+        # Update progress every document
+        update_job_progress(processed_count, len(all_to_process))
+    
+    # Mark job as completed
+    final_status = "completed" if failed == 0 else "completed"  # Still completed even with failures
+    error_msg = f"{failed} documents failed" if failed > 0 else None
+    update_job_progress(processed_count, len(all_to_process), status=final_status, error=error_msg)
     
     print(f"\nProcessing complete: {success} succeeded, {failed} failed")
     
     return {
         "project_id": project_id,
         "qdrant_collection": collection,
+        "job_id": job_id,  # Include job ID for tracking
         "processed": success,
         "failed": failed,
         "skipped": len(skipped),

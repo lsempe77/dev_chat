@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, ExternalLink, FileText } from "lucide-react";
 
 interface CompareModalProps {
@@ -45,15 +44,16 @@ export function CompareModal({ isOpen, onClose, studies, onRemoveStudy }: Compar
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[95vw] max-h-[90vh] w-full overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="max-w-[98vw] h-[90vh] w-full flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             Compare Studies
             <Badge variant="outline">{studies.length} selected</Badge>
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[70vh]">
+        {/* Horizontal + Vertical scroll container */}
+        <div className="flex-1 overflow-auto min-h-0">
           <div className="space-y-0 min-w-max">
             {/* Header Row - Study Titles */}
             <div 
@@ -173,9 +173,9 @@ export function CompareModal({ isOpen, onClose, studies, onRemoveStudy }: Compar
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex justify-end gap-2 pt-4 border-t shrink-0">
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
