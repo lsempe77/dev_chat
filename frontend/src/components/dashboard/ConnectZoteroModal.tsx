@@ -246,9 +246,18 @@ export function ConnectZoteroModal({
   const handleBulkSync = async () => {
     setBulkSyncing(true);
     setSyncResult(null);
+    
+    // Calculate initial total based on selection
+    const selectedColl = selectedCollection 
+      ? collections.find(c => c.key === selectedCollection)
+      : null;
+    const initialTotal = selectedColl 
+      ? selectedColl.num_items 
+      : (libraryInfo?.num_items || 0);
+    
     setSyncProgress({
       current: 0,
-      total: libraryInfo?.num_items || 0,
+      total: initialTotal,
       batchNumber: 0,
       itemsSynced: 0,
       pdfsDownloaded: 0,
@@ -561,34 +570,45 @@ export function ConnectZoteroModal({
                 <Button variant="outline" onClick={handleClose} disabled={syncing || bulkSyncing}>
                   {bulkSyncing ? "Close" : "Cancel"}
                 </Button>
-                {libraryInfo && libraryInfo.num_items > 50 ? (
-                  // For large libraries, show Sync All button
-                  <Button onClick={handleBulkSync} disabled={syncing || bulkSyncing}>
-                    {bulkSyncing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Syncing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Sync All ({libraryInfo.num_items.toLocaleString()})
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  // For small libraries, use single sync
-                  <Button onClick={handleSaveSettings} disabled={syncing || bulkSyncing}>
-                    {syncing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Syncing...
-                      </>
-                    ) : (
-                      "Save & Sync"
-                    )}
-                  </Button>
-                )}
+                {(() => {
+                  // Determine item count based on selection
+                  const selectedColl = selectedCollection 
+                    ? collections.find(c => c.key === selectedCollection)
+                    : null;
+                  const itemCount = selectedColl 
+                    ? selectedColl.num_items 
+                    : (libraryInfo?.num_items || 0);
+                  const label = selectedColl ? selectedColl.name : "All";
+                  
+                  return itemCount > 50 ? (
+                    // For large libraries/collections, show Sync All button
+                    <Button onClick={handleBulkSync} disabled={syncing || bulkSyncing}>
+                      {bulkSyncing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Sync {label} ({itemCount.toLocaleString()})
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    // For small libraries, use single sync
+                    <Button onClick={handleSaveSettings} disabled={syncing || bulkSyncing}>
+                      {syncing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        `Sync${itemCount > 0 ? ` (${itemCount})` : ""}`
+                      )}
+                    </Button>
+                  );
+                })()}
               </div>
             </div>
           </div>
