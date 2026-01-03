@@ -3,20 +3,29 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Loader2 } from "lucide-react";
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 
 interface SearchInputProps {
   onSearch: (query: string) => void;
   isLoading?: boolean;
   placeholder?: string;
+  value?: string;  // External controlled value
 }
 
 export function SearchInput({
   onSearch,
   isLoading = false,
   placeholder = "Ask about development evidence...",
+  value: externalValue,
 }: SearchInputProps) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(externalValue || "");
+
+  // Sync internal state with external value when it changes
+  useEffect(() => {
+    if (externalValue !== undefined) {
+      setQuery(externalValue);
+    }
+  }, [externalValue]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();

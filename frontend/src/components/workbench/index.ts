@@ -8,3 +8,5 @@ export { EvidencePanel } from "./EvidencePanel";
 export { AnswerPanel } from "./AnswerPanel";
 export { SearchInput } from "./SearchInput";
 export { CompareModal } from "./CompareModal";
+export { ChatHistory } from "./ChatHistory";
+export type { ChatHistoryItem } from "./ChatHistory";

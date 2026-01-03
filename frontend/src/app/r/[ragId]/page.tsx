@@ -12,10 +12,12 @@ import {
   AnswerPanel,
   SearchInput,
   CompareModal,
+  ChatHistory,
 } from "@/components/workbench";
+import type { ChatHistoryItem } from "@/components/workbench";
 import type { SearchSettings } from "@/components/workbench";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, X, ExternalLink, Copy, Check, FileText, Loader2 } from "lucide-react";
+import { ArrowLeft, X, ExternalLink, Copy, Check, FileText, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Study, Citation, Filter, EvidenceHealth, AnswerStyle } from "@/types";
 import { PDFViewer } from "@/components/pdf";
 
@@ -125,6 +127,11 @@ export default function RAGChatPage() {
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   
+  // Chat history state
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [currentQueryId, setCurrentQueryId] = useState<string | undefined>();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
   // PDF Viewer state
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -168,6 +175,10 @@ export default function RAGChatPage() {
     setHasSearched(true);
     setError(null);
     
+    // Create a new history item ID
+    const queryId = `query-${Date.now()}`;
+    setCurrentQueryId(queryId);
+    
     try {
       // Call the API with the specific RAG collection
       const response = await fetch(`${API_BASE_URL}/api/query`, {
@@ -191,6 +202,15 @@ export default function RAGChatPage() {
       setAnswer(data.answer || "");
       setSuggestions(data.suggestions || []);
       setEvidenceHealth(data.evidenceHealth || defaultEvidenceHealth);
+      
+      // Add to chat history (at the beginning)
+      setChatHistory(prev => [{
+        id: queryId,
+        query: searchQuery,
+        timestamp: new Date(),
+        studyCount: (data.studies || []).length,
+      }, ...prev.filter(h => h.query !== searchQuery)]);  // Remove duplicates
+      
     } catch (err) {
       console.error("Search failed:", err);
       setError(err instanceof Error ? err.message : "Search failed. Please try again.");
@@ -274,11 +294,28 @@ export default function RAGChatPage() {
     setSelectedStudies([]);
     setFilters([]);
     setError(null);
+    setCurrentQueryId(undefined);
   }, []);
 
   const handleSuggestionClick = useCallback((suggestion: string) => {
     handleSearch(suggestion);
   }, [handleSearch]);
+
+  // Chat history handlers
+  const handleSelectHistoryItem = useCallback((item: ChatHistoryItem) => {
+    handleSearch(item.query);
+  }, [handleSearch]);
+
+  const handleDeleteHistoryItem = useCallback((id: string) => {
+    setChatHistory(prev => prev.filter(h => h.id !== id));
+    if (currentQueryId === id) {
+      setCurrentQueryId(undefined);
+    }
+  }, [currentQueryId]);
+
+  const handleNewChat = useCallback(() => {
+    handleReset();
+  }, [handleReset]);
 
   // Loading state
   if (projectLoading) {
@@ -312,15 +349,44 @@ export default function RAGChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              {hasSearched && (
-                <Button variant="ghost" size="sm" onClick={handleReset} className="gap-1">
-                  <ArrowLeft className="h-4 w-4" />
+    <div className="min-h-screen bg-background flex">
+      {/* Chat History Sidebar */}
+      {isSidebarOpen && (
+        <aside className="w-64 shrink-0 h-screen sticky top-0">
+          <ChatHistory
+            history={chatHistory}
+            currentQueryId={currentQueryId}
+            onSelectQuery={handleSelectHistoryItem}
+            onDeleteQuery={handleDeleteHistoryItem}
+            onNewChat={handleNewChat}
+          />
+        </aside>
+      )}
+      
+      {/* Main Content */}
+      <div className="flex-1 min-w-0">
+        {/* Header */}
+        <header className="border-b bg-card">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                {/* Sidebar Toggle */}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                  title={isSidebarOpen ? "Hide history" : "Show history"}
+                  className="h-8 w-8"
+                >
+                  {isSidebarOpen ? (
+                    <PanelLeftClose className="h-4 w-4" />
+                  ) : (
+                    <PanelLeft className="h-4 w-4" />
+                  )}
+                </Button>
+                {hasSearched && (
+                  <Button variant="ghost" size="sm" onClick={handleReset} className="gap-1">
+                    <ArrowLeft className="h-4 w-4" />
                   New Search
                 </Button>
               )}
@@ -341,7 +407,7 @@ export default function RAGChatPage() {
           {project.description && !hasSearched && (
             <p className="text-muted-foreground text-sm mb-4">{project.description}</p>
           )}
-          <SearchInput onSearch={handleSearch} isLoading={isLoading} />
+          <SearchInput onSearch={handleSearch} isLoading={isLoading} value={query} />
         </div>
       </header>
 
@@ -500,6 +566,7 @@ export default function RAGChatPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
