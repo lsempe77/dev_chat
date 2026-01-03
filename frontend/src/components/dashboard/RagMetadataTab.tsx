@@ -349,7 +349,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={`flex flex-col ${editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}`}>
+        <Card className={`h-full flex flex-col ${editingDoc || viewingPdfDoc ? "w-1/3" : "w-full"}`}>
           <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
