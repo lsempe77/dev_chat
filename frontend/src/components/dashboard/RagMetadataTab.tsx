@@ -350,7 +350,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       {/* Main Content */}
       <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)' }}>
         {/* Left Panel: Document List */}
-        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col min-h-0" : "w-full flex flex-col min-h-0"}>
+        <Card className={editingDoc || viewingPdfDoc ? "w-1/3 flex flex-col" : "w-full"}>
           <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -381,7 +381,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <CardContent className="flex-1 overflow-hidden">
             <div className="flex gap-4 mb-4">
               <div className="flex-1">
                 <div className="relative">
@@ -427,7 +427,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div className="flex-1 min-h-0 overflow-auto">
+              <ScrollArea className="h-full">
                 <div className="space-y-3 pr-2">
                   {documents.map((doc) => (
                     <Card 
@@ -568,7 +568,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                     </div>
                   )}
                 </div>
-              </div>
+              </ScrollArea>
             )}
             
             <div className="flex items-center justify-between pt-4 border-t mt-2 shrink-0">
