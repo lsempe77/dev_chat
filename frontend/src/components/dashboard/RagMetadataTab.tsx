@@ -234,13 +234,11 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       if (markAsReviewedOnSave) {
         updateData.needs_review = false;
       }
-      await updateRagDocumentMetadata(ragId, editingDoc.id, updateData);
+      const updatedDoc = await updateRagDocumentMetadata(ragId, editingDoc.id, updateData);
       
-      // Update the document in-place in the list (so it doesn't disappear)
+      // Update the document in-place in the list using the server response
       setDocuments(prev => prev.map(doc => 
-        doc.id === editingDoc.id 
-          ? { ...doc, ...editForm, needs_review: markAsReviewedOnSave ? false : doc.needs_review }
-          : doc
+        doc.id === editingDoc.id ? updatedDoc : doc
       ));
       
       // Update stats if we marked as reviewed
@@ -426,39 +424,42 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                 </Tabs>
               </div>
               {/* Confidence filter */}
-              <div className="flex gap-1">
-                <Button 
-                  variant={confidenceFilter === "all" ? "secondary" : "ghost"} 
-                  size="sm" 
-                  onClick={() => setConfidenceFilter("all")}
-                  className="h-6 text-xs px-2 flex-1"
-                >
-                  All
-                </Button>
-                <Button 
-                  variant={confidenceFilter === "high" ? "secondary" : "ghost"} 
-                  size="sm" 
-                  onClick={() => setConfidenceFilter("high")}
-                  className="h-6 text-xs px-2 flex-1 text-green-600"
-                >
-                  High
-                </Button>
-                <Button 
-                  variant={confidenceFilter === "medium" ? "secondary" : "ghost"} 
-                  size="sm" 
-                  onClick={() => setConfidenceFilter("medium")}
-                  className="h-6 text-xs px-2 flex-1 text-yellow-600"
-                >
-                  Med
-                </Button>
-                <Button 
-                  variant={confidenceFilter === "low" ? "secondary" : "ghost"} 
-                  size="sm" 
-                  onClick={() => setConfidenceFilter("low")}
-                  className="h-6 text-xs px-2 flex-1 text-red-600"
-                >
-                  Low
-                </Button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Confidence:</span>
+                <div className="flex gap-1">
+                  <Button 
+                    variant={confidenceFilter === "all" ? "secondary" : "ghost"} 
+                    size="sm" 
+                    onClick={() => setConfidenceFilter("all")}
+                    className="h-6 text-xs px-2"
+                  >
+                    All
+                  </Button>
+                  <Button 
+                    variant={confidenceFilter === "high" ? "secondary" : "ghost"} 
+                    size="sm" 
+                    onClick={() => setConfidenceFilter("high")}
+                    className="h-6 text-xs px-2 text-green-600"
+                  >
+                    High
+                  </Button>
+                  <Button 
+                    variant={confidenceFilter === "medium" ? "secondary" : "ghost"} 
+                    size="sm" 
+                    onClick={() => setConfidenceFilter("medium")}
+                    className="h-6 text-xs px-2 text-yellow-600"
+                  >
+                    Med
+                  </Button>
+                  <Button 
+                    variant={confidenceFilter === "low" ? "secondary" : "ghost"} 
+                    size="sm" 
+                    onClick={() => setConfidenceFilter("low")}
+                    className="h-6 text-xs px-2 text-red-600"
+                  >
+                    Low
+                  </Button>
+                </div>
               </div>
             </div>
 
