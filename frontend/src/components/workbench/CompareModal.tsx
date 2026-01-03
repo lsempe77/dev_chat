@@ -25,11 +25,11 @@ const confidenceColors = {
   low: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
-const CompareField = ({ label, values }: { label: string; values: (string | number | undefined)[] }) => (
-  <div className="grid gap-2" style={{ gridTemplateColumns: `150px repeat(${values.length}, 1fr)` }}>
+const CompareField = ({ label, values, gridCols }: { label: string; values: (string | number | undefined)[]; gridCols: string }) => (
+  <div className="grid gap-2" style={{ gridTemplateColumns: gridCols }}>
     <div className="font-medium text-sm text-muted-foreground py-2">{label}</div>
     {values.map((value, i) => (
-      <div key={i} className="py-2 text-sm border-l pl-3">
+      <div key={i} className="py-2 text-sm border-l pl-3 min-w-0 break-words">
         {value || "—"}
       </div>
     ))}
@@ -39,11 +39,13 @@ const CompareField = ({ label, values }: { label: string; values: (string | numb
 export function CompareModal({ isOpen, onClose, studies, onRemoveStudy }: CompareModalProps) {
   if (studies.length === 0) return null;
 
-  const gridCols = `150px repeat(${studies.length}, 1fr)`;
+  // Calculate min width per study column (200px min, but responsive)
+  const minColWidth = Math.max(180, Math.floor(800 / Math.max(studies.length, 1)));
+  const gridCols = `120px repeat(${studies.length}, minmax(${minColWidth}px, 1fr))`;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[95vw] max-h-[90vh] w-full">
+      <DialogContent className="max-w-[95vw] max-h-[90vh] w-full overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Compare Studies
@@ -52,7 +54,7 @@ export function CompareModal({ isOpen, onClose, studies, onRemoveStudy }: Compar
         </DialogHeader>
 
         <ScrollArea className="max-h-[70vh]">
-          <div className="space-y-0">
+          <div className="space-y-0 min-w-max">
             {/* Header Row - Study Titles */}
             <div 
               className="grid gap-2 sticky top-0 bg-background pb-2 border-b"
@@ -60,11 +62,11 @@ export function CompareModal({ isOpen, onClose, studies, onRemoveStudy }: Compar
             >
               <div className="font-medium text-sm text-muted-foreground py-2">Field</div>
               {studies.map((study) => (
-                <div key={study.id} className="border-l pl-3 py-2">
+                <div key={study.id} className="border-l pl-3 py-2 min-w-0">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm line-clamp-2">{study.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
                         {study.authors}
                       </p>
                     </div>
@@ -86,25 +88,29 @@ export function CompareModal({ isOpen, onClose, studies, onRemoveStudy }: Compar
               <CompareField 
                 label="Year" 
                 values={studies.map(s => s.year)} 
+                gridCols={gridCols}
               />
               <CompareField 
                 label="Country" 
                 values={studies.map(s => s.country)} 
+                gridCols={gridCols}
               />
               <CompareField 
                 label="Sector" 
                 values={studies.map(s => s.sector)} 
+                gridCols={gridCols}
               />
               <CompareField 
                 label="Study Type" 
                 values={studies.map(s => s.studyType)} 
+                gridCols={gridCols}
               />
               
               {/* Confidence with colored badges */}
               <div className="grid gap-2" style={{ gridTemplateColumns: gridCols }}>
                 <div className="font-medium text-sm text-muted-foreground py-2">Confidence</div>
                 {studies.map((study, i) => (
-                  <div key={i} className="py-2 border-l pl-3">
+                  <div key={i} className="py-2 border-l pl-3 min-w-0">
                     <Badge className={confidenceColors[study.confidence]}>
                       {study.confidence}
                     </Badge>

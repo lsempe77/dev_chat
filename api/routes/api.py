@@ -368,3 +368,137 @@ async def get_available_filters():
         studyTypes=["RCT", "Quasi-experimental", "Systematic Review", "Mixed Methods"],
         yearRange={"min": 1990, "max": 2024},
     )
+
+
+# =============================================================================
+# Chat History Endpoints
+# =============================================================================
+
+@router.get("/chat-history/{rag_id}")
+async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50):
+    """
+    Get chat history for a RAG project.
+    
+    Args:
+        rag_id: The RAG project ID
+        session_id: Optional session ID for anonymous users
+        limit: Maximum number of history items to return
+    """
+    from src.database.supabase_client import get_supabase_client
+    
+    try:
+        supabase = get_supabase_client()
+        
+        # Query chat history for this project
+        query = supabase.table("chat_history")\
+            .select("id, query, study_count, created_at")\
+            .eq("rag_project_id", rag_id)\
+            .order("created_at", desc=True)\
+            .limit(limit)
+        
+        # Filter by session if provided (for anonymous users)
+        if session_id:
+            query = query.eq("session_id", session_id)
+        
+        result = query.execute()
+        
+        return {
+            "history": [
+                {
+                    "id": item["id"],
+                    "query": item["query"],
+                    "studyCount": item["study_count"],
+                    "timestamp": item["created_at"],
+                }
+                for item in result.data
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Failed to get chat history: {e}")
+        # Return empty history on error (graceful degradation)
+        return {"history": []}
+
+
+@router.post("/chat-history/{rag_id}")
+async def add_chat_history(rag_id: str, body: dict):
+    """
+    Add a query to chat history.
+    
+    Args:
+        rag_id: The RAG project ID
+        body: {query: str, studyCount: int, sessionId?: str}
+    """
+    from src.database.supabase_client import get_supabase_client
+    
+    try:
+        supabase = get_supabase_client()
+        
+        # Insert new history item
+        result = supabase.table("chat_history").insert({
+            "rag_project_id": rag_id,
+            "query": body.get("query", ""),
+            "study_count": body.get("studyCount", 0),
+            "session_id": body.get("sessionId"),
+        }).execute()
+        
+        if result.data:
+            item = result.data[0]
+            return {
+                "id": item["id"],
+                "query": item["query"],
+                "studyCount": item["study_count"],
+                "timestamp": item["created_at"],
+            }
+        
+        return {"error": "Failed to add history"}
+    except Exception as e:
+        logger.error(f"Failed to add chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/chat-history/{rag_id}/{history_id}")
+async def delete_chat_history_item(rag_id: str, history_id: str):
+    """
+    Delete a specific chat history item.
+    """
+    from src.database.supabase_client import get_supabase_client
+    
+    try:
+        supabase = get_supabase_client()
+        
+        # Delete the history item
+        result = supabase.table("chat_history")\
+            .delete()\
+            .eq("id", history_id)\
+            .eq("rag_project_id", rag_id)\
+            .execute()
+        
+        return {"deleted": True}
+    except Exception as e:
+        logger.error(f"Failed to delete chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/chat-history/{rag_id}")
+async def clear_chat_history(rag_id: str, session_id: str = None):
+    """
+    Clear all chat history for a RAG project (or just for a session).
+    """
+    from src.database.supabase_client import get_supabase_client
+    
+    try:
+        supabase = get_supabase_client()
+        
+        query = supabase.table("chat_history")\
+            .delete()\
+            .eq("rag_project_id", rag_id)
+        
+        if session_id:
+            query = query.eq("session_id", session_id)
+        
+        result = query.execute()
+        
+        return {"cleared": True}
+    except Exception as e:
+        logger.error(f"Failed to clear chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

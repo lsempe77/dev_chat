@@ -20,6 +20,12 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, X, ExternalLink, Copy, Check, FileText, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Study, Citation, Filter, EvidenceHealth, AnswerStyle } from "@/types";
 import { PDFViewer } from "@/components/pdf";
+import { 
+  getChatHistory, 
+  addChatHistory, 
+  deleteChatHistoryItem,
+  ChatHistoryItem as ApiChatHistoryItem 
+} from "@/lib/api";
 
 // Default evidence health for initial state
 const defaultEvidenceHealth: EvidenceHealth = {
@@ -157,6 +163,9 @@ export default function RAGChatPage() {
         }
         const data = await response.json();
         setProject(data);
+        
+        // Load chat history for this project
+        loadChatHistory(ragId);
       } catch (err) {
         setProjectError("Failed to connect to server");
       } finally {
@@ -167,6 +176,34 @@ export default function RAGChatPage() {
     fetchProject();
   }, [ragId]);
 
+  // Load chat history from API
+  const loadChatHistory = useCallback(async (projectId: string) => {
+    try {
+      const sessionId = getSessionId();
+      const history = await getChatHistory(projectId, sessionId);
+      setChatHistory(history.map(item => ({
+        id: item.id,
+        query: item.query,
+        timestamp: new Date(item.timestamp),
+        studyCount: item.studyCount,
+      })));
+    } catch (error) {
+      console.error("Failed to load chat history:", error);
+    }
+  }, []);
+
+  // Get or create session ID for anonymous users
+  const getSessionId = useCallback((): string => {
+    if (typeof window === "undefined") return "";
+    let sessionId = localStorage.getItem("chat_session_id");
+    if (!sessionId) {
+      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem("chat_session_id", sessionId);
+    }
+    return sessionId;
+  }, []);
+
+
   const handleSearch = useCallback(async (searchQuery: string) => {
     if (!project) return;
     
@@ -174,10 +211,6 @@ export default function RAGChatPage() {
     setIsLoading(true);
     setHasSearched(true);
     setError(null);
-    
-    // Create a new history item ID
-    const queryId = `query-${Date.now()}`;
-    setCurrentQueryId(queryId);
     
     try {
       // Call the API with the specific RAG collection
@@ -203,13 +236,21 @@ export default function RAGChatPage() {
       setSuggestions(data.suggestions || []);
       setEvidenceHealth(data.evidenceHealth || defaultEvidenceHealth);
       
-      // Add to chat history (at the beginning)
-      setChatHistory(prev => [{
-        id: queryId,
-        query: searchQuery,
-        timestamp: new Date(),
-        studyCount: (data.studies || []).length,
-      }, ...prev.filter(h => h.query !== searchQuery)]);  // Remove duplicates
+      // Save to API and update local state
+      const studyCount = (data.studies || []).length;
+      const sessionId = getSessionId();
+      const savedItem = await addChatHistory(ragId, searchQuery, studyCount, sessionId);
+      
+      if (savedItem) {
+        // Add to local state (at the beginning, remove duplicates)
+        setChatHistory(prev => [{
+          id: savedItem.id,
+          query: savedItem.query,
+          timestamp: new Date(savedItem.timestamp),
+          studyCount: savedItem.studyCount,
+        }, ...prev.filter(h => h.query !== searchQuery)]);
+        setCurrentQueryId(savedItem.id);
+      }
       
     } catch (err) {
       console.error("Search failed:", err);
@@ -217,7 +258,7 @@ export default function RAGChatPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [project, searchSettings]);
+  }, [project, searchSettings, ragId, getSessionId]);
 
   const handleCitationClick = useCallback(async (citationId: number) => {
     if (!project) return;
@@ -306,12 +347,16 @@ export default function RAGChatPage() {
     handleSearch(item.query);
   }, [handleSearch]);
 
-  const handleDeleteHistoryItem = useCallback((id: string) => {
+  const handleDeleteHistoryItem = useCallback(async (id: string) => {
+    // Delete from API
+    await deleteChatHistoryItem(ragId, id);
+    
+    // Update local state
     setChatHistory(prev => prev.filter(h => h.id !== id));
     if (currentQueryId === id) {
       setCurrentQueryId(undefined);
     }
-  }, [currentQueryId]);
+  }, [currentQueryId, ragId]);
 
   const handleNewChat = useCallback(() => {
     handleReset();

@@ -173,3 +173,88 @@ export async function getAvailableFilters(): Promise<{
 
   return response.json();
 }
+
+// =============================================================================
+// Chat History API
+// =============================================================================
+
+export interface ChatHistoryItem {
+  id: string;
+  query: string;
+  studyCount: number;
+  timestamp: string;
+}
+
+export async function getChatHistory(
+  ragId: string,
+  sessionId?: string
+): Promise<ChatHistoryItem[]> {
+  const params = sessionId ? `?session_id=${sessionId}` : "";
+  const response = await fetch(`${API_BASE_URL}/api/chat-history/${ragId}${params}`);
+
+  if (!response.ok) {
+    console.error("Failed to fetch chat history");
+    return [];
+  }
+
+  const data = await response.json();
+  return data.history || [];
+}
+
+export async function addChatHistory(
+  ragId: string,
+  query: string,
+  studyCount: number,
+  sessionId?: string
+): Promise<ChatHistoryItem | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat-history/${ragId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, studyCount, sessionId }),
+    });
+
+    if (!response.ok) {
+      console.error("Failed to add chat history");
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Failed to add chat history:", error);
+    return null;
+  }
+}
+
+export async function deleteChatHistoryItem(
+  ragId: string,
+  historyId: string
+): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat-history/${ragId}/${historyId}`,
+      { method: "DELETE" }
+    );
+    return response.ok;
+  } catch (error) {
+    console.error("Failed to delete chat history:", error);
+    return false;
+  }
+}
+
+export async function clearChatHistory(
+  ragId: string,
+  sessionId?: string
+): Promise<boolean> {
+  try {
+    const params = sessionId ? `?session_id=${sessionId}` : "";
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat-history/${ragId}${params}`,
+      { method: "DELETE" }
+    );
+    return response.ok;
+  } catch (error) {
+    console.error("Failed to clear chat history:", error);
+    return false;
+  }
+}
