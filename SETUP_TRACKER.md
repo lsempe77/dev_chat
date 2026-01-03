@@ -175,7 +175,7 @@ devchat_v2_sota/
 - [ ] Auto-match imported bibliography to uploaded PDFs
 - [ ] Suggest matches for review
 
-### Database Changes (Phase 1)
+### Database Changes (Phase 1) ✅ APPLIED
 ```sql
 -- Track import source and matching
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS import_source TEXT;
@@ -188,6 +188,10 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS external_id TEXT;
 ## 📝 Recent Changes
 
 ### January 3, 2026
+- **Bibliography Import System** - Phase 1 (backend) + Phase 2 (UI) complete
+  - RIS/BibTeX/CSV parser with auto-format detection
+  - Multi-strategy matching (DOI, title, author+year, filename)
+  - Import dialog with drag-drop, preview table, manual matching
 - Added sparse vector support to Modal indexing
 - Fixed Qdrant collection name mismatch bug
 - Added "Mark as reviewed" checkbox in metadata editor
