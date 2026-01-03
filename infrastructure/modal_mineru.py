@@ -779,14 +779,14 @@ def orchestrate_rag(
     Flow:
     1. List PDFs in rags/{project_id}/input-pdfs/
     2. Check which ones have outputs in rags/{project_id}/outputs/
-    3. Check Qdrant collection rag_{project_id} for existing embeddings
+    3. Check Qdrant collection for existing embeddings (looked up from database)
     4. Process new PDFs with MinerU + metadata enrichment
     5. Embed to project-specific Qdrant collection
     6. Sync metadata back to Supabase documents table
     
     Args:
         project_id: The RAG project UUID
-        qdrant_collection: Optional override (default: rag_{project_id})
+        qdrant_collection: Optional override (default: lookup from database)
         force_reprocess: If True, reprocess all PDFs
         max_documents: Max docs to process (0 = unlimited)
         
@@ -800,7 +800,19 @@ def orchestrate_rag(
     
     s3 = get_r2_client()
     bucket = get_bucket_name()
-    collection = qdrant_collection or f"rag_{project_id}"
+    
+    # Get the actual collection name from the database if not provided
+    if not qdrant_collection:
+        from supabase import create_client
+        supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        project_result = supabase.table("rag_projects").select("qdrant_collection").eq("id", project_id).single().execute()
+        if project_result.data and project_result.data.get("qdrant_collection"):
+            collection = project_result.data["qdrant_collection"]
+        else:
+            # Fallback - should not happen for existing projects
+            collection = f"rag_{project_id}"
+    else:
+        collection = qdrant_collection
     
     # R2 paths for this project
     input_prefix = f"rags/{project_id}/input-pdfs/"
@@ -1012,7 +1024,7 @@ def process_pdf_rag(
     Args:
         pdf_key: Full R2 key (e.g., rags/{project_id}/input-pdfs/paper.pdf)
         project_id: RAG project UUID for Supabase sync
-        qdrant_collection: Qdrant collection name (rag_{project_id})
+        qdrant_collection: Qdrant collection name (from database)
     """
     import os
     import tempfile
