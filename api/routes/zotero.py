@@ -589,7 +589,6 @@ async def sync_from_zotero(
                     
                     supabase.table("documents").update({
                         "metadata": merged_meta,
-                        "metadata_confidence": calculate_zotero_confidence(item),
                     }).eq("id", matched_doc["id"]).execute()
                     
                     items_updated += 1
@@ -669,7 +668,6 @@ async def sync_from_zotero(
                             "status": "pending",
                             "r2_input_key": r2_key,
                             "metadata": doc_metadata,
-                            "metadata_confidence": calculate_zotero_confidence(item),
                         }, on_conflict="filename,rag_project_id").execute()
                         
                         pdfs_downloaded += 1
@@ -712,7 +710,6 @@ async def sync_from_zotero(
                                 "mime_type": "application/pdf",
                                 "status": "no_pdf",
                                 "metadata": doc_metadata,
-                                "metadata_confidence": calculate_zotero_confidence(item),
                             }).execute()
                             logger.debug(f"Created metadata-only record for: {item.get('title')}")
                 
@@ -759,7 +756,6 @@ async def sync_from_zotero(
                         "mime_type": "application/pdf",
                         "status": "no_pdf",  # Special status for items without PDF
                         "metadata": doc_metadata,
-                        "metadata_confidence": calculate_zotero_confidence(item),
                     }).execute()
                     
                     logger.debug(f"Created metadata-only record for: {item_title}")
