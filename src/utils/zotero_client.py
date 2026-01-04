@@ -296,23 +296,26 @@ class ZoteroClient:
         limit: int = 100,
         start: int = 0,
         max_items: int = 500
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], int, bool]:
         """
         Get items and check which have PDF attachments.
         Uses pagination to fetch more items.
 
         Args:
             collection_key: Optional collection to fetch from
-            limit: Number of items per API call
-            start: Starting offset for pagination
-            max_items: Maximum total items to fetch (for safety)
+            limit: Number of items per API call (raw items including attachments/notes)
+            start: Starting offset for pagination (raw API offset)
+            max_items: Maximum filtered items to fetch (only top-level items)
 
         Returns:
-            List of normalized items with has_pdf flag
+            Tuple of (list of normalized items, next_start for pagination, has_more)
+            - next_start is the raw API offset for the next batch
+            - has_more is True if there are more items to fetch
         """
         try:
             all_items = []
             current_start = start
+            has_more = False
             
             while len(all_items) < max_items:
                 if collection_key:
@@ -323,6 +326,9 @@ class ZoteroClient:
                 if not items:
                     break  # No more items
                 
+                # Advance raw offset BEFORE filtering
+                current_start += len(items)
+                
                 normalized = self._normalize_items(items)
                 
                 for item in normalized:
@@ -332,17 +338,19 @@ class ZoteroClient:
                     all_items.append(item)
                     
                     if len(all_items) >= max_items:
+                        # We hit our limit - there may be more items
+                        has_more = True
                         break
                 
-                current_start += len(items)
-                
                 if len(items) < limit:
-                    break  # Reached the end
+                    # API returned fewer items than requested = no more items
+                    has_more = False
+                    break
                 
                 logger.info(f"Fetched {len(all_items)} items so far...")
             
-            logger.info(f"Total items fetched: {len(all_items)}")
-            return all_items
+            logger.info(f"Total items fetched: {len(all_items)}, next_start: {current_start}, has_more: {has_more}")
+            return all_items, current_start, has_more
         except Exception as e:
             logger.error(f"Failed to get items with attachments: {e}")
             raise

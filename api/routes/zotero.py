@@ -461,14 +461,14 @@ async def sync_from_zotero(
         # Get items with attachment info (paginated)
         # Limited to 50 items per sync to avoid timeout (each item needs API call for attachments)
         logger.info(f"Fetching items from Zotero for project {project_id}, start={request.start}")
-        items = zotero_client.get_items_with_attachments(
+        items, next_raw_start, has_more_items = zotero_client.get_items_with_attachments(
             collection_key=request.collection_key,
-            limit=50,  # Items per API call
-            start=request.start,  # Pagination offset
-            max_items=50  # Total max items per sync (keep low to avoid timeout)
+            limit=50,  # Items per API call (raw, including attachments/notes)
+            start=request.start,  # Pagination offset (raw API offset)
+            max_items=50  # Total max filtered items per sync (keep low to avoid timeout)
         )
         
-        logger.info(f"Found {len(items)} items in Zotero (offset {request.start})")
+        logger.info(f"Found {len(items)} items in Zotero (raw offset {request.start} -> {next_raw_start})")
         
         # Get existing documents for matching
         existing_docs = supabase.table("documents").select(
@@ -733,12 +733,9 @@ async def sync_from_zotero(
         ).execute()
         total_synced_so_far = total_synced_docs.count or 0
         
-        # Calculate next offset for pagination
-        next_start = request.start + len(items)
-        
-        # Check if there are more items to sync
-        # has_more if we got a full batch
-        has_more = len(items) >= 50
+        # Use raw offset from get_items_with_attachments for proper pagination
+        # next_raw_start tracks raw API position (including attachments/notes)
+        # has_more_items comes from the function and accounts for filtered items
         
         return ZoteroSyncResponse(
             success=items_failed == 0,
@@ -748,10 +745,10 @@ async def sync_from_zotero(
             pdfs_downloaded=pdfs_downloaded,
             errors=errors if errors else None,
             library_version=None,
-            has_more=has_more,
+            has_more=has_more_items,
             total_in_library=total_in_library,
             total_synced_so_far=total_synced_so_far,
-            next_start=next_start,
+            next_start=next_raw_start,
         )
         
     except Exception as e:
