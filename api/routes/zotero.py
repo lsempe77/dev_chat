@@ -6,9 +6,29 @@ Handles Zotero account connection, collection listing, and item sync.
 
 import hashlib
 import os
+import unicodedata
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
+
+
+def sanitize_to_ascii(text: str, max_length: int = 200) -> str:
+    """
+    Sanitize a string to contain only ASCII characters.
+    S3/R2 metadata can only contain ASCII characters.
+    
+    - Converts accented characters to their base form (ä -> a, é -> e)
+    - Removes any remaining non-ASCII characters
+    - Truncates to max_length
+    """
+    if not text:
+        return text
+    # Normalize to NFKD form (decomposes accented chars into base + combining)
+    normalized = unicodedata.normalize("NFKD", text)
+    # Encode to ASCII, ignoring non-ASCII combining marks
+    ascii_bytes = normalized.encode("ascii", "ignore")
+    # Decode back to string and truncate
+    return ascii_bytes.decode("ascii")[:max_length]
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -560,6 +580,8 @@ async def sync_from_zotero(
                         content_hash = hashlib.sha256(pdf_bytes).hexdigest()[:16]
                         safe_filename = original_filename.replace(" ", "_").replace("/", "_")
                         base_name = os.path.splitext(safe_filename)[0]
+                        # Sanitize to ASCII for S3 metadata compatibility
+                        ascii_base_name = sanitize_to_ascii(base_name)
                         
                         # Check if this exact content already exists
                         existing_hash = supabase.table("documents").select("id").eq(
@@ -571,8 +593,8 @@ async def sync_from_zotero(
                             items_synced += 1
                             continue
                         
-                        # Upload to R2
-                        doc_id = f"{content_hash}_{base_name}"
+                        # Upload to R2 - use ASCII-safe doc_id for S3 metadata
+                        doc_id = f"{content_hash}_{ascii_base_name}"
                         r2_key = f"rags/{project_id}/input-pdfs/{doc_id}.pdf"
                         
                         r2_client.put_object(
@@ -583,7 +605,7 @@ async def sync_from_zotero(
                             Metadata={
                                 "doc_id": doc_id,
                                 "content_hash": content_hash,
-                                "original_filename": original_filename,
+                                "original_filename": sanitize_to_ascii(original_filename),
                                 "upload_timestamp": datetime.utcnow().isoformat(),
                                 "project_id": project_id,
                                 "source": "zotero",
