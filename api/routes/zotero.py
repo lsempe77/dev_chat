@@ -30,6 +30,30 @@ def sanitize_to_ascii(text: str, max_length: int = 200) -> str:
     # Decode back to string and truncate
     return ascii_bytes.decode("ascii")[:max_length]
 
+
+def calculate_zotero_confidence(item: dict) -> float:
+    """
+    Calculate metadata confidence score based on Zotero field completeness.
+    
+    Zotero is a trusted source, so we give a base confidence of 0.6.
+    Having DOI gives another 0.2 boost (can be verified externally).
+    Having complete bibliographic fields gives up to 0.2 more.
+    
+    Returns: confidence score between 0.6 and 1.0
+    """
+    base_confidence = 0.6
+    
+    # DOI is a strong identifier - boost confidence
+    has_doi = bool(item.get("doi"))
+    doi_bonus = 0.2 if has_doi else 0.0
+    
+    # Check key fields for completeness
+    key_fields = ["title", "authors", "year", "journal", "abstract"]
+    present_fields = sum(1 for f in key_fields if item.get(f))
+    completeness_score = (present_fields / len(key_fields)) * 0.2
+    
+    return min(1.0, base_confidence + doi_bonus + completeness_score)
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -561,9 +585,11 @@ async def sync_from_zotero(
                     # Merge with existing metadata
                     existing_meta = matched_doc.get("metadata", {}) or {}
                     merged_meta = {**existing_meta, **zotero_metadata}
+                    merged_meta["metadata_confidence"] = calculate_zotero_confidence(item)
                     
                     supabase.table("documents").update({
-                        "metadata": merged_meta
+                        "metadata": merged_meta,
+                        "metadata_confidence": calculate_zotero_confidence(item),
                     }).eq("id", matched_doc["id"]).execute()
                     
                     items_updated += 1
@@ -631,6 +657,7 @@ async def sync_from_zotero(
                             "url": item.get("url"),
                             "metadata_source": "zotero",
                             "has_pdf": True,
+                            "metadata_confidence": calculate_zotero_confidence(item),
                         }
                         
                         supabase.table("documents").upsert({
@@ -642,6 +669,7 @@ async def sync_from_zotero(
                             "status": "pending",
                             "r2_input_key": r2_key,
                             "metadata": doc_metadata,
+                            "metadata_confidence": calculate_zotero_confidence(item),
                         }, on_conflict="filename,rag_project_id").execute()
                         
                         pdfs_downloaded += 1
@@ -673,6 +701,7 @@ async def sync_from_zotero(
                                 "url": item.get("url"),
                                 "metadata_source": "zotero",
                                 "has_pdf": False,
+                                "metadata_confidence": calculate_zotero_confidence(item),
                             }
                             
                             supabase.table("documents").insert({
@@ -683,6 +712,7 @@ async def sync_from_zotero(
                                 "mime_type": "application/pdf",
                                 "status": "no_pdf",
                                 "metadata": doc_metadata,
+                                "metadata_confidence": calculate_zotero_confidence(item),
                             }).execute()
                             logger.debug(f"Created metadata-only record for: {item.get('title')}")
                 
@@ -718,6 +748,7 @@ async def sync_from_zotero(
                         "url": item.get("url"),
                         "metadata_source": "zotero",
                         "has_pdf": False,  # Flag: no PDF available
+                        "metadata_confidence": calculate_zotero_confidence(item),
                     }
                     
                     supabase.table("documents").insert({
@@ -728,6 +759,7 @@ async def sync_from_zotero(
                         "mime_type": "application/pdf",
                         "status": "no_pdf",  # Special status for items without PDF
                         "metadata": doc_metadata,
+                        "metadata_confidence": calculate_zotero_confidence(item),
                     }).execute()
                     
                     logger.debug(f"Created metadata-only record for: {item_title}")
