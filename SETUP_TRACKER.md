@@ -175,6 +175,8 @@ devchat_v2_sota/
 - [ ] Extract DOI from PDF text during processing
 - [ ] Auto-match imported bibliography to uploaded PDFs
 - [ ] Suggest matches for review
+- [ ] Ability to adapt prompts per RAG
+
 
 
 ## 📝 Recent Changes

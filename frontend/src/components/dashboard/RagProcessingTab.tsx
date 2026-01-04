@@ -45,6 +45,15 @@ interface ProcessingJob {
   created_at: string;
 }
 
+interface DocumentStats {
+  total_documents: number;
+  completed: number;
+  pending: number;
+  processing: number;
+  failed: number;
+  total_chunks: number;
+}
+
 interface RagProcessingTabProps {
   ragId: string;
   accessToken: string;
@@ -53,6 +62,7 @@ interface RagProcessingTabProps {
 
 export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: RagProcessingTabProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [stats, setStats] = useState<DocumentStats | null>(null);
   const [activeJob, setActiveJob] = useState<ProcessingJob | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
@@ -67,12 +77,16 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
     setIsRefreshing(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents`, {
+      const response = await fetch(`${API_BASE_URL}/rags/${ragId}/documents?limit=100`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!response.ok) throw new Error("Failed to fetch documents");
       const data = await response.json();
       setDocuments(data.documents || []);
+      // Use stats from API for accurate counts (not paginated)
+      if (data.stats) {
+        setStats(data.stats);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch documents");
     } finally {
@@ -110,11 +124,11 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
     },
   });
 
-  // Calculate stats from documents
-  const pendingCount = documents.filter(d => d.status === "pending").length;
-  const processingCount = documents.filter(d => d.status === "processing").length;
-  const completedCount = documents.filter(d => d.status === "completed").length;
-  const failedCount = documents.filter(d => d.status === "failed").length;
+  // Use stats from API (accurate totals) or fallback to counting documents
+  const pendingCount = stats?.pending ?? documents.filter(d => d.status === "pending").length;
+  const processingCount = stats?.processing ?? documents.filter(d => d.status === "processing").length;
+  const completedCount = stats?.completed ?? documents.filter(d => d.status === "completed").length;
+  const failedCount = stats?.failed ?? documents.filter(d => d.status === "failed").length;
 
   // Fetch processing jobs (fallback when realtime not available)
   const fetchJobs = useCallback(async () => {
