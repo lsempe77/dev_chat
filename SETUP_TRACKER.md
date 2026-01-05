@@ -130,12 +130,20 @@ devchat_v2_sota/
 - [x] **Quality Monitoring** (Phase 5) ✅ Complete with baseline metrics
 
 ### Medium Priority
-- [x] **Per-RAG Model Selection** ✅ Complete
+- [x] **Per-RAG Model Selection** ✅ Code Complete ⚠️ *Untested - needs SQL migration + end-to-end testing*
   - [x] Add `model_config` JSONB to `rag_projects` table (provider, model, reasoning_model, temperature)
   - [x] Settings tab UI: dropdown for provider (OpenAI, Claude, Gemini) + models
   - [x] Pass model config to DevChatAgent/ClaimLedgerSynthesizer at query time
   - [x] Backend endpoints: GET/PATCH `/rags/{id}/model-config`, GET `/rags/models/available`
   - [x] Cost tracking per model for accurate projections
+  - [ ] **Deploy:** Run `scripts/migrations/002_model_config.sql` in Supabase
+  - [ ] **Test:** Verify model switching works end-to-end
+- [ ] **Context Prompts & Prompt Customization** 🔜 HIGH VALUE
+  - [ ] Add `context_prompt` field to `rag_projects` (domain instructions)
+  - [ ] Add `custom_prompts` JSONB for extraction/synthesis override
+  - [ ] Settings UI with textarea + warning alerts
+  - [ ] Pass context prompt to synthesis pipeline
+  - [ ] Prompt reset to defaults option
 - [ ] Advanced search filters in chat
 - [x] Export citations (CSV, JSON, BibTeX) ✅ Done
 
@@ -467,4 +475,4 @@ See `CHANGELOG.md` for complete history.
 - **Production:** https://dev-chat-frontend.vercel.app/
 - **API Health:** https://3iechat.up.railway.app/health
 - **Repository:** https://github.com/lsempe77/dev_chat
-- **Modal App:** https://modal.com/apps/lsempe77/main/deployed/devchat-mineru
+- **Modal App:** https://modal.com/apps/3ieimpact/main/deployed/devchat-mineru

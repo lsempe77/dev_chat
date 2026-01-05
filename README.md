@@ -274,9 +274,11 @@ devchat_v2_sota/
 - [x] Langfuse observability integration
 - [x] Zotero bibliography sync
 - [x] Quality monitoring with baseline metrics
+- [x] Per-RAG model selection (GPT-4o / Claude / Gemini) ⚠️ *untested*
 
 ### 🔜 Coming Soon
-- [ ] **Per-RAG model selection** - Choose GPT-4o vs Claude vs Gemini per project
+- [ ] **Context prompts** - RAG owners add domain-specific instructions
+- [ ] **Prompt customization** - Modify extraction/synthesis prompts per project
 - [ ] **User feedback** - 👍/👎 on responses for quality improvement
 - [ ] **A/B experiments** - Compare prompts and models in Langfuse
 - [ ] **Advanced search filters** - Year, country, methodology in chat
