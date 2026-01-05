@@ -402,9 +402,9 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
     try:
         supabase = get_supabase_client()
         
-        # Query chat history for this project
+        # Query chat history for this project (include answer for cache)
         query = supabase.table("chat_history")\
-            .select("id, query, study_count, created_at")\
+            .select("id, query, study_count, created_at, answer, citations_used")\
             .eq("rag_project_id", rag_id)\
             .order("created_at", desc=True)\
             .limit(limit)
@@ -422,6 +422,8 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
                     "query": item["query"],
                     "studyCount": item["study_count"],
                     "timestamp": item["created_at"],
+                    "answer": item.get("answer"),
+                    "citationsUsed": item.get("citations_used"),
                 }
                 for item in result.data
             ]

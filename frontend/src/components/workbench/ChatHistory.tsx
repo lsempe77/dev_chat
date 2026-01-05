@@ -10,6 +10,8 @@ export interface ChatHistoryItem {
   query: string;
   timestamp: Date;
   studyCount?: number;
+  answer?: string;
+  citationsUsed?: number;
 }
 
 interface ChatHistoryProps {

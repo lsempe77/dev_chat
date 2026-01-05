@@ -186,6 +186,8 @@ export default function RAGChatPage() {
         query: item.query,
         timestamp: new Date(item.timestamp),
         studyCount: item.studyCount,
+        answer: item.answer,
+        citationsUsed: item.citationsUsed,
       })));
     } catch (error) {
       console.error("Failed to load chat history:", error);
@@ -344,9 +346,24 @@ export default function RAGChatPage() {
     handleSearch(suggestion);
   }, [handleSearch]);
 
-  // Chat history handlers
+  // Chat history handlers - use cached answer if available, otherwise re-search
   const handleSelectHistoryItem = useCallback((item: ChatHistoryItem) => {
-    handleSearch(item.query);
+    // If we have a cached answer, use it directly (no API call needed)
+    if (item.answer) {
+      setQuery(item.query);
+      setAnswer(item.answer);
+      setHasSearched(true);
+      setCurrentQueryId(item.id);
+      // Note: citations/studies aren't cached, so we clear them
+      // User can re-search if they want full results
+      setCitations([]);
+      setStudies([]);
+      setSuggestions([]);
+      setError(null);
+    } else {
+      // No cached answer, re-run the search
+      handleSearch(item.query);
+    }
   }, [handleSearch]);
 
   const handleDeleteHistoryItem = useCallback(async (id: string) => {

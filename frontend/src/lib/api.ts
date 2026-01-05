@@ -183,6 +183,8 @@ export interface ChatHistoryItem {
   query: string;
   studyCount: number;
   timestamp: string;
+  answer?: string;
+  citationsUsed?: number;
 }
 
 export async function getChatHistory(
