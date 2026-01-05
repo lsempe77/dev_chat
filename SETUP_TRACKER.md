@@ -1,7 +1,7 @@
 # DevChat v2.0 - Setup & Progress Tracker
 
 **Created:** December 17, 2025  
-**Last Updated:** January 3, 2026  
+**Last Updated:** January 5, 2026  
 **Status:** ✅ Production | ✅ Multi-Tenant | ✅ Hybrid Search | ✅ Sparse Vectors
 
 ---
@@ -180,6 +180,14 @@ devchat_v2_sota/
 
 
 ## 📝 Recent Changes
+
+### January 5, 2026
+- **Zotero Sync Bug Fix** - Fixed early pagination termination
+  - **Problem:** Sync would stop after batch 1 when all items in batch were already synced (skipped)
+  - **Root Cause:** Backend wasn't returning `items_skipped` count, so frontend early-exit condition triggered incorrectly
+  - **Fix:** Added `items_skipped` field to `ZoteroSyncResponse` (backend) and updated sync loop condition (frontend)
+  - **Commits:** `184e50c` (items_skipped fix), plus manual insertion of 22 missing items
+  - **Result:** Collection now has 188 documents (was stuck at 166)
 
 ### January 3, 2026
 - **Bibliography Import System** - Phase 1 (backend) + Phase 2 (UI) complete
