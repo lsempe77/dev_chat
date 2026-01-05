@@ -404,7 +404,7 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
         
         # Query chat history for this project (include answer for cache)
         query = supabase.table("chat_history")\
-            .select("id, query, study_count, created_at, answer, citations_used")\
+            .select("id, query, study_count, created_at, answer, citations_used, response_data")\
             .eq("rag_project_id", rag_id)\
             .order("created_at", desc=True)\
             .limit(limit)
@@ -424,6 +424,7 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
                     "timestamp": item["created_at"],
                     "answer": item.get("answer"),
                     "citationsUsed": item.get("citations_used"),
+                    "responseData": item.get("response_data"),
                 }
                 for item in result.data
             ]
@@ -461,6 +462,9 @@ async def add_chat_history(rag_id: str, body: dict):
             insert_data["answer"] = body.get("answer")
         if body.get("citationsUsed") is not None:
             insert_data["citations_used"] = body.get("citationsUsed")
+        # Add full response data for caching (citations, studies, suggestions, etc.)
+        if body.get("responseData"):
+            insert_data["response_data"] = body.get("responseData")
         
         # Insert new history item
         result = supabase.table("chat_history").insert(insert_data).execute()
@@ -474,6 +478,7 @@ async def add_chat_history(rag_id: str, body: dict):
                 "timestamp": item["created_at"],
                 "answer": item.get("answer"),
                 "citationsUsed": item.get("citations_used"),
+                "responseData": item.get("response_data"),
             }
         
         return {"error": "Failed to add history"}

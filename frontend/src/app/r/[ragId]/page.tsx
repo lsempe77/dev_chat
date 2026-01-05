@@ -188,6 +188,7 @@ export default function RAGChatPage() {
         studyCount: item.studyCount,
         answer: item.answer,
         citationsUsed: item.citationsUsed,
+        responseData: item.responseData,
       })));
     } catch (error) {
       console.error("Failed to load chat history:", error);
@@ -238,12 +239,21 @@ export default function RAGChatPage() {
       setSuggestions(data.suggestions || []);
       setEvidenceHealth(data.evidenceHealth || defaultEvidenceHealth);
       
-      // Save to API and update local state (including answer for future analysis)
+      // Save to API and update local state (including full response for caching)
       const studyCount = (data.studies || []).length;
       const sessionId = getSessionId();
       const answerText = data.answer || "";
       const citationsCount = (data.citations || []).length;
-      const savedItem = await addChatHistory(ragId, searchQuery, studyCount, sessionId, answerText, citationsCount);
+      
+      // Cache the full response data for instant recall
+      const responseData = {
+        citations: data.citations || [],
+        studies: data.studies || [],
+        suggestions: data.suggestions || [],
+        evidenceHealth: data.evidenceHealth || defaultEvidenceHealth,
+      };
+      
+      const savedItem = await addChatHistory(ragId, searchQuery, studyCount, sessionId, answerText, citationsCount, responseData);
       
       if (savedItem) {
         // Add to local state (at the beginning, remove duplicates)
@@ -252,6 +262,8 @@ export default function RAGChatPage() {
           query: savedItem.query,
           timestamp: new Date(savedItem.timestamp),
           studyCount: savedItem.studyCount,
+          answer: savedItem.answer,
+          responseData: savedItem.responseData,
         }, ...prev.filter(h => h.query !== searchQuery)]);
         setCurrentQueryId(savedItem.id);
       }
@@ -346,22 +358,31 @@ export default function RAGChatPage() {
     handleSearch(suggestion);
   }, [handleSearch]);
 
-  // Chat history handlers - use cached answer if available, otherwise re-search
+  // Chat history handlers - use cached response if available, otherwise re-search
   const handleSelectHistoryItem = useCallback((item: ChatHistoryItem) => {
-    // If we have a cached answer, use it directly (no API call needed)
-    if (item.answer) {
+    // If we have a cached full response, restore it completely (no API call needed)
+    if (item.responseData) {
+      setQuery(item.query);
+      setAnswer(item.answer || "");
+      setCitations(item.responseData.citations || []);
+      setStudies(item.responseData.studies || []);
+      setSuggestions(item.responseData.suggestions || []);
+      setEvidenceHealth(item.responseData.evidenceHealth || defaultEvidenceHealth);
+      setHasSearched(true);
+      setCurrentQueryId(item.id);
+      setError(null);
+    } else if (item.answer) {
+      // Fallback: only answer cached (legacy), show answer but no citations/studies
       setQuery(item.query);
       setAnswer(item.answer);
       setHasSearched(true);
       setCurrentQueryId(item.id);
-      // Note: citations/studies aren't cached, so we clear them
-      // User can re-search if they want full results
       setCitations([]);
       setStudies([]);
       setSuggestions([]);
       setError(null);
     } else {
-      // No cached answer, re-run the search
+      // No cached data, re-run the search
       handleSearch(item.query);
     }
   }, [handleSearch]);

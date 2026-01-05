@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { CachedResponseData } from "@/lib/api";
 
 export interface ChatHistoryItem {
   id: string;
@@ -12,6 +13,7 @@ export interface ChatHistoryItem {
   studyCount?: number;
   answer?: string;
   citationsUsed?: number;
+  responseData?: CachedResponseData;
 }
 
 interface ChatHistoryProps {

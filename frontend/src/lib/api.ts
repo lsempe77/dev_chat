@@ -178,6 +178,39 @@ export async function getAvailableFilters(): Promise<{
 // Chat History API
 // =============================================================================
 
+// Response data structure for caching
+export interface CachedResponseData {
+  citations?: Array<{
+    id: number;
+    studyId: string;
+    text: string;
+    page?: number;
+    highlightText?: string;
+    study?: {
+      id: string;
+      title: string;
+      authors?: string;
+      year?: number;
+    };
+  }>;
+  studies?: Array<{
+    id: string;
+    title: string;
+    authors?: string;
+    year?: number;
+    abstract?: string;
+    relevance?: number;
+    pdfUrl?: string;
+  }>;
+  suggestions?: string[];
+  evidenceHealth?: {
+    overall: string;
+    studyCount: number;
+    avgRelevance: number;
+    yearRange?: { min: number; max: number };
+  };
+}
+
 export interface ChatHistoryItem {
   id: string;
   query: string;
@@ -185,6 +218,7 @@ export interface ChatHistoryItem {
   timestamp: string;
   answer?: string;
   citationsUsed?: number;
+  responseData?: CachedResponseData;
 }
 
 export async function getChatHistory(
@@ -209,13 +243,14 @@ export async function addChatHistory(
   studyCount: number,
   sessionId?: string,
   answer?: string,
-  citationsUsed?: number
+  citationsUsed?: number,
+  responseData?: CachedResponseData
 ): Promise<ChatHistoryItem | null> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat-history/${ragId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, studyCount, sessionId, answer, citationsUsed }),
+      body: JSON.stringify({ query, studyCount, sessionId, answer, citationsUsed, responseData }),
     });
 
     if (!response.ok) {
