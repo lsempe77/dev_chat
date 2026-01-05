@@ -381,7 +381,7 @@ export function OverviewTab() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <a
-            href="https://cloud.langfuse.com"
+            href="https://cloud.langfuse.com/project/cmjafx1vd00qkad06prpgl80o"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors"
