@@ -67,6 +67,19 @@ def _generate_pdf_url(document_id: str, source_path: str = None) -> str | None:
         return None
 
 
+def _get_project_model_config(project_id: str) -> dict | None:
+    """Fetch model configuration for a project from Supabase."""
+    try:
+        from src.database.supabase_client import get_supabase_client
+        client = get_supabase_client()
+        result = client.table("rag_projects").select("model_config").eq("id", project_id).single().execute()
+        if result.data and result.data.get("model_config"):
+            return result.data["model_config"]
+    except Exception as e:
+        logger.warning(f"Failed to fetch model config for project {project_id}: {e}")
+    return None
+
+
 @router.post("/query", response_model=QueryResponse)
 async def query_evidence(request: QueryRequest):
     """
@@ -152,11 +165,19 @@ async def query_evidence(request: QueryRequest):
                 # Get agent (with optional custom collection for multi-tenant)
                 agent = get_agent(collection_name=request.collection)
                 
-                # Call the agent with settings
+                # Fetch project-specific model configuration if project_id provided
+                model_config = None
+                if request.project_id:
+                    model_config = _get_project_model_config(request.project_id)
+                    if model_config:
+                        logger.info(f"Using project model config: {model_config.get('provider')}/{model_config.get('model')}")
+                
+                # Call the agent with settings and model config
                 response = await agent.chat(
                     query=request.query,
                     include_citations=True,
                     search_settings=agent_settings,
+                    model_config=model_config,
                 )
                 
                 # Convert backend response to frontend format

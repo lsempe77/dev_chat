@@ -141,6 +141,7 @@ class DevChatAgent:
         stream: bool = False,
         search_settings: Optional[SearchSettings] = None,
         session_id: Optional[str] = None,
+        model_config: Optional[Dict[str, Any]] = None,
     ) -> DevChatResponse:
         """
         Process a user query and generate a response.
@@ -151,6 +152,8 @@ class DevChatAgent:
             stream: Whether to stream the response (not implemented yet)
             search_settings: Optional settings from frontend (relevance, max studies, etc.)
             session_id: Optional session ID for conversation memory
+            model_config: Optional LLM configuration from project settings
+                          Dict with provider, model, reasoning_model, temperature
             
         Returns:
             DevChatResponse with answer and metadata
@@ -369,7 +372,7 @@ class DevChatAgent:
         if user_settings.use_claim_ledger and user_settings.use_structured_citations:
             # ALCE-style claim ledger for highest citation accuracy
             logger.info("Using claim ledger synthesizer (ALCE-style verified citations)")
-            claim_ledger_synth = ClaimLedgerSynthesizer()
+            claim_ledger_synth = ClaimLedgerSynthesizer(model_config=model_config)
             answer, claim_ledger = await claim_ledger_synth.synthesize(
                 query=processed_query,
                 context=context,

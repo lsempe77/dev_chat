@@ -216,13 +216,14 @@ export default function RAGChatPage() {
     setError(null);
     
     try {
-      // Call the API with the specific RAG collection
+      // Call the API with the specific RAG collection and project ID for model config
       const response = await fetch(`${API_BASE_URL}/api/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: searchQuery,
           collection: project.qdrant_collection,
+          project_id: ragId,  // Pass project ID for model config lookup
           settings: searchSettings,
         }),
       });

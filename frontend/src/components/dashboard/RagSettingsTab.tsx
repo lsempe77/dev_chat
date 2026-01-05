@@ -24,12 +24,64 @@ import {
   Copy,
   Check,
   Library,
+  Cpu,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { ConnectZoteroModal } from "./ConnectZoteroModal";
 import { getZoteroConnection, type ZoteroConnection } from "@/lib/rag-api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Available LLM providers and models (synced with backend)
+const AVAILABLE_PROVIDERS = {
+  openai: {
+    name: "OpenAI",
+    models: {
+      "gpt-4o-mini": { name: "GPT-4o Mini", type: "fast", cost: "Low" },
+      "gpt-4o": { name: "GPT-4o", type: "reasoning", cost: "Medium" },
+      "gpt-4-turbo": { name: "GPT-4 Turbo", type: "reasoning", cost: "High" },
+    },
+  },
+  anthropic: {
+    name: "Anthropic",
+    models: {
+      "claude-3-5-haiku-20241022": { name: "Claude 3.5 Haiku", type: "fast", cost: "Low" },
+      "claude-sonnet-4-20250514": { name: "Claude Sonnet 4", type: "reasoning", cost: "Medium" },
+      "claude-3-5-sonnet-20241022": { name: "Claude 3.5 Sonnet", type: "reasoning", cost: "Medium" },
+    },
+  },
+  google: {
+    name: "Google",
+    models: {
+      "gemini-2.0-flash-exp": { name: "Gemini 2.0 Flash", type: "fast", cost: "Free" },
+      "gemini-exp-1206": { name: "Gemini Exp", type: "reasoning", cost: "Free" },
+    },
+  },
+};
+
+type ProviderKey = keyof typeof AVAILABLE_PROVIDERS;
+
+interface ModelConfig {
+  provider: string;
+  model: string;
+  reasoning_model: string;
+  temperature: number;
+}
+
+const DEFAULT_MODEL_CONFIG: ModelConfig = {
+  provider: "openai",
+  model: "gpt-4o-mini",
+  reasoning_model: "gpt-4o",
+  temperature: 0.1,
+};
 
 interface ConnectionStatus {
   name: string;
@@ -54,6 +106,7 @@ interface RagSettingsTabProps {
     is_public: boolean;
     document_count: number;
     chunk_count: number;
+    model_config_data?: ModelConfig | null;
   };
   onProjectUpdated: () => void;
   onProjectDeleted: () => void;
@@ -101,6 +154,13 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   const [isResettingDocuments, setIsResettingDocuments] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [dangerConfirm, setDangerConfirm] = useState<string | null>(null);
+  
+  // Model configuration state
+  const [modelConfig, setModelConfig] = useState<ModelConfig>(
+    project.model_config_data || DEFAULT_MODEL_CONFIG
+  );
+  const [isSavingModelConfig, setIsSavingModelConfig] = useState(false);
+  const [modelConfigError, setModelConfigError] = useState<string | null>(null);
   
   // Zotero state
   const [zoteroModalOpen, setZoteroModalOpen] = useState(false);
@@ -258,6 +318,50 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
     } finally {
       setIsSaving(false);
     }
+  };
+  
+  // Save model configuration
+  const handleSaveModelConfig = async () => {
+    setIsSavingModelConfig(true);
+    setModelConfigError(null);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}/model-config`, {
+        method: "PATCH",
+        body: JSON.stringify(modelConfig),
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Failed to save model configuration");
+      }
+      
+      onProjectUpdated();
+    } catch (err) {
+      setModelConfigError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setIsSavingModelConfig(false);
+    }
+  };
+  
+  // Handle provider change - reset models to provider's defaults
+  const handleProviderChange = (newProvider: string) => {
+    const providerData = AVAILABLE_PROVIDERS[newProvider as ProviderKey];
+    if (!providerData) return;
+    
+    const modelKeys = Object.keys(providerData.models);
+    const fastModel = modelKeys.find(
+      k => providerData.models[k as keyof typeof providerData.models].type === "fast"
+    ) || modelKeys[0];
+    const reasoningModel = modelKeys.find(
+      k => providerData.models[k as keyof typeof providerData.models].type === "reasoning"
+    ) || modelKeys[0];
+    
+    setModelConfig({
+      ...modelConfig,
+      provider: newProvider,
+      model: fastModel,
+      reasoning_model: reasoningModel,
+    });
   };
   
   const copyShareUrl = () => {
@@ -608,6 +712,140 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
               </>
             ) : (
               "Save Changes"
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* LLM Configuration */}
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cpu className="h-5 w-5" />
+            LLM Configuration
+          </CardTitle>
+          <CardDescription>
+            Choose which AI models power your RAG&apos;s responses. Different providers offer varying quality, speed, and cost trade-offs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {modelConfigError && (
+            <div className="p-3 rounded-lg bg-red-50 text-red-600 text-sm">
+              {modelConfigError}
+            </div>
+          )}
+          
+          {/* Provider Selection */}
+          <div className="space-y-2">
+            <Label>AI Provider</Label>
+            <Select
+              value={modelConfig.provider}
+              onValueChange={handleProviderChange}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(AVAILABLE_PROVIDERS).map(([key, provider]) => (
+                  <SelectItem key={key} value={key}>
+                    {provider.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Fast Model */}
+            <div className="space-y-2">
+              <Label>Fast Model (Extraction)</Label>
+              <Select
+                value={modelConfig.model}
+                onValueChange={(value) => setModelConfig({ ...modelConfig, model: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(
+                    AVAILABLE_PROVIDERS[modelConfig.provider as ProviderKey]?.models || {}
+                  ).map(([key, model]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className="flex items-center gap-2">
+                        {model.name}
+                        <Badge variant={model.type === "fast" ? "secondary" : "outline"} className="text-xs">
+                          {model.cost}
+                        </Badge>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used for quick tasks like claim extraction
+              </p>
+            </div>
+            
+            {/* Reasoning Model */}
+            <div className="space-y-2">
+              <Label>Reasoning Model (Synthesis)</Label>
+              <Select
+                value={modelConfig.reasoning_model}
+                onValueChange={(value) => setModelConfig({ ...modelConfig, reasoning_model: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(
+                    AVAILABLE_PROVIDERS[modelConfig.provider as ProviderKey]?.models || {}
+                  ).map(([key, model]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className="flex items-center gap-2">
+                        {model.name}
+                        <Badge variant={model.type === "reasoning" ? "default" : "outline"} className="text-xs">
+                          {model.cost}
+                        </Badge>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used for generating comprehensive answers
+              </p>
+            </div>
+          </div>
+          
+          {/* Temperature */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Temperature</Label>
+              <span className="text-sm text-muted-foreground font-mono">
+                {modelConfig.temperature.toFixed(1)}
+              </span>
+            </div>
+            <Slider
+              value={[modelConfig.temperature * 10]}
+              onValueChange={(values) => setModelConfig({ ...modelConfig, temperature: values[0] / 10 })}
+              min={0}
+              max={10}
+              step={1}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              Lower = more consistent, higher = more creative. Recommended: 0.1 for factual research.
+            </p>
+          </div>
+          
+          <Button onClick={handleSaveModelConfig} disabled={isSavingModelConfig}>
+            {isSavingModelConfig ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Model Configuration"
             )}
           </Button>
         </CardContent>

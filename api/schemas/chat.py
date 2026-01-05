@@ -38,6 +38,7 @@ class QueryRequest(BaseModel):
     settings: Optional[SearchSettings] = None
     session_id: Optional[str] = Field(None, description="Session ID for conversation memory")
     collection: Optional[str] = Field(None, description="Qdrant collection name for multi-tenant RAGs")
+    project_id: Optional[str] = Field(None, description="RAG project ID for model config lookup")
 
 
 class StudyResponse(BaseModel):

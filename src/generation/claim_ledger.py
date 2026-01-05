@@ -110,24 +110,44 @@ class ClaimLedgerSynthesizer:
     2. Then writing using only the verified claim mappings (strong model)
     """
     
-    def __init__(self, llm=None, writing_llm=None):
+    def __init__(self, llm=None, writing_llm=None, model_config: Optional[Dict] = None):
+        """
+        Initialize with optional model configuration.
+        
+        Args:
+            llm: Pre-configured LLM for extraction (overrides model_config)
+            writing_llm: Pre-configured LLM for writing (overrides model_config)
+            model_config: Dict with provider, model, reasoning_model, temperature
+                          If provided, used to configure LLMs dynamically
+        """
         self.llm = llm  # For extraction (can be fast)
         self.writing_llm = writing_llm  # For writing (needs to be strong)
+        self.model_config = model_config or {}
         self._setup_llms()
         self._llm_semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
     
     def _setup_llms(self):
-        """Initialize LLMs using OpenRouter."""
+        """Initialize LLMs using OpenRouter with optional model config override."""
         try:
             from llama_index.llms.openai_like import OpenAILike
+            
+            # Get model config with defaults
+            provider = self.model_config.get("provider", "openai")
+            fast_model = self.model_config.get("model", "gpt-4o-mini")
+            reasoning_model = self.model_config.get("reasoning_model", "gpt-4o")
+            temperature = self.model_config.get("temperature", 0.1)
+            
+            # Format model name for OpenRouter (provider/model)
+            fast_model_full = f"{provider}/{fast_model}" if "/" not in fast_model else fast_model
+            reasoning_model_full = f"{provider}/{reasoning_model}" if "/" not in reasoning_model else reasoning_model
             
             # Fast model for claim extraction
             if self.llm is None:
                 self.llm = OpenAILike(
-                    model="openai/gpt-4o-mini",
+                    model=fast_model_full,
                     api_key=settings.openrouter_api_key,
                     api_base=settings.openrouter_base_url,
-                    temperature=0.1,  # Low temperature for consistent extraction
+                    temperature=temperature,  # Low temperature for consistent extraction
                     max_tokens=4000,
                     is_chat_model=True,
                     additional_kwargs={
@@ -141,7 +161,7 @@ class ClaimLedgerSynthesizer:
             # Strong model for writing (better at following constraints)
             if self.writing_llm is None:
                 self.writing_llm = OpenAILike(
-                    model=settings.llm_reasoning_model,  # GPT-4o or Claude
+                    model=reasoning_model_full,
                     api_key=settings.openrouter_api_key,
                     api_base=settings.openrouter_base_url,
                     temperature=0.0,  # Zero temp for maximum faithfulness

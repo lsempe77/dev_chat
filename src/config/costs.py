@@ -64,6 +64,23 @@ MODEL_PRICING: Dict[str, ModelPricing] = {
         output_per_1m=Decimal("4.00"),
         provider="openrouter"
     ),
+    "anthropic/claude-3-5-sonnet-20241022": ModelPricing(
+        input_per_1m=Decimal("3.00"),
+        output_per_1m=Decimal("15.00"),
+        provider="openrouter"
+    ),
+    
+    # Google models (via OpenRouter) - Free tier
+    "google/gemini-2.0-flash-exp": ModelPricing(
+        input_per_1m=Decimal("0"),
+        output_per_1m=Decimal("0"),
+        provider="openrouter"
+    ),
+    "google/gemini-exp-1206": ModelPricing(
+        input_per_1m=Decimal("0"),
+        output_per_1m=Decimal("0"),
+        provider="openrouter"
+    ),
     
     # Cohere models
     "embed-v4": ModelPricing(
@@ -92,8 +109,14 @@ MODEL_PRICING: Dict[str, ModelPricing] = {
 MODEL_ALIASES: Dict[str, str] = {
     "gpt-4o": "openai/gpt-4o",
     "gpt-4o-mini": "openai/gpt-4o-mini",
+    "gpt-4-turbo": "openai/gpt-4o",  # Treat as gpt-4o for costing
     "claude-sonnet-4": "anthropic/claude-sonnet-4-20250514",
+    "claude-sonnet-4-20250514": "anthropic/claude-sonnet-4-20250514",
+    "claude-3-5-haiku-20241022": "anthropic/claude-3-5-haiku-20241022",
+    "claude-3-5-sonnet-20241022": "anthropic/claude-3-5-sonnet-20241022",
     "claude-3.5-haiku": "anthropic/claude-3-5-haiku-20241022",
+    "gemini-2.0-flash-exp": "google/gemini-2.0-flash-exp",
+    "gemini-exp-1206": "google/gemini-exp-1206",
 }
 
 
