@@ -38,6 +38,7 @@ async def run_experiment(
     """Run the test dataset through DevChat and log results."""
     
     from src.agents.devchat_agent import DevChatAgent, SearchSettings
+    from src.retrieval.hybrid_retriever import HybridRetriever
     from evaluation.minicheck_evaluator import MiniCheckEvaluator
     
     # Get the dataset
@@ -51,8 +52,9 @@ async def run_experiment(
     print(f"   Test cases: {len(items)}")
     print("-" * 50)
     
-    # Initialize agent and evaluator
-    agent = DevChatAgent(project_id="0816e8d3-ab23-417c-bf3f-e45531411c73")
+    # Initialize agent with custom collection and evaluator
+    collection_name = "rag_0816e8d3-ab23-417c-bf3f-e45531411c73"
+    agent = DevChatAgent(retriever=HybridRetriever(collection_name=collection_name))
     evaluator = MiniCheckEvaluator(backend='api', api_model='openai/gpt-4o-mini')
     
     settings = SearchSettings(
@@ -68,9 +70,10 @@ async def run_experiment(
         
         print(f"\n[{i+1}/{len(items)}] {query[:50]}...")
         
-        # Create trace for this run
-        trace = langfuse.trace(
+        # Create a trace using v3 SDK (start_span creates a trace)
+        trace = langfuse.start_span(
             name=f"experiment-{experiment_name}",
+            input=query,
             metadata={
                 "experiment": experiment_name,
                 "model": model,
@@ -79,14 +82,13 @@ async def run_experiment(
                 "dataset_item_id": item.id,
                 "category": expected.get("category"),
             },
-            tags=["experiment", experiment_name]
         )
         
         try:
             start_time = time.time()
             
             # Run the query
-            response = await agent.chat(query, settings)
+            response = await agent.chat(query, search_settings=settings)
             
             latency_ms = (time.time() - start_time) * 1000
             
@@ -98,27 +100,30 @@ async def run_experiment(
                 citations=response.citations or []
             )
             
-            # Log scores to trace
-            trace.score(name="faithfulness", value=eval_result.faithfulness)
-            trace.score(name="citation_recall", value=eval_result.citation_recall)
-            trace.score(name="citation_precision", value=eval_result.citation_precision)
-            trace.score(name="latency_ms", value=latency_ms)
-            
-            # Log generation
-            trace.generation(
-                name="synthesis",
-                model=model,
-                input={"query": query, "num_sources": response.num_sources},
+            # Update trace with output
+            trace.update(
                 output=response.answer[:1000],
                 metadata={
                     "faithfulness": eval_result.faithfulness,
                     "citation_recall": eval_result.citation_recall,
                     "citation_precision": eval_result.citation_precision,
+                    "latency_ms": latency_ms,
+                    "num_sources": response.num_sources,
                 }
             )
             
-            # Link to dataset item for experiment tracking
-            item.link(trace, experiment_name)
+            # End the trace span
+            trace.end()
+            
+            # Log scores using v3 SDK - create_score method
+            trace_id = trace.trace_id
+            langfuse.create_score(trace_id=trace_id, name="faithfulness", value=eval_result.faithfulness)
+            langfuse.create_score(trace_id=trace_id, name="citation_recall", value=eval_result.citation_recall)
+            langfuse.create_score(trace_id=trace_id, name="citation_precision", value=eval_result.citation_precision)
+            langfuse.create_score(trace_id=trace_id, name="latency_ms", value=latency_ms)
+            
+            # Note: Dataset item linking uses a different API in v3
+            # The scores are still captured with the trace_id for analysis
             
             results.append({
                 "query": query[:50],
@@ -134,7 +139,8 @@ async def run_experiment(
             
         except Exception as e:
             print(f"   ❌ Error: {e}")
-            trace.score(name="error", value=1, comment=str(e))
+            trace.update(output=f"Error: {str(e)}")
+            trace.end()
             results.append({
                 "query": query[:50],
                 "error": str(e),
