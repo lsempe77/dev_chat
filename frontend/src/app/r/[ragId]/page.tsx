@@ -368,7 +368,8 @@ export default function RAGChatPage() {
       setCitations((item.responseData.citations || []) as Citation[]);
       setStudies((item.responseData.studies || []) as Study[]);
       setSuggestions(item.responseData.suggestions || []);
-      setEvidenceHealth(item.responseData.evidenceHealth as EvidenceHealth || defaultEvidenceHealth);
+      // Cast through unknown for EvidenceHealth since cache structure differs
+      setEvidenceHealth((item.responseData.evidenceHealth as unknown as EvidenceHealth) || defaultEvidenceHealth);
       setHasSearched(true);
       setCurrentQueryId(item.id);
       setError(null);
