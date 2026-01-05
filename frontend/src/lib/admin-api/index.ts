@@ -643,3 +643,82 @@ export async function downloadBibliography(
 
   return response.json();
 }
+
+// =============================================================================
+// Usage & Cost Tracking
+// =============================================================================
+
+import type {
+  UsageSummaryResponse,
+  CostProjection,
+  PricingResponse,
+} from "./types";
+
+/**
+ * Get usage summary for a date range
+ */
+export async function getUsageSummary(
+  days: number = 30
+): Promise<UsageSummaryResponse> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/usage/summary?days=${days}`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch usage" }));
+    throw new Error(error.detail || "Failed to fetch usage summary");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get cost projection (daily avg → monthly/annual)
+ */
+export async function getCostProjection(
+  days: number = 30
+): Promise<CostProjection> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/usage/costs?days=${days}`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch costs" }));
+    throw new Error(error.detail || "Failed to fetch cost projection");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get model pricing configuration
+ */
+export async function getModelPricing(): Promise<PricingResponse> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/usage/pricing`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch pricing" }));
+    throw new Error(error.detail || "Failed to fetch pricing");
+  }
+
+  return response.json();
+}
+
+/**
+ * Force flush buffered usage events
+ */
+export async function flushUsageBuffer(): Promise<{ success: boolean; message: string }> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/usage/flush`,
+    { method: "POST" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to flush" }));
+    throw new Error(error.detail || "Failed to flush usage buffer");
+  }
+
+  return response.json();
+}

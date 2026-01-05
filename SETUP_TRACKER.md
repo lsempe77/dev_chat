@@ -205,7 +205,7 @@ A comprehensive admin dashboard for 3ie staff to monitor costs, usage, users, RA
 
 **Effort:** ~3 hours
 
-#### Phase 3: Admin Overview Dashboard (UI)
+#### Phase 3: Admin Overview Dashboard (UI) ✅ DONE
 **Goal:** At-a-glance view of system health and costs
 
 New tab: **Overview** (first tab in admin)
@@ -220,16 +220,21 @@ New tab: **Overview** (first tab in admin)
 | **Recent Activity** | Last 10 queries (user, RAG, cost) |
 
 Components:
-- [ ] `AdminOverview.tsx` - main dashboard component
-- [ ] `StatsCard.tsx` - reusable metric card
-- [ ] `UsageChart.tsx` - daily usage over time (recharts)
-- [ ] Backend endpoints:
-  - `GET /admin/stats/summary` - aggregate stats
-  - `GET /admin/stats/daily` - daily breakdown
-  - `GET /admin/stats/top-users` - top users
-  - `GET /admin/stats/recent` - recent activity
+- [x] `OverviewTab.tsx` - main dashboard component with stats cards
+- [x] `StatsCard` - reusable metric card (inline component)
+- [x] `ModelUsageCard` - model breakdown with progress bars
+- [x] `CostProjectionCard` - daily/monthly/annual projections
+- [x] `AccessControlInfo` - explains admin auth system
+- [ ] `UsageChart.tsx` - daily usage over time (recharts) - OPTIONAL
+- [x] Frontend API functions in `admin-api/index.ts`:
+  - `getUsageSummary()` - aggregate stats with daily/model breakdown
+  - `getCostProjection()` - cost projections
+  - `getModelPricing()` - current pricing config
+  - `flushUsageBuffer()` - force flush events
 
-**Effort:** ~6 hours
+**Status:** Complete - Overview tab now first tab in Admin panel
+
+**Effort:** ~4 hours
 
 #### Phase 4: User & RAG Management
 **Goal:** View all users, their RAGs, usage, and take action

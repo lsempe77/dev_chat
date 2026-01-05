@@ -11,10 +11,12 @@ import {
   ArrowLeft,
   Database,
   Loader2,
-  Tag
+  Tag,
+  BarChart3
 } from "lucide-react";
 import Link from "next/link";
 import { AdminProvider } from "./AdminContext";
+import { OverviewTab } from "./OverviewTab";
 import { UploadTab } from "./UploadTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { ProcessingTab } from "./ProcessingTab";
@@ -23,7 +25,7 @@ import { MetadataTab } from "./MetadataTab";
 import { checkHealth, getCollectionInfo } from "@/lib/admin-api";
 
 function AdminLayoutInner() {
-  const [activeTab, setActiveTab] = useState("upload");
+  const [activeTab, setActiveTab] = useState("overview");
   const [connectionStatus, setConnectionStatus] = useState<{
     modal: boolean;
     qdrant: boolean;
@@ -98,7 +100,11 @@ function AdminLayoutInner() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl grid-cols-5">
+          <TabsList className="grid w-full max-w-3xl grid-cols-6">
+            <TabsTrigger value="overview" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
             <TabsTrigger value="upload" className="gap-2">
               <Upload className="h-4 w-4" />
               Upload
@@ -120,6 +126,10 @@ function AdminLayoutInner() {
               Settings
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="overview" className="space-y-4">
+            <OverviewTab />
+          </TabsContent>
 
           <TabsContent value="upload" className="space-y-4">
             <UploadTab />

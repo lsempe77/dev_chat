@@ -371,3 +371,53 @@ export interface ImportConfirmResponse {
   enriched: number;
   errors: string[];
 }
+
+// =============================================================================
+// Usage & Cost Tracking Types
+// =============================================================================
+
+export interface DailyBreakdown {
+  date: string;
+  queries: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface ModelBreakdown {
+  model: string;
+  queries: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface UsageSummaryResponse {
+  period_start: string;
+  period_end: string;
+  total_queries: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost_usd: number;
+  avg_latency_ms: number;
+  cache_hit_rate: number;
+  daily_breakdown: DailyBreakdown[];
+  model_breakdown: ModelBreakdown[];
+}
+
+export interface CostProjection {
+  current_daily_avg: number;
+  projected_monthly: number;
+  projected_annual: number;
+  days_in_sample: number;
+}
+
+export interface ModelPricing {
+  input_per_1m: number;
+  output_per_1m: number;
+  provider: string;
+}
+
+export interface PricingResponse {
+  [model: string]: ModelPricing;
+}
