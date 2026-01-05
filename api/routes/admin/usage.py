@@ -67,6 +67,16 @@ class CostProjection(BaseModel):
     days_in_sample: int
 
 
+class AdminOverviewStats(BaseModel):
+    """Overview stats for admin dashboard."""
+    total_users: int
+    total_rag_projects: int
+    total_documents: int
+    total_chunks: int
+    total_queries: int
+    total_cost_usd: float
+
+
 # =============================================================================
 # Usage Stats Endpoints
 # =============================================================================
@@ -314,4 +324,76 @@ async def flush_usage_buffer():
         return {"status": "ok", "message": "Buffer flushed successfully"}
     except Exception as e:
         logger.error(f"Error flushing usage buffer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/overview", response_model=AdminOverviewStats)
+async def get_admin_overview():
+    """
+    Get overview statistics for the admin dashboard.
+    
+    Returns total counts across all users and projects.
+    """
+    from ..dependencies import get_db_session, is_postgres_available
+    
+    if not is_postgres_available():
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = await get_db_session()
+        if not db:
+            raise HTTPException(status_code=503, detail="Could not get database session")
+        
+        async with db:
+            from sqlalchemy import text
+            
+            # Get user count
+            user_sql = text("SELECT COUNT(*) as count FROM auth.users")
+            user_result = await db.execute(user_sql)
+            user_count = user_result.fetchone().count or 0
+            
+            # Get RAG project count
+            rag_sql = text("SELECT COUNT(*) as count FROM rag_projects")
+            rag_result = await db.execute(rag_sql)
+            rag_count = rag_result.fetchone().count or 0
+            
+            # Get document and chunk counts
+            doc_sql = text("""
+                SELECT 
+                    COUNT(*) as doc_count,
+                    COALESCE(SUM(chunk_count), 0) as chunk_count
+                FROM documents
+            """)
+            doc_result = await db.execute(doc_sql)
+            doc_row = doc_result.fetchone()
+            doc_count = doc_row.doc_count or 0
+            chunk_count = int(doc_row.chunk_count or 0)
+            
+            # Get usage totals (if usage_logs exists)
+            try:
+                usage_sql = text("""
+                    SELECT 
+                        COUNT(*) as query_count,
+                        COALESCE(SUM(cost_usd), 0) as total_cost
+                    FROM usage_logs
+                """)
+                usage_result = await db.execute(usage_sql)
+                usage_row = usage_result.fetchone()
+                query_count = usage_row.query_count or 0
+                total_cost = float(usage_row.total_cost or 0)
+            except Exception:
+                query_count = 0
+                total_cost = 0.0
+            
+            return AdminOverviewStats(
+                total_users=user_count,
+                total_rag_projects=rag_count,
+                total_documents=doc_count,
+                total_chunks=chunk_count,
+                total_queries=query_count,
+                total_cost_usd=total_cost,
+            )
+            
+    except Exception as e:
+        logger.error(f"Error fetching admin overview: {e}")
         raise HTTPException(status_code=500, detail=str(e))

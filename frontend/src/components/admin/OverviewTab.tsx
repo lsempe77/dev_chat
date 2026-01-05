@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
@@ -14,18 +13,21 @@ import {
   Zap,
   Clock,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Database,
+  FolderKanban
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
   getUsageSummary, 
   getCostProjection,
-  getDocuments,
+  getAdminOverview,
 } from "@/lib/admin-api/index";
 import type { 
   UsageSummaryResponse,
   CostProjection,
   ModelBreakdown,
+  AdminOverviewStats,
 } from "@/lib/admin-api/types";
 
 // =============================================================================
@@ -213,53 +215,13 @@ function CostProjectionCard({ projection, loading }: CostProjectionCardProps) {
 }
 
 // =============================================================================
-// Access Control Info
-// =============================================================================
-
-function AccessControlInfo() {
-  return (
-    <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Users className="h-4 w-4" />
-          Admin Access Control
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm space-y-2">
-        <p className="text-muted-foreground">
-          This dashboard is protected by password authentication.
-        </p>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">Browser</Badge>
-            <span className="text-xs text-muted-foreground">
-              Login with ADMIN_PASSWORD → session token (24hr)
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">API</Badge>
-            <span className="text-xs text-muted-foreground">
-              Use X-Admin-API-Key header for programmatic access
-            </span>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Set <code className="bg-muted px-1 rounded">ADMIN_PASSWORD</code> and{" "}
-          <code className="bg-muted px-1 rounded">ADMIN_API_KEY</code> env vars to enable.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// =============================================================================
 // Main Overview Tab
 // =============================================================================
 
 export function OverviewTab() {
   const [usageData, setUsageData] = useState<UsageSummaryResponse | null>(null);
   const [costProjection, setCostProjection] = useState<CostProjection | null>(null);
-  const [docCount, setDocCount] = useState<number>(0);
+  const [overview, setOverview] = useState<AdminOverviewStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -270,15 +232,15 @@ export function OverviewTab() {
     setError(null);
 
     try {
-      const [usage, costs, docs] = await Promise.all([
+      const [usage, costs, overviewData] = await Promise.all([
         getUsageSummary(30).catch(() => null),
         getCostProjection(30).catch(() => null),
-        getDocuments({ limit: 1 }).catch(() => ({ total_count: 0 })),
+        getAdminOverview().catch(() => null),
       ]);
 
       setUsageData(usage);
       setCostProjection(costs);
-      setDocCount(docs.total_count);
+      setOverview(overviewData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard data");
     } finally {
@@ -365,50 +327,40 @@ export function OverviewTab() {
         />
       </div>
 
-      {/* Secondary Stats */}
+      {/* Secondary Stats - Platform Overview */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
+          title="Users"
+          value={overview ? overview.total_users.toLocaleString() : "0"}
+          description="Registered accounts"
+          icon={<Users className="h-4 w-4" />}
+          loading={loading}
+        />
+        <StatsCard
+          title="RAG Projects"
+          value={overview ? overview.total_rag_projects.toLocaleString() : "0"}
+          description="Active knowledge bases"
+          icon={<FolderKanban className="h-4 w-4" />}
+          loading={loading}
+        />
+        <StatsCard
           title="Documents"
-          value={docCount.toLocaleString()}
-          description="Indexed in knowledge base"
+          value={overview ? overview.total_documents.toLocaleString() : "0"}
+          description={overview ? `${formatNumber(overview.total_chunks)} chunks` : "Across all projects"}
           icon={<FileText className="h-4 w-4" />}
           loading={loading}
         />
         <StatsCard
-          title="Cache Hit Rate"
-          value={usageData && usageData.cache_hit_rate > 0 ? `${(usageData.cache_hit_rate * 100).toFixed(1)}%` : "—"}
-          description="Queries served from cache"
-          icon={<Zap className="h-4 w-4" />}
+          title="Chunks"
+          value={overview ? formatNumber(overview.total_chunks) : "0"}
+          description="Total indexed vectors"
+          icon={<Database className="h-4 w-4" />}
           loading={loading}
         />
-        <Card className="col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Period
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-6 w-48" />
-            ) : usageData ? (
-              <div className="text-sm">
-                <span className="font-mono">
-                  {new Date(usageData.period_start).toLocaleDateString()}
-                </span>
-                <span className="text-muted-foreground mx-2">→</span>
-                <span className="font-mono">
-                  {new Date(usageData.period_end).toLocaleDateString()}
-                </span>
-              </div>
-            ) : (
-              <span className="text-muted-foreground">No data</span>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Details Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <ModelUsageCard 
           breakdown={usageData?.model_breakdown || []} 
           loading={loading}
@@ -417,7 +369,6 @@ export function OverviewTab() {
           projection={costProjection} 
           loading={loading}
         />
-        <AccessControlInfo />
       </div>
     </div>
   );

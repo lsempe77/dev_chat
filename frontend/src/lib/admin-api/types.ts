@@ -412,6 +412,15 @@ export interface CostProjection {
   days_in_sample: number;
 }
 
+export interface AdminOverviewStats {
+  total_users: number;
+  total_rag_projects: number;
+  total_documents: number;
+  total_chunks: number;
+  total_queries: number;
+  total_cost_usd: number;
+}
+
 export interface ModelPricing {
   input_per_1m: number;
   output_per_1m: number;

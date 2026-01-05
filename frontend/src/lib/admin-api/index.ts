@@ -652,6 +652,7 @@ import type {
   UsageSummaryResponse,
   CostProjection,
   PricingResponse,
+  AdminOverviewStats,
 } from "./types";
 
 /**
@@ -718,6 +719,22 @@ export async function flushUsageBuffer(): Promise<{ success: boolean; message: s
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: "Failed to flush" }));
     throw new Error(error.detail || "Failed to flush usage buffer");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get admin overview stats (users, projects, documents, etc.)
+ */
+export async function getAdminOverview(): Promise<AdminOverviewStats> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/overview`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch overview" }));
+    throw new Error(error.detail || "Failed to fetch admin overview");
   }
 
   return response.json();
