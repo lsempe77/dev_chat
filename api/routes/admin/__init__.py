@@ -25,6 +25,7 @@ from .documents import router as documents_router
 from .metadata import router as metadata_router
 from .bibliography import router as bibliography_router
 from .usage import router as usage_router
+from .users import router as users_router
 
 # Auth router (login/logout) - NO authentication required
 # This must be separate so users can actually log in
@@ -50,6 +51,7 @@ protected_router.include_router(documents_router)
 protected_router.include_router(metadata_router)
 protected_router.include_router(bibliography_router)
 protected_router.include_router(usage_router)
+protected_router.include_router(users_router)
 
 # Combined router that includes both public and protected routes
 router = APIRouter()

@@ -4,50 +4,35 @@ import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { 
-  Upload, 
-  FileText, 
-  Activity, 
-  Settings, 
   ArrowLeft,
-  Database,
+  BarChart3,
+  Users,
   Loader2,
-  Tag,
-  BarChart3
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
-import { AdminProvider } from "./AdminContext";
 import { OverviewTab } from "./OverviewTab";
-import { UploadTab } from "./UploadTab";
-import { DocumentsTab } from "./DocumentsTab";
-import { ProcessingTab } from "./ProcessingTab";
-import { SettingsTab } from "./SettingsTab";
-import { MetadataTab } from "./MetadataTab";
-import { checkHealth, getCollectionInfo } from "@/lib/admin-api";
+import { UsersTab } from "./UsersTab";
+import { checkHealth } from "@/lib/admin-api";
 
 function AdminLayoutInner() {
   const [activeTab, setActiveTab] = useState("overview");
   const [connectionStatus, setConnectionStatus] = useState<{
-    modal: boolean;
-    qdrant: boolean;
+    backend: boolean;
     loading: boolean;
-  }>({ modal: false, qdrant: false, loading: true });
+  }>({ backend: false, loading: true });
 
   // Check connections on mount
   useEffect(() => {
     const checkConnections = async () => {
       try {
-        const [healthResult, collectionResult] = await Promise.allSettled([
-          checkHealth(),
-          getCollectionInfo(),
-        ]);
-        
+        const healthResult = await checkHealth();
         setConnectionStatus({
-          modal: healthResult.status === "fulfilled",
-          qdrant: collectionResult.status === "fulfilled",
+          backend: !!healthResult,
           loading: false,
         });
       } catch {
-        setConnectionStatus({ modal: false, qdrant: false, loading: false });
+        setConnectionStatus({ backend: false, loading: false });
       }
     };
     
@@ -64,33 +49,26 @@ function AdminLayoutInner() {
               <Link href="/">
                 <Button variant="ghost" size="sm" className="gap-2">
                   <ArrowLeft className="h-4 w-4" />
-                  Back to Research
+                  Back to App
                 </Button>
               </Link>
               <div className="h-6 w-px bg-border" />
               <div className="flex items-center gap-2">
-                <Database className="h-5 w-5 text-primary" />
-                <h1 className="text-xl font-semibold">Document Management</h1>
+                <Shield className="h-5 w-5 text-primary" />
+                <h1 className="text-xl font-semibold">3ie Admin</h1>
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               {connectionStatus.loading ? (
                 <span className="flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  Checking connections...
+                  Checking...
                 </span>
               ) : (
-                <>
-                  <span className="flex items-center gap-1">
-                    <span className={`h-2 w-2 rounded-full ${connectionStatus.modal ? "bg-green-500" : "bg-red-500"}`} />
-                    Backend {connectionStatus.modal ? "Online" : "Offline"}
-                  </span>
-                  <span className="text-border">|</span>
-                  <span className="flex items-center gap-1">
-                    <span className={`h-2 w-2 rounded-full ${connectionStatus.qdrant ? "bg-green-500" : "bg-red-500"}`} />
-                    Qdrant {connectionStatus.qdrant ? "Online" : "Offline"}
-                  </span>
-                </>
+                <span className="flex items-center gap-1">
+                  <span className={`h-2 w-2 rounded-full ${connectionStatus.backend ? "bg-green-500" : "bg-red-500"}`} />
+                  Backend {connectionStatus.backend ? "Online" : "Offline"}
+                </span>
               )}
             </div>
           </div>
@@ -100,30 +78,14 @@ function AdminLayoutInner() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-3xl grid-cols-6">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
             <TabsTrigger value="overview" className="gap-2">
               <BarChart3 className="h-4 w-4" />
               Overview
             </TabsTrigger>
-            <TabsTrigger value="upload" className="gap-2">
-              <Upload className="h-4 w-4" />
-              Upload
-            </TabsTrigger>
-            <TabsTrigger value="processing" className="gap-2">
-              <Activity className="h-4 w-4" />
-              Processing
-            </TabsTrigger>
-            <TabsTrigger value="documents" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Documents
-            </TabsTrigger>
-            <TabsTrigger value="metadata" className="gap-2">
-              <Tag className="h-4 w-4" />
-              Metadata
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="h-4 w-4" />
+              Users & RAGs
             </TabsTrigger>
           </TabsList>
 
@@ -131,24 +93,8 @@ function AdminLayoutInner() {
             <OverviewTab />
           </TabsContent>
 
-          <TabsContent value="upload" className="space-y-4">
-            <UploadTab />
-          </TabsContent>
-
-          <TabsContent value="processing" className="space-y-4">
-            <ProcessingTab />
-          </TabsContent>
-
-          <TabsContent value="documents" className="space-y-4">
-            <DocumentsTab />
-          </TabsContent>
-
-          <TabsContent value="metadata" className="space-y-4">
-            <MetadataTab />
-          </TabsContent>
-
-          <TabsContent value="settings" className="space-y-4">
-            <SettingsTab />
+          <TabsContent value="users" className="space-y-4">
+            <UsersTab />
           </TabsContent>
         </Tabs>
       </main>
@@ -157,9 +103,5 @@ function AdminLayoutInner() {
 }
 
 export function AdminLayout() {
-  return (
-    <AdminProvider>
-      <AdminLayoutInner />
-    </AdminProvider>
-  );
+  return <AdminLayoutInner />;
 }
