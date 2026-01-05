@@ -136,6 +136,12 @@ devchat_v2_sota/
 - [ ] Advanced search filters in chat
 - [x] Export citations (CSV, JSON, BibTeX) ✅ Done
 
+### Quality Improvements (Post Phase 5)
+- [ ] Improve faithfulness (currently 66.47%) via prompt tuning in Langfuse
+- [ ] Add user feedback tracking (👍/👎 on responses)
+- [ ] Create A/B experiments for synthesis prompts
+- [ ] Expand golden test suite (currently 8 queries)
+
 ### Future Exploration
 - [ ] RAPTOR hierarchical summarization
 - [ ] GraphRAG for complex relationships
