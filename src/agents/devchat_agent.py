@@ -28,6 +28,7 @@ from src.database.memory import get_conversation_memory
 from src.utils.cache import get_response_cache
 from src.utils.logging import get_logger
 from src.utils.usage_logger import log_query
+from src.utils.langfuse_client import create_trace, flush_langfuse, add_generation_to_trace, add_span_to_trace, add_generation_to_trace, add_span_to_trace
 
 logger = get_logger(__name__)
 
@@ -161,6 +162,20 @@ class DevChatAgent:
         
         total_start = time.time()
         
+        # Create Langfuse trace for observability
+        trace = create_trace(
+            name="chat",
+            session_id=session_id,
+            input_data=query,
+            metadata={
+                "relevance_threshold": user_settings.relevance_threshold,
+                "max_studies": user_settings.max_studies,
+                "use_claim_ledger": user_settings.use_claim_ledger,
+                "use_structured_citations": user_settings.use_structured_citations,
+            },
+            tags=["chat", "devchat"],
+        )
+        
         # Get conversation context if session provided
         conversation_context = ""
         if session_id and settings.conversation_memory_enabled:
@@ -244,6 +259,15 @@ class DevChatAgent:
         retrieval_time = (time.time() - retrieval_start) * 1000
         retrieval_count = len(results)
         
+        # Log retrieval to Langfuse
+        add_span_to_trace(
+            trace,
+            name="retrieval",
+            input_data=retrieval_query[:500],
+            output_data={"result_count": retrieval_count, "hyde_used": hyde_used},
+            latency_ms=int(retrieval_time),
+        )
+        
         logger.info(f"Retrieved {retrieval_count} results (settings.maxStudies={user_settings.max_studies})")
         
         # Step 3: Reranking (optional based on settings)
@@ -289,6 +313,16 @@ class DevChatAgent:
         
         rerank_time = (time.time() - rerank_start) * 1000
         reranked_count = len(reranked_results)
+        
+        # Log reranking to Langfuse
+        add_span_to_trace(
+            trace,
+            name="reranking",
+            input_data=processed_query.original_query[:500],
+            output_data={"input_count": retrieval_count, "output_count": reranked_count},
+            latency_ms=int(rerank_time),
+            metadata={"use_reranking": user_settings.use_reranking, "threshold": user_settings.relevance_threshold},
+        )
         
         # Handle case where threshold filtered everything
         if threshold_filtered_all:
@@ -377,6 +411,19 @@ class DevChatAgent:
             output_tokens = synthesis_result.output_tokens or 0
         
         synthesis_time = (time.time() - synthesis_start) * 1000
+        
+        # Log synthesis to Langfuse
+        add_generation_to_trace(
+            trace,
+            name="synthesis",
+            model=model_used,
+            input_text=f"Query: {query}\nContext: {context.text[:500]}...",
+            output_text=answer,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=int(synthesis_time),
+            metadata={"num_sources": context.num_studies},
+        )
         
         # Check if answer indicates no relevant information found
         # These must be at the start of sentences or the whole answer to avoid false positives
@@ -497,6 +544,26 @@ class DevChatAgent:
         if not stream:
             await cache.set(query, response, settings_dict=settings_dict)
             logger.debug(f"Cached response for query: '{query[:50]}...'")
+        
+        # Update Langfuse trace with output
+        if trace:
+            try:
+                trace.update(
+                    output=answer[:2000] if answer else None,
+                    metadata={
+                        "model_used": model_used,
+                        "num_sources": len(final_citations),
+                        "query_type": processed_query.query_type.value,
+                        "total_time_ms": int(total_time),
+                        "retrieval_count": retrieval_count,
+                        "reranked_count": reranked_count,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                    },
+                )
+                flush_langfuse()
+            except Exception as e:
+                logger.warning(f"Failed to update Langfuse trace: {e}")
         
         return response
     

@@ -190,20 +190,26 @@ A comprehensive admin dashboard for 3ie staff to monitor costs, usage, users, RA
 
 **Effort:** ~4 hours
 
-#### Phase 2: Langfuse Observability Integration
+#### Phase 2: Langfuse Observability Integration ✅ DONE
 **Goal:** Full tracing of LLM calls, prompt debugging, quality monitoring
 
-- [ ] Install Langfuse SDK: `pip install langfuse`
-- [ ] Initialize Langfuse client in `src/config/settings.py`
-- [ ] Add `@observe` decorator to key functions:
-  - `query_with_claim_ledger()` - main synthesis
-  - `embed_texts()` - embedding calls
-  - `rerank()` - reranking calls
-  - `enrich_metadata()` - metadata LLM calls
-- [ ] Pass trace IDs through the call stack
+- [x] Install Langfuse SDK: `pip install langfuse` (v3.5.0)
+- [x] Create `src/utils/langfuse_client.py` with v3 SDK API:
+  - `create_trace()` - manual trace creation for async code
+  - `add_span_to_trace()` - retrieval/reranking spans
+  - `add_generation_to_trace()` - LLM generation tracking
+  - `@observe_llm` decorator for LLM calls
+  - `@observe_embedding` decorator for embedding calls
+  - `@observe_retrieval` decorator for retrieval calls
+- [x] Add tracing to `DevChatAgent.chat()`:
+  - Creates trace at start with query metadata
+  - Logs retrieval span (count, hyde_used, latency)
+  - Logs reranking span (in/out counts, threshold)
+  - Logs synthesis generation (model, tokens, latency)
+  - Updates trace with output and flushes on completion
 - [ ] Add Langfuse dashboard link to admin UI
 
-**Effort:** ~3 hours
+**Effort:** ~3 hours (actual: 2 hours)
 
 #### Phase 3: Admin Overview Dashboard (UI) ✅ DONE
 **Goal:** At-a-glance view of system health and costs
