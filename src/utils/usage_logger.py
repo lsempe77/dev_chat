@@ -317,7 +317,7 @@ async def log_query(
     query_id: Optional[str] = None,
     metadata: Optional[Dict] = None,
 ) -> None:
-    """Log a complete query (synthesis)."""
+    """Log a complete query (synthesis). Flushes immediately to ensure persistence."""
     event = UsageEvent(
         event_type="query",
         model=model,
@@ -331,4 +331,7 @@ async def log_query(
         query_id=query_id,
         metadata=metadata or {},
     )
-    await get_usage_logger().log(event)
+    logger_instance = get_usage_logger()
+    await logger_instance.log(event)
+    # Flush immediately for query events to ensure persistence
+    await logger_instance.flush()

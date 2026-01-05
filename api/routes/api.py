@@ -439,20 +439,29 @@ async def add_chat_history(rag_id: str, body: dict):
     
     Args:
         rag_id: The RAG project ID
-        body: {query: str, studyCount: int, sessionId?: str}
+        body: {query: str, studyCount: int, sessionId?: str, answer?: str, citationsUsed?: int}
     """
     from src.auth import get_supabase_client
     
     try:
         supabase = get_supabase_client()
         
-        # Insert new history item
-        result = supabase.table("chat_history").insert({
+        # Build insert data - only include answer/citations if columns exist
+        insert_data = {
             "rag_project_id": rag_id,
             "query": body.get("query", ""),
             "study_count": body.get("studyCount", 0),
             "session_id": body.get("sessionId"),
-        }).execute()
+        }
+        
+        # Add answer if provided (requires migration to add column)
+        if body.get("answer"):
+            insert_data["answer"] = body.get("answer")
+        if body.get("citationsUsed") is not None:
+            insert_data["citations_used"] = body.get("citationsUsed")
+        
+        # Insert new history item
+        result = supabase.table("chat_history").insert(insert_data).execute()
         
         if result.data:
             item = result.data[0]
@@ -461,6 +470,8 @@ async def add_chat_history(rag_id: str, body: dict):
                 "query": item["query"],
                 "studyCount": item["study_count"],
                 "timestamp": item["created_at"],
+                "answer": item.get("answer"),
+                "citationsUsed": item.get("citations_used"),
             }
         
         return {"error": "Failed to add history"}

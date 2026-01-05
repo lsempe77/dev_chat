@@ -60,41 +60,58 @@ export function AnswerPanel({
     }
   };
 
-  // Custom renderer for citations in markdown - converts [1], [2] to clickable bubbles
+  // Render a single citation button
+  const renderCitationButton = (citationId: number, key: string): React.ReactNode => {
+    const isValidCitation = citations.some(c => c.id === citationId);
+    
+    if (isValidCitation) {
+      return (
+        <button
+          key={key}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onCitationClick(citationId);
+          }}
+          className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-xs font-mono bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5"
+        >
+          {citationId}
+        </button>
+      );
+    } else {
+      return (
+        <span key={key} className="text-orange-500" title="Citation not found">
+          [{citationId}]
+        </span>
+      );
+    }
+  };
+
+  // Custom renderer for citations in markdown - converts [1], [2], [1,2], [1, 2, 3] to clickable bubbles
   const renderCitationLinks = (text: string): React.ReactNode => {
-    // Match [1], [2], etc. and make them clickable
-    const parts = text.split(/(\[\d+\])/g);
+    // Match single [1] or combined [1,2] [1, 2, 3] patterns
+    const parts = text.split(/(\[\d+(?:\s*,\s*\d+)*\])/g);
     
     return parts.map((part, index) => {
-      const match = part.match(/\[(\d+)\]/);
-      if (match) {
-        const citationId = parseInt(match[1], 10);
-        // Validate citation exists - only render as button if valid
-        const isValidCitation = citations.some(c => c.id === citationId);
-        
-        if (isValidCitation) {
-          return (
-            <button
-              key={index}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onCitationClick(citationId);
-              }}
-              className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-xs font-mono bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5"
-            >
-              {citationId}
-            </button>
-          );
-        } else {
-          // Invalid citation - render as plain text with warning style
-          return (
-            <span key={index} className="text-orange-500" title="Citation not found">
-              {part}
-            </span>
-          );
-        }
+      // Check for combined citations like [1,2] or [1, 2, 3]
+      const multiMatch = part.match(/\[(\d+(?:\s*,\s*\d+)+)\]/);
+      if (multiMatch) {
+        // Parse all citation numbers
+        const citationIds = multiMatch[1].split(/\s*,\s*/).map(n => parseInt(n, 10));
+        return (
+          <span key={index}>
+            {citationIds.map((citationId, i) => renderCitationButton(citationId, `${index}-${i}`))}
+          </span>
+        );
       }
+      
+      // Check for single citation like [1]
+      const singleMatch = part.match(/\[(\d+)\]/);
+      if (singleMatch) {
+        const citationId = parseInt(singleMatch[1], 10);
+        return renderCitationButton(citationId, `${index}`);
+      }
+      
       return <span key={index}>{part}</span>;
     });
   };

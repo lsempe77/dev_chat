@@ -236,10 +236,12 @@ export default function RAGChatPage() {
       setSuggestions(data.suggestions || []);
       setEvidenceHealth(data.evidenceHealth || defaultEvidenceHealth);
       
-      // Save to API and update local state
+      // Save to API and update local state (including answer for future analysis)
       const studyCount = (data.studies || []).length;
       const sessionId = getSessionId();
-      const savedItem = await addChatHistory(ragId, searchQuery, studyCount, sessionId);
+      const answerText = data.answer || "";
+      const citationsCount = (data.citations || []).length;
+      const savedItem = await addChatHistory(ragId, searchQuery, studyCount, sessionId, answerText, citationsCount);
       
       if (savedItem) {
         // Add to local state (at the beginning, remove duplicates)

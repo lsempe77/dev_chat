@@ -205,13 +205,15 @@ export async function addChatHistory(
   ragId: string,
   query: string,
   studyCount: number,
-  sessionId?: string
+  sessionId?: string,
+  answer?: string,
+  citationsUsed?: number
 ): Promise<ChatHistoryItem | null> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat-history/${ragId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, studyCount, sessionId }),
+      body: JSON.stringify({ query, studyCount, sessionId, answer, citationsUsed }),
     });
 
     if (!response.ok) {
