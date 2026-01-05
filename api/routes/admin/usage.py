@@ -333,68 +333,49 @@ async def get_admin_overview():
     Get overview statistics for the admin dashboard.
     
     Returns total counts across all users and projects.
+    Uses Supabase REST API directly (not SQLAlchemy).
     """
-    from ..dependencies import get_db_session, is_postgres_available
-    
-    if not is_postgres_available():
-        raise HTTPException(status_code=503, detail="Database not available")
-    
     try:
-        db = await get_db_session()
-        if not db:
-            raise HTTPException(status_code=503, detail="Could not get database session")
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
         
-        async with db:
-            from sqlalchemy import text
-            
-            # Get user count from distinct owners of RAG projects
-            # (auth.users is not directly accessible, but we can count unique user_ids)
-            user_sql = text("SELECT COUNT(DISTINCT user_id) as count FROM rag_projects")
-            user_result = await db.execute(user_sql)
-            user_count = user_result.fetchone().count or 0
-            
-            # Get RAG project count
-            rag_sql = text("SELECT COUNT(*) as count FROM rag_projects")
-            rag_result = await db.execute(rag_sql)
-            rag_count = rag_result.fetchone().count or 0
-            
-            # Get document and chunk counts
-            doc_sql = text("""
-                SELECT 
-                    COUNT(*) as doc_count,
-                    COALESCE(SUM(chunk_count), 0) as chunk_count
-                FROM documents
-            """)
-            doc_result = await db.execute(doc_sql)
-            doc_row = doc_result.fetchone()
-            doc_count = doc_row.doc_count or 0
-            chunk_count = int(doc_row.chunk_count or 0)
-            
-            # Get usage totals (if usage_logs exists)
-            try:
-                usage_sql = text("""
-                    SELECT 
-                        COUNT(*) as query_count,
-                        COALESCE(SUM(cost_usd), 0) as total_cost
-                    FROM usage_logs
-                """)
-                usage_result = await db.execute(usage_sql)
-                usage_row = usage_result.fetchone()
-                query_count = usage_row.query_count or 0
-                total_cost = float(usage_row.total_cost or 0)
-            except Exception:
-                query_count = 0
-                total_cost = 0.0
-            
-            return AdminOverviewStats(
-                total_users=user_count,
-                total_rag_projects=rag_count,
-                total_documents=doc_count,
-                total_chunks=chunk_count,
-                total_queries=query_count,
-                total_cost_usd=total_cost,
-            )
-            
+        if not url or not key:
+            raise HTTPException(status_code=503, detail="Supabase not configured")
+        
+        supabase = create_client(url, key)
+        
+        # Get RAG projects and count distinct users
+        projects_result = supabase.table("rag_projects").select("id, user_id").execute()
+        rag_count = len(projects_result.data) if projects_result.data else 0
+        user_ids = set(p.get("user_id") for p in (projects_result.data or []) if p.get("user_id"))
+        user_count = len(user_ids)
+        
+        # Get document count and total chunks
+        docs_result = supabase.table("documents").select("id, chunk_count", count="exact").execute()
+        doc_count = docs_result.count or 0
+        chunk_count = sum(d.get("chunk_count", 0) or 0 for d in (docs_result.data or []))
+        
+        # Get usage totals (if usage_logs exists)
+        try:
+            usage_result = supabase.table("usage_logs").select("id, cost_usd", count="exact").execute()
+            query_count = usage_result.count or 0
+            total_cost = sum(float(u.get("cost_usd", 0) or 0) for u in (usage_result.data or []))
+        except Exception:
+            query_count = 0
+            total_cost = 0.0
+        
+        return AdminOverviewStats(
+            total_users=user_count,
+            total_rag_projects=rag_count,
+            total_documents=doc_count,
+            total_chunks=chunk_count,
+            total_queries=query_count,
+            total_cost_usd=total_cost,
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching admin overview: {e}")
         raise HTTPException(status_code=500, detail=str(e))
