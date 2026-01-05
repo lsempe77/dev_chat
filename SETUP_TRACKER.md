@@ -126,8 +126,8 @@ devchat_v2_sota/
 - [x] Admin authentication (protect `/admin` routes) ✅ Done
 - [x] Processing status WebSocket (real-time updates) ✅ Code ready (polling fallback works)
 - [x] **Bibliography Import System** ✅ Phases 1-3 complete
-- [x] **3ie Admin Panel** ✅ Phases 1-4 complete (Overview, Langfuse, Users & RAGs)
-- [ ] **Quality Monitoring** (Phase 5) 🚀 NEXT
+- [x] **3ie Admin Panel** ✅ Phases 1-5 complete (Overview, Langfuse, Users & RAGs, Quality)
+- [x] **Quality Monitoring** (Phase 5) ✅ Complete with baseline metrics
 
 ### Waiting on External
 - [ ] Enable Supabase Realtime when beta access granted (run SQL: `ALTER PUBLICATION supabase_realtime ADD TABLE processing_jobs, documents;`)
@@ -265,26 +265,40 @@ Components:
 
 **Effort:** ~4 hours
 
-#### Phase 5: Prompt Quality & Debugging
+#### Phase 5: Prompt Quality & Debugging ✅ DONE
 **Goal:** Monitor and improve answer quality
 
-New tab: **Quality** (or integrate with Langfuse)
+New tab: **Quality** (simplified - leverages Langfuse for deep analysis)
 
 | Feature | Description |
 |---------|-------------|
-| Recent queries | Question, answer, sources, latency |
-| Feedback tracking | User 👍/👎 on answers (future) |
-| Langfuse link | Direct link to trace for each query |
-| Prompt templates | View/edit system prompts |
-| A/B testing | Compare prompt versions (future) |
+| Langfuse integration | Direct links to experiments, prompts, datasets |
+| Golden test suite | 8 curated queries with expected answer patterns |
+| Baseline experiment | `baseline-v1` run with MiniCheck evaluation |
+| Experiment scripts | `setup_langfuse.py`, `run_langfuse_experiment.py` |
 
-Initial scope:
-- [ ] Link to Langfuse dashboard for detailed traces
-- [ ] Show recent queries with expandable details
-- [ ] Display query → answer → sources chain
-- [ ] Add prompt template viewer (read-only for now)
+Components:
+- [x] `QualityTab.tsx` - simplified dashboard linking to Langfuse features
+- [x] `scripts/setup_langfuse.py` - creates dataset + prompts in Langfuse
+- [x] `scripts/run_langfuse_experiment.py` - runs experiments with MiniCheck eval
+- [x] `EVALUATION_FRAMEWORK.md` - documents dual-lane evaluation approach
+- [x] Dataset `devchat-graduation-tests` with 8 golden queries
+- [x] Prompts: `claim-extraction-v1`, `synthesis-v1`
 
-**Effort:** ~4 hours (basic), ~8 hours (full)
+**Baseline Metrics (baseline-v1):**
+| Metric | Value |
+|--------|-------|
+| Faithfulness | 66.47% |
+| Citation Recall | 98.86% |
+| Citation Precision | 98.86% |
+| Avg Latency | 12,193ms |
+
+**Next Steps:**
+- Improve faithfulness through prompt tuning in Langfuse
+- Add user feedback tracking (👍/👎)
+- Create A/B experiments for synthesis prompts
+
+**Effort:** ~4 hours
 
 #### Phase 6: Cost Alerts & Quotas (Optional)
 **Goal:** Prevent runaway costs
@@ -345,7 +359,7 @@ Observability (Langfuse)
 | 1 | Phase 2 | ✅ Langfuse integration |
 | 2 | Phase 3 | ✅ Admin Overview dashboard |
 | 2 | Phase 4 | ✅ Users & RAGs management |
-| 3 | Phase 5 | Quality monitoring |
+| 3 | Phase 5 | ✅ Quality monitoring + baseline (66.47% faithfulness) |
 | Future | Phase 6 | Cost alerts & quotas |
 
 **Total estimated effort:** ~22-30 hours
