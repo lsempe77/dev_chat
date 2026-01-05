@@ -13,9 +13,11 @@
 | **Frontend** | ✅ Live | Vercel - Next.js 15 |
 | **Backend** | ✅ Live | Railway - FastAPI |
 | **PDF Processing** | ✅ Working | Modal - MinerU GPU |
-| **Vector DB** | ✅ Connected | Qdrant Cloud |
+| **Vector DB** | ✅ Connected | Qdrant Cloud (hybrid search) |
 | **Auth & Database** | ✅ Working | Supabase |
 | **Multi-Tenant RAG** | ✅ Done | Per-user projects with isolated collections |
+| **Admin Panel** | ✅ Done | Overview, Usage, Users & RAGs |
+| **Observability** | ✅ Done | Langfuse tracing |
 
 ### Citation Quality Metrics
 
@@ -85,6 +87,12 @@
 - **Claim Ledger synthesis** - Grounded, citation-rich responses
 - **Page-aware chunking** - Click citations to jump to PDF page
 - **Post-hoc verification** - NLI-based faithfulness checking
+
+### Admin Panel
+- **Overview Dashboard** - Usage stats, costs, system health
+- **Users & RAGs** - Monitor all users and projects
+- **Langfuse Integration** - Full LLM call tracing
+- **Cost Tracking** - Per-model pricing with projections
 
 ---
 

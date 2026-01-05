@@ -126,7 +126,8 @@ devchat_v2_sota/
 - [x] Admin authentication (protect `/admin` routes) ✅ Done
 - [x] Processing status WebSocket (real-time updates) ✅ Code ready (polling fallback works)
 - [x] **Bibliography Import System** ✅ Phases 1-3 complete
-- [ ] **3ie Admin Panel** (see detailed plan below) 🚀 NEXT
+- [x] **3ie Admin Panel** ✅ Phases 1-4 complete (Overview, Langfuse, Users & RAGs)
+- [ ] **Quality Monitoring** (Phase 5) 🚀 NEXT
 
 ### Waiting on External
 - [ ] Enable Supabase Realtime when beta access granted (run SQL: `ALTER PUBLICATION supabase_realtime ADD TABLE processing_jobs, documents;`)
@@ -155,11 +156,11 @@ A comprehensive admin dashboard for 3ie staff to monitor costs, usage, users, RA
 | Document management | ✅ Done | Upload, list, delete, metadata edit |
 | Processing jobs | ✅ Done | View status, trigger processing |
 | Service health | ✅ Done | R2, Qdrant, LLM, Cohere status |
-| Metrics tracking | ⚠️ Partial | In-memory only, lost on restart |
-| Cost tracking | ❌ Missing | No $$ calculation |
-| Langfuse integration | ❌ Missing | Config exists, not wired up |
-| User management | ❌ Missing | No UI to view users/RAGs |
-| Overview dashboard | ❌ Missing | No aggregate stats view |
+| Metrics tracking | ✅ Done | Supabase `usage_logs` table |
+| Cost tracking | ✅ Done | Per-model pricing, projections |
+| Langfuse integration | ✅ Done | Full tracing in agents |
+| User management | ✅ Done | Read-only view + Supabase link |
+| Overview dashboard | ✅ Done | Stats, costs, quick links |
 
 ### Implementation Phases
 
@@ -242,7 +243,7 @@ Components:
 
 **Effort:** ~4 hours
 
-#### Phase 4: User & RAG Management
+#### Phase 4: User & RAG Management ✅ DONE
 **Goal:** View all users, their RAGs, usage, and take action
 
 New tab: **Users & RAGs**
@@ -252,18 +253,17 @@ New tab: **Users & RAGs**
 | User list | Email, created, last active, query count, cost |
 | RAG list per user | Name, docs, chunks, status, last query |
 | Usage details | Click user → see their usage history |
-| Actions | Disable user, delete RAG (soft), export data |
+| Actions | Manage in Supabase dashboard (link provided) |
 
 Components:
-- [ ] `AdminUsers.tsx` - user list with expandable rows
-- [ ] `UserDetail.tsx` - modal with user details + RAGs
-- [ ] Backend endpoints:
+- [x] `UsersTab.tsx` - user list with stats and RAG projects
+- [x] Read-only monitoring with "Manage in Supabase" link
+- [x] Backend endpoints:
   - `GET /admin/users` - list all users with stats
-  - `GET /admin/users/{id}/rags` - user's RAG projects
-  - `GET /admin/users/{id}/usage` - user's usage logs
-  - `POST /admin/users/{id}/disable` - disable user
+  - `GET /admin/users/{id}` - user details with RAGs
+  - `GET /admin/rags` - list all RAG projects
 
-**Effort:** ~5 hours
+**Effort:** ~4 hours
 
 #### Phase 5: Prompt Quality & Debugging
 **Goal:** Monitor and improve answer quality
@@ -341,14 +341,15 @@ Observability (Langfuse)
 
 | Week | Phase | Deliverable |
 |------|-------|-------------|
-| 1 | Phase 1 | Persistent usage logging + costs |
-| 1 | Phase 2 | Langfuse integration |
-| 2 | Phase 3 | Admin Overview dashboard |
-| 2 | Phase 4 | Users & RAGs management |
+| 1 | Phase 1 | ✅ Persistent usage logging + costs |
+| 1 | Phase 2 | ✅ Langfuse integration |
+| 2 | Phase 3 | ✅ Admin Overview dashboard |
+| 2 | Phase 4 | ✅ Users & RAGs management |
 | 3 | Phase 5 | Quality monitoring |
 | Future | Phase 6 | Cost alerts & quotas |
 
 **Total estimated effort:** ~22-30 hours
+**Completed:** Phases 1-4 (~15 hours)
 
 ---
 
@@ -400,12 +401,18 @@ Observability (Langfuse)
 ## 📝 Recent Changes
 
 ### January 5, 2026
+- **Admin Panel Phase 4 Complete** - Users & RAGs tab working
+  - Backend: `/admin/users` endpoint with Supabase auth integration
+  - Fixed datetime serialization (Pydantic validation)
+  - Added "Manage in Supabase" link for user management
+  - Quick Links section with Langfuse, Railway, Modal
 - **Zotero Sync Bug Fix** - Fixed early pagination termination
   - **Problem:** Sync would stop after batch 1 when all items in batch were already synced (skipped)
   - **Root Cause:** Backend wasn't returning `items_skipped` count, so frontend early-exit condition triggered incorrectly
   - **Fix:** Added `items_skipped` field to `ZoteroSyncResponse` (backend) and updated sync loop condition (frontend)
   - **Commits:** `184e50c` (items_skipped fix), plus manual insertion of 22 missing items
   - **Result:** Collection now has 188 documents (was stuck at 166)
+- **Project Cleanup** - Organized scripts and documentation
 
 ### January 3, 2026
 - **Bibliography Import System** - Phase 1 (backend) + Phase 2 (UI) complete
