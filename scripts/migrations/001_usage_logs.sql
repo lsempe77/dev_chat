@@ -45,8 +45,8 @@ CREATE INDEX IF NOT EXISTS idx_usage_logs_rag_project_id ON usage_logs(rag_proje
 CREATE INDEX IF NOT EXISTS idx_usage_logs_event_type ON usage_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_model ON usage_logs(model);
 
--- Composite index for daily aggregations
-CREATE INDEX IF NOT EXISTS idx_usage_logs_daily ON usage_logs(date_trunc('day', created_at), event_type);
+-- Composite index for date range queries (use created_at directly, aggregate in query)
+CREATE INDEX IF NOT EXISTS idx_usage_logs_created_event ON usage_logs(created_at, event_type);
 
 -- RLS Policies
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
