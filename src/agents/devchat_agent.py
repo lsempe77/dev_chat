@@ -415,7 +415,8 @@ class DevChatAgent:
                 model=model_used.split("/")[-1] if "/" in model_used else model_used,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                latency_ms=total_time,
+                latency_ms=int(total_time),
+                query_text=query,
                 metadata={
                     "query_type": processed_query.query_type.value,
                     "retrieval_count": retrieval_count,
