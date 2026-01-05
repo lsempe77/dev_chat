@@ -9,10 +9,12 @@ import {
   Users,
   Loader2,
   Shield,
+  FlaskConical,
 } from "lucide-react";
 import Link from "next/link";
 import { OverviewTab } from "./OverviewTab";
 import { UsersTab } from "./UsersTab";
+import { QualityTab } from "./QualityTab";
 import { checkHealth } from "@/lib/admin-api";
 
 function AdminLayoutInner() {
@@ -78,10 +80,14 @@ function AdminLayoutInner() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="overview" className="gap-2">
               <BarChart3 className="h-4 w-4" />
               Overview
+            </TabsTrigger>
+            <TabsTrigger value="quality" className="gap-2">
+              <FlaskConical className="h-4 w-4" />
+              Quality
             </TabsTrigger>
             <TabsTrigger value="users" className="gap-2">
               <Users className="h-4 w-4" />
@@ -91,6 +97,10 @@ function AdminLayoutInner() {
 
           <TabsContent value="overview" className="space-y-4">
             <OverviewTab />
+          </TabsContent>
+
+          <TabsContent value="quality" className="space-y-4">
+            <QualityTab />
           </TabsContent>
 
           <TabsContent value="users" className="space-y-4">

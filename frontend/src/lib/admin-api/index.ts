@@ -739,3 +739,160 @@ export async function getAdminOverview(): Promise<AdminOverviewStats> {
 
   return response.json();
 }
+
+// =============================================================================
+// Quality Monitoring
+// =============================================================================
+
+export interface EvaluationMetrics {
+  faithfulness: number;
+  citation_recall: number;
+  citation_precision: number;
+  overall_score: number;
+}
+
+export interface EvaluationRun {
+  id: string;
+  run_type: string;
+  evaluator: string;
+  collection_name?: string;
+  metrics: EvaluationMetrics;
+  num_queries: number;
+  num_successful: number;
+  avg_latency_ms?: number;
+  started_at: string;
+  completed_at?: string;
+  triggered_by?: string;
+}
+
+export interface LatestMetricsResponse {
+  metrics: EvaluationMetrics | null;
+  last_run: string | null;
+  targets: Record<string, number>;
+  status: string;
+}
+
+export interface EvaluationHistory {
+  runs: EvaluationRun[];
+  summary: Record<string, number | string | null>;
+}
+
+export interface RunEvaluationRequest {
+  evaluator?: string;
+  collection_name?: string;
+  num_queries?: number;
+}
+
+export interface RunEvaluationResponse {
+  run_id: string;
+  status: string;
+  message: string;
+}
+
+export interface QueryQualityLog {
+  id: string;
+  query: string;
+  answer_preview?: string;
+  rag_project_id?: string;
+  num_sources: number;
+  num_citations: number;
+  faithfulness?: number;
+  citation_recall?: number;
+  citation_precision?: number;
+  was_sampled: boolean;
+  latency_ms?: number;
+  created_at: string;
+}
+
+/**
+ * Get latest quality metrics
+ */
+export async function getLatestMetrics(): Promise<LatestMetricsResponse> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/quality/metrics`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch metrics" }));
+    throw new Error(error.detail || "Failed to fetch quality metrics");
+  }
+
+  return response.json();
+}
+
+/**
+ * Start a new evaluation run
+ */
+export async function runEvaluation(request: RunEvaluationRequest = {}): Promise<RunEvaluationResponse> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/quality/run`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to start evaluation" }));
+    throw new Error(error.detail || "Failed to start evaluation");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get evaluation run history
+ */
+export async function getEvaluationHistory(limit: number = 10, evaluator?: string): Promise<EvaluationHistory> {
+  const params = new URLSearchParams({ limit: limit.toString() });
+  if (evaluator) params.append("evaluator", evaluator);
+
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/quality/history?${params}`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch history" }));
+    throw new Error(error.detail || "Failed to fetch evaluation history");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get details of a specific evaluation run
+ */
+export async function getEvaluationRun(runId: string): Promise<EvaluationRun & { details?: Record<string, unknown> }> {
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/quality/run/${runId}`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch run" }));
+    throw new Error(error.detail || "Failed to fetch evaluation run");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get recent queries with quality logs
+ */
+export async function getRecentQueries(limit: number = 20, sampledOnly: boolean = false): Promise<{ queries: QueryQualityLog[]; total: number }> {
+  const params = new URLSearchParams({ 
+    limit: limit.toString(),
+    sampled_only: sampledOnly.toString()
+  });
+
+  const response = await adminFetch(
+    `${API_BASE_URL}/admin/quality/recent-queries?${params}`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch queries" }));
+    throw new Error(error.detail || "Failed to fetch recent queries");
+  }
+
+  return response.json();
+}
