@@ -364,10 +364,11 @@ export default function RAGChatPage() {
     if (item.responseData) {
       setQuery(item.query);
       setAnswer(item.answer || "");
-      setCitations(item.responseData.citations || []);
-      setStudies(item.responseData.studies || []);
+      // Cast cached citations to Citation[] - the cache stores a compatible subset
+      setCitations((item.responseData.citations || []) as Citation[]);
+      setStudies((item.responseData.studies || []) as Study[]);
       setSuggestions(item.responseData.suggestions || []);
-      setEvidenceHealth(item.responseData.evidenceHealth || defaultEvidenceHealth);
+      setEvidenceHealth(item.responseData.evidenceHealth as EvidenceHealth || defaultEvidenceHealth);
       setHasSearched(true);
       setCurrentQueryId(item.id);
       setError(null);
