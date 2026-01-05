@@ -124,9 +124,9 @@ function UserCard({ user }: UserCardProps) {
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <FileText className="h-3 w-3" />
-                    {rag.document_count} docs
+                    {rag.document_count ?? 0} docs
                   </span>
-                  <span>{rag.chunk_count.toLocaleString()} chunks</span>
+                  <span>{(rag.chunk_count ?? 0).toLocaleString()} chunks</span>
                 </div>
               </div>
             ))}
@@ -177,8 +177,8 @@ export function UsersTab() {
   // Calculate totals
   const totalUsers = users.length;
   const totalRags = users.reduce((sum, u) => sum + u.rag_projects.length, 0);
-  const totalQueries = users.reduce((sum, u) => sum + u.total_queries, 0);
-  const totalCost = users.reduce((sum, u) => sum + u.total_cost_usd, 0);
+  const totalQueries = users.reduce((sum, u) => sum + (u.total_queries ?? 0), 0);
+  const totalCost = users.reduce((sum, u) => sum + (u.total_cost_usd ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -244,7 +244,7 @@ export function UsersTab() {
             {loading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <div className="text-2xl font-bold">{totalQueries.toLocaleString()}</div>
+              <div className="text-2xl font-bold">{(totalQueries ?? 0).toLocaleString()}</div>
             )}
           </CardContent>
         </Card>
@@ -259,7 +259,7 @@ export function UsersTab() {
             {loading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <div className="text-2xl font-bold">${totalCost.toFixed(2)}</div>
+              <div className="text-2xl font-bold">${(totalCost ?? 0).toFixed(2)}</div>
             )}
           </CardContent>
         </Card>

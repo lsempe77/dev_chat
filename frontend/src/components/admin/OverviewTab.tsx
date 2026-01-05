@@ -145,8 +145,8 @@ function ModelUsageCard({ breakdown, loading }: ModelUsageProps) {
                   />
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{model.queries.toLocaleString()} queries</span>
-                  <span>{(model.input_tokens + model.output_tokens).toLocaleString()} tokens</span>
+                  <span>{(model.queries ?? 0).toLocaleString()} queries</span>
+                  <span>{((model.input_tokens ?? 0) + (model.output_tokens ?? 0)).toLocaleString()} tokens</span>
                 </div>
               </div>
             );
