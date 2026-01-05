@@ -130,6 +130,12 @@ devchat_v2_sota/
 - [x] **Quality Monitoring** (Phase 5) ✅ Complete with baseline metrics
 
 ### Medium Priority
+- [ ] **Per-RAG Model Selection** 🔜 HIGH VALUE
+  - [ ] Add `model_config` to `rag_projects` table (provider, model, temperature)
+  - [ ] Settings tab UI: dropdown for provider (OpenAI, Claude, Gemini) + model
+  - [ ] Pass model config to DevChatAgent at query time
+  - [ ] Enable model comparison in Langfuse experiments
+  - [ ] Cost tracking per model for accurate projections
 - [ ] Advanced search filters in chat
 - [x] Export citations (CSV, JSON, BibTeX) ✅ Done
 
