@@ -207,7 +207,7 @@ A comprehensive admin dashboard for 3ie staff to monitor costs, usage, users, RA
   - Logs reranking span (in/out counts, threshold)
   - Logs synthesis generation (model, tokens, latency)
   - Updates trace with output and flushes on completion
-- [ ] Add Langfuse dashboard link to admin UI
+- [x] Add Langfuse dashboard link to admin UI
 
 **Effort:** ~3 hours (actual: 2 hours)
 

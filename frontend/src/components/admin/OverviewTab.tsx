@@ -15,7 +15,9 @@ import {
   AlertCircle,
   RefreshCw,
   Database,
-  FolderKanban
+  FolderKanban,
+  ExternalLink,
+  LineChart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -370,6 +372,46 @@ export function OverviewTab() {
           loading={loading}
         />
       </div>
+
+      {/* Quick Links */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Observability & Monitoring</CardTitle>
+          <CardDescription>External dashboards and tools</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <a
+            href="https://cloud.langfuse.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors"
+          >
+            <LineChart className="h-4 w-4" />
+            Langfuse Traces
+            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+          </a>
+          <a
+            href="https://railway.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors"
+          >
+            <Activity className="h-4 w-4" />
+            Railway Logs
+            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+          </a>
+          <a
+            href="https://modal.com/apps"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors"
+          >
+            <Zap className="h-4 w-4" />
+            Modal Jobs
+            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+          </a>
+        </CardContent>
+      </Card>
     </div>
   );
 }
