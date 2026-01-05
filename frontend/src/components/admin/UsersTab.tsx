@@ -15,6 +15,7 @@ import {
   RefreshCw,
   AlertCircle,
   ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 
 // =============================================================================
@@ -187,19 +188,47 @@ export function UsersTab() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Users & RAG Projects</h2>
           <p className="text-muted-foreground">
-            View all users and their knowledge bases
+            Read-only view of users and their knowledge bases
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => fetchUsers(true)}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://supabase.com/dashboard/project/kpgooeknvgzivrpekfqr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-secondary hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors"
+          >
+            Manage in Supabase
+            <ExternalLink className="h-3 w-3" />
+          </a>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => fetchUsers(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {/* Info Alert */}
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          This is a monitoring view. To manage users (invite, delete, reset passwords) or RAG projects 
+          (delete, transfer ownership), use the{" "}
+          <a 
+            href="https://supabase.com/dashboard/project/kpgooeknvgzivrpekfqr" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="underline font-medium"
+          >
+            Supabase Dashboard
+          </a>.
+        </AlertDescription>
+      </Alert>
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
