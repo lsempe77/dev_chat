@@ -70,15 +70,15 @@ async def get_all_users():
         async with db:
             from sqlalchemy import text
             
-            # Get all users from auth.users with their RAG projects
+            # Get distinct users from rag_projects (auth.users not directly accessible)
+            # This gets all users who have at least one RAG project
             users_sql = text("""
-                SELECT 
-                    u.id,
-                    u.email,
-                    u.created_at,
-                    u.last_sign_in_at
-                FROM auth.users u
-                ORDER BY u.created_at DESC
+                SELECT DISTINCT 
+                    rp.user_id as id,
+                    MIN(rp.created_at) as first_project_at
+                FROM rag_projects rp
+                GROUP BY rp.user_id
+                ORDER BY first_project_at DESC
             """)
             
             users_result = await db.execute(users_sql)
@@ -137,11 +137,12 @@ async def get_all_users():
                     total_queries = 0
                     total_cost = 0.0
                 
+                # Use truncated user_id as email placeholder since auth.users not accessible
                 users.append(UserWithRags(
                     id=user_id,
-                    email=user_row.email or "unknown",
-                    created_at=user_row.created_at.isoformat() if user_row.created_at else "",
-                    last_sign_in_at=user_row.last_sign_in_at.isoformat() if user_row.last_sign_in_at else None,
+                    email=f"user-{user_id[:8]}...",  # Placeholder, can't access auth.users
+                    created_at=user_row.first_project_at.isoformat() if user_row.first_project_at else "",
+                    last_sign_in_at=None,
                     rag_projects=rag_projects,
                     total_queries=total_queries,
                     total_cost_usd=total_cost,
@@ -173,18 +174,18 @@ async def get_user_detail(user_id: str):
         async with db:
             from sqlalchemy import text
             
-            # Get user info
-            user_sql = text("""
-                SELECT 
-                    id, email, created_at, last_sign_in_at
-                FROM auth.users
-                WHERE id = :user_id
+            # Check if user exists by looking for their RAG projects
+            check_sql = text("""
+                SELECT user_id, MIN(created_at) as first_project_at
+                FROM rag_projects
+                WHERE user_id = :user_id
+                GROUP BY user_id
             """)
             
-            user_result = await db.execute(user_sql, {"user_id": user_id})
-            user_row = user_result.fetchone()
+            check_result = await db.execute(check_sql, {"user_id": user_id})
+            check_row = check_result.fetchone()
             
-            if not user_row:
+            if not check_row:
                 raise HTTPException(status_code=404, detail="User not found")
             
             # Get RAG projects
@@ -245,10 +246,10 @@ async def get_user_detail(user_id: str):
                 usage_history = []
             
             return {
-                "id": str(user_row.id),
-                "email": user_row.email,
-                "created_at": user_row.created_at.isoformat() if user_row.created_at else "",
-                "last_sign_in_at": user_row.last_sign_in_at.isoformat() if user_row.last_sign_in_at else None,
+                "id": user_id,
+                "email": f"user-{user_id[:8]}...",  # Placeholder, can't access auth.users
+                "created_at": check_row.first_project_at.isoformat() if check_row.first_project_at else "",
+                "last_sign_in_at": None,
                 "rag_projects": rag_projects,
                 "usage_history": usage_history,
             }

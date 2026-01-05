@@ -347,8 +347,9 @@ async def get_admin_overview():
         async with db:
             from sqlalchemy import text
             
-            # Get user count
-            user_sql = text("SELECT COUNT(*) as count FROM auth.users")
+            # Get user count from distinct owners of RAG projects
+            # (auth.users is not directly accessible, but we can count unique user_ids)
+            user_sql = text("SELECT COUNT(DISTINCT user_id) as count FROM rag_projects")
             user_result = await db.execute(user_sql)
             user_count = user_result.fetchone().count or 0
             
