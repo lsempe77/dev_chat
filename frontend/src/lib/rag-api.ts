@@ -396,6 +396,7 @@ export interface ZoteroSyncResponse {
   items_synced: number;
   items_updated: number;
   items_failed: number;
+  items_skipped: number;  // Items already synced, skipped this batch
   pdfs_downloaded: number;
   errors?: string[];
   library_version?: number;

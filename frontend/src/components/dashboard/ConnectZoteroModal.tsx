@@ -90,6 +90,7 @@ export function ConnectZoteroModal({
     total: number;
     batchNumber: number;
     itemsSynced: number;
+    itemsSkipped: number;
     pdfsDownloaded: number;
   } | null>(null);
   const [shouldStopSync, setShouldStopSync] = useState(false);
@@ -260,11 +261,13 @@ export function ConnectZoteroModal({
       total: initialTotal,
       batchNumber: 0,
       itemsSynced: 0,
+      itemsSkipped: 0,
       pdfsDownloaded: 0,
     });
     setShouldStopSync(false);
     
     let totalItemsSynced = 0;
+    let totalItemsSkipped = 0;
     let totalPdfsDownloaded = 0;
     let totalUpdated = 0;
     let batchNumber = 0;
@@ -278,6 +281,7 @@ export function ConnectZoteroModal({
         const result = await syncFromZotero(ragId, selectedCollection || undefined, syncPdfs, currentStart);
         
         totalItemsSynced += result.items_synced;
+        totalItemsSkipped += result.items_skipped || 0;
         totalPdfsDownloaded += result.pdfs_downloaded;
         totalUpdated += result.items_updated;
         hasMore = result.has_more;
@@ -291,11 +295,13 @@ export function ConnectZoteroModal({
           total: prev?.total || initialTotal,  // Keep using initial collection count
           batchNumber,
           itemsSynced: totalItemsSynced,
+          itemsSkipped: totalItemsSkipped,
           pdfsDownloaded: totalPdfsDownloaded,
         }));
         
         // If no items returned in this batch, we're done
-        if (result.items_synced === 0 && result.items_updated === 0) {
+        // Only stop if nothing was processed (synced, updated, or skipped)
+        if (result.items_synced === 0 && result.items_updated === 0 && (result.items_skipped || 0) === 0) {
           hasMore = false;
         }
       }
@@ -528,7 +534,7 @@ export function ConnectZoteroModal({
                 />
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>
-                    {syncProgress.itemsSynced} synced • {syncProgress.pdfsDownloaded} PDFs
+                    {syncProgress.itemsSynced} new • {syncProgress.itemsSkipped} existing • {syncProgress.pdfsDownloaded} PDFs
                   </span>
                   <Button 
                     variant="ghost" 

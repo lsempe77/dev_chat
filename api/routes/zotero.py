@@ -142,6 +142,7 @@ class ZoteroSyncResponse(BaseModel):
     items_synced: int = 0
     items_updated: int = 0
     items_failed: int = 0
+    items_skipped: int = 0  # Items already synced, skipped this batch
     pdfs_downloaded: int = 0
     errors: Optional[List[str]] = None
     library_version: Optional[int] = None
@@ -793,6 +794,7 @@ async def sync_from_zotero(
             items_synced=items_synced,
             items_updated=items_updated,
             items_failed=items_failed,
+            items_skipped=items_skipped,
             pdfs_downloaded=pdfs_downloaded,
             errors=errors if errors else None,
             library_version=None,
