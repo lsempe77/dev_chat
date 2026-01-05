@@ -129,9 +129,6 @@ devchat_v2_sota/
 - [x] **3ie Admin Panel** ✅ Phases 1-5 complete (Overview, Langfuse, Users & RAGs, Quality)
 - [x] **Quality Monitoring** (Phase 5) ✅ Complete with baseline metrics
 
-### Waiting on External
-- [ ] Enable Supabase Realtime when beta access granted (run SQL: `ALTER PUBLICATION supabase_realtime ADD TABLE processing_jobs, documents;`)
-
 ### Medium Priority
 - [ ] Advanced search filters in chat
 - [x] Export citations (CSV, JSON, BibTeX) ✅ Done
