@@ -27,6 +27,7 @@ from src.retrieval.reranker import CohereReranker, Reranker, get_reranker
 from src.database.memory import get_conversation_memory
 from src.utils.cache import get_response_cache
 from src.utils.logging import get_logger
+from src.utils.usage_logger import log_query
 
 logger = get_logger(__name__)
 
@@ -186,6 +187,17 @@ class DevChatAgent:
             if cached_response:
                 cache_time = (time.time() - total_start) * 1000
                 logger.info(f"Cache hit for query: '{query[:50]}...' ({cache_time:.0f}ms)")
+                # Log cache hit (no tokens used, zero cost)
+                try:
+                    await log_query(
+                        model="cache",
+                        input_tokens=0,
+                        output_tokens=0,
+                        latency_ms=cache_time,
+                        metadata={"cache_hit": True, "query_length": len(query)},
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to log cache hit: {e}")
                 # Update timing to reflect cache retrieval
                 cached_response.total_time_ms = cache_time
                 return cached_response
@@ -316,6 +328,10 @@ class DevChatAgent:
         # Step 5: Synthesis - choose between claim ledger, structured, or standard
         synthesis_start = time.time()
         
+        # Track tokens for usage logging
+        input_tokens = 0
+        output_tokens = 0
+        
         if user_settings.use_claim_ledger and user_settings.use_structured_citations:
             # ALCE-style claim ledger for highest citation accuracy
             logger.info("Using claim ledger synthesizer (ALCE-style verified citations)")
@@ -330,6 +346,9 @@ class DevChatAgent:
                 f"{len(sources_with_claims)}/{context.num_studies} sources"
             )
             model_used = "claim-ledger/gpt-4o-mini"
+            # Estimate tokens for claim ledger (multiple LLM calls)
+            input_tokens = len(context.text) // 4 + len(query) // 4
+            output_tokens = len(answer) // 4
         elif user_settings.use_structured_citations:
             # Two-pass structured synthesis for better citation accuracy
             logger.info("Using structured synthesizer (two-pass citation mapping)")
@@ -342,6 +361,9 @@ class DevChatAgent:
             sources_with_evidence = claim_ledger.get_sources_with_claims()
             logger.info(f"Extracted evidence from {len(sources_with_evidence)}/{context.num_studies} sources")
             model_used = "structured/gpt-4o-mini"
+            # Estimate tokens for structured synth
+            input_tokens = len(context.text) // 4 + len(query) // 4
+            output_tokens = len(answer) // 4
         else:
             # Standard single-pass synthesis
             synthesis_result = await self.synthesizer.synthesize(
@@ -350,6 +372,9 @@ class DevChatAgent:
             )
             answer = synthesis_result.answer
             model_used = synthesis_result.model_used
+            # Use actual tokens from synthesis result
+            input_tokens = synthesis_result.input_tokens or 0
+            output_tokens = synthesis_result.output_tokens or 0
         
         synthesis_time = (time.time() - synthesis_start) * 1000
         
@@ -383,6 +408,28 @@ class DevChatAgent:
         
         # Calculate total time
         total_time = (time.time() - total_start) * 1000
+        
+        # Log usage for cost tracking (fire-and-forget, non-blocking)
+        try:
+            await log_query(
+                model=model_used.split("/")[-1] if "/" in model_used else model_used,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=total_time,
+                metadata={
+                    "query_type": processed_query.query_type.value,
+                    "retrieval_count": retrieval_count,
+                    "reranked_count": reranked_count,
+                    "num_sources": len(final_citations),
+                    "query_length": len(query),
+                    "answer_length": len(answer),
+                    "use_claim_ledger": user_settings.use_claim_ledger,
+                    "use_structured_citations": user_settings.use_structured_citations,
+                    "cache_hit": False,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log usage: {e}")
         
         # Build response
         response = DevChatResponse(

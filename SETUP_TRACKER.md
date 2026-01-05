@@ -48,6 +48,14 @@
 - [x] Clickable citations → PDF page
 - [x] Post-hoc verification (NLI-based)
 
+### Evaluation Framework
+- [x] Test cases with ground truth (`evaluation/test_cases.json`)
+- [x] RAGAS evaluator (faithfulness, answer relevancy)
+- [x] MiniCheck evaluator (claim-level verification)
+- [x] ReliableRAG evaluator (citation precision/recall)
+- [x] Claim Ledger evaluation scripts
+- [x] Post-hoc verification testing
+
 ### UI/UX
 - [x] Dashboard with Documents/Metadata/Settings tabs
 - [x] Side-by-side metadata editor with PDF viewer
@@ -155,38 +163,30 @@ A comprehensive admin dashboard for 3ie staff to monitor costs, usage, users, RA
 
 ### Implementation Phases
 
-#### Phase 1: Persistent Usage Metrics (Foundation)
+#### Phase 1: Persistent Usage Metrics (Foundation) ✅ DONE
 **Goal:** Never lose usage data, track costs accurately
 
-- [ ] Create `usage_logs` table in Supabase:
-  ```sql
-  CREATE TABLE usage_logs (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at timestamptz DEFAULT now(),
-    user_id uuid REFERENCES auth.users,
-    rag_project_id uuid REFERENCES rag_projects,
-    event_type text NOT NULL, -- 'query', 'embed', 'rerank', 'llm'
-    model text,
-    input_tokens int,
-    output_tokens int,
-    cost_usd numeric(10,6),
-    latency_ms int,
-    metadata jsonb
-  );
-  CREATE INDEX idx_usage_logs_created ON usage_logs(created_at);
-  CREATE INDEX idx_usage_logs_user ON usage_logs(user_id);
-  ```
-- [ ] Add cost config ($/1M tokens per model):
-  ```python
-  COST_PER_1M_TOKENS = {
-    'gpt-4o': {'input': 2.50, 'output': 10.00},
-    'gpt-4o-mini': {'input': 0.15, 'output': 0.60},
-    'embed-v4': {'input': 0.10, 'output': 0},
-    'rerank-v3.5': {'input': 2.00, 'output': 0},
-  }
-  ```
-- [ ] Log every LLM/embed/rerank call to `usage_logs`
-- [ ] Update MetricsTracker to persist on write
+- [x] Created `usage_logs` SQL migration: `scripts/migrations/001_usage_logs.sql`
+  - Full table schema with RLS policies
+  - Indexes for performance
+  - `daily_usage_summary` and `user_usage_summary` views
+- [x] Added cost config in `src/config/costs.py`:
+  - `ModelPricing` dataclass with `calculate_cost()` method
+  - Pricing for GPT-4o, GPT-4o-mini, embed-v4, rerank-v3.5
+- [x] Created `UsageLogger` class in `src/utils/usage_logger.py`:
+  - Async batch logging with configurable buffer size
+  - Fallback to in-memory when DB unavailable
+  - Convenience functions: `log_query()`, `log_llm_call()`, `log_embedding_call()`, etc.
+- [x] Integrated logging in `src/agents/devchat_agent.py`:
+  - Logs every query with tokens, latency, and metadata
+  - Logs cache hits separately (zero cost)
+- [x] Added admin usage endpoints in `api/routes/admin/usage.py`:
+  - `GET /admin/usage/summary` - Period summary with daily/model breakdown
+  - `GET /admin/usage/costs` - Cost projection (daily avg → monthly/annual)
+  - `GET /admin/usage/pricing` - Current model pricing config
+  - `POST /admin/usage/flush` - Force flush buffered events
+
+**Status:** Complete - Run `scripts/migrations/001_usage_logs.sql` in Supabase to activate
 
 **Effort:** ~4 hours
 
