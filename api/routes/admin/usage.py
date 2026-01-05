@@ -88,7 +88,7 @@ async def get_usage_summary(
     """
     Get usage summary for the specified period.
     
-    Aggregates data from usage_logs table in Supabase.
+    Uses chat_history for query counts, usage_logs for detailed metrics.
     """
     import os
     from supabase import create_client
@@ -96,10 +96,10 @@ async def get_usage_summary(
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+    
     if not supabase_url or not supabase_key:
-        # Return empty response if Supabase not configured
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=days)
         return UsageSummaryResponse(
             period_start=start_date.isoformat(),
             period_end=end_date.isoformat(),
@@ -113,22 +113,32 @@ async def get_usage_summary(
             model_breakdown=[],
         )
     
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=days)
-    
     try:
         supabase = create_client(supabase_url, supabase_key)
         
-        # Get all usage logs for the period
-        result = supabase.table("usage_logs").select("*").gte(
+        # Get queries from chat_history (the actual query log)
+        chat_result = supabase.table("chat_history").select("*").gte(
             "created_at", start_date.isoformat()
         ).lte(
             "created_at", end_date.isoformat()
         ).execute()
         
-        logs = result.data or []
+        chats = chat_result.data or []
+        total_queries = len(chats)
         
-        if not logs:
+        # Get usage details from usage_logs (if any)
+        try:
+            usage_result = supabase.table("usage_logs").select("*").gte(
+                "created_at", start_date.isoformat()
+            ).lte(
+                "created_at", end_date.isoformat()
+            ).execute()
+            logs = usage_result.data or []
+        except Exception:
+            logs = []
+        
+        # If no detailed logs, still return query count from chat_history
+        if not logs and not chats:
             return UsageSummaryResponse(
                 period_start=start_date.isoformat(),
                 period_end=end_date.isoformat(),
@@ -142,8 +152,7 @@ async def get_usage_summary(
                 model_breakdown=[],
             )
         
-        # Calculate totals
-        total_queries = len(logs)
+        # Calculate totals from usage_logs (tokens/cost) 
         total_input = sum(log.get("input_tokens", 0) or 0 for log in logs)
         total_output = sum(log.get("output_tokens", 0) or 0 for log in logs)
         total_cost = sum(log.get("cost_usd", 0) or 0 for log in logs)
@@ -152,10 +161,10 @@ async def get_usage_summary(
         cache_hits = sum(1 for log in logs if log.get("model") == "cache")
         cache_rate = cache_hits / total_queries if total_queries > 0 else 0
         
-        # Daily breakdown
+        # Daily breakdown from chat_history
         daily_data = {}
-        for log in logs:
-            date_str = log.get("created_at", "")[:10]  # YYYY-MM-DD
+        for chat in chats:
+            date_str = chat.get("created_at", "")[:10]  # YYYY-MM-DD
             if date_str not in daily_data:
                 daily_data[date_str] = {
                     "queries": 0,
@@ -166,9 +175,14 @@ async def get_usage_summary(
                     "cache_hits": 0,
                 }
             daily_data[date_str]["queries"] += 1
-            daily_data[date_str]["input_tokens"] += log.get("input_tokens", 0) or 0
-            daily_data[date_str]["output_tokens"] += log.get("output_tokens", 0) or 0
-            daily_data[date_str]["cost_usd"] += log.get("cost_usd", 0) or 0
+        
+        # Merge in token/cost data from usage_logs if available
+        for log in logs:
+            date_str = log.get("created_at", "")[:10]
+            if date_str in daily_data:
+                daily_data[date_str]["input_tokens"] += log.get("input_tokens", 0) or 0
+                daily_data[date_str]["output_tokens"] += log.get("output_tokens", 0) or 0
+                daily_data[date_str]["cost_usd"] += log.get("cost_usd", 0) or 0
             if log.get("latency_ms"):
                 daily_data[date_str]["latencies"].append(log["latency_ms"])
             if log.get("model") == "cache":
@@ -364,13 +378,18 @@ async def get_admin_overview():
         doc_count = docs_result.count or 0
         chunk_count = sum(d.get("chunk_count", 0) or 0 for d in (docs_result.data or []))
         
-        # Get usage totals (if usage_logs exists)
+        # Get query count from chat_history (the actual query log)
         try:
-            usage_result = supabase.table("usage_logs").select("id, cost_usd", count="exact").execute()
-            query_count = usage_result.count or 0
-            total_cost = sum(float(u.get("cost_usd", 0) or 0) for u in (usage_result.data or []))
+            chat_result = supabase.table("chat_history").select("id", count="exact").execute()
+            query_count = chat_result.count or 0
         except Exception:
             query_count = 0
+        
+        # Get cost totals from usage_logs (if any logged)
+        try:
+            usage_result = supabase.table("usage_logs").select("cost_usd").execute()
+            total_cost = sum(float(u.get("cost_usd", 0) or 0) for u in (usage_result.data or []))
+        except Exception:
             total_cost = 0.0
         
         return AdminOverviewStats(
