@@ -19,6 +19,21 @@ router = APIRouter()
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+def to_iso_string(value) -> str:
+    """Convert a value to ISO string format."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return str(value)
+
+
+# =============================================================================
 # Response Models
 # =============================================================================
 
@@ -160,9 +175,10 @@ async def get_all_users():
                     user_id = str(user.id)
                     if user_id in users_map:
                         users_map[user_id]["email"] = user.email or f"user-{user_id[:8]}..."
-                        users_map[user_id]["created_at"] = user.created_at if hasattr(user, 'created_at') else users_map[user_id]["created_at"]
+                        if hasattr(user, 'created_at') and user.created_at:
+                            users_map[user_id]["created_at"] = to_iso_string(user.created_at)
                         if hasattr(user, 'last_sign_in_at') and user.last_sign_in_at:
-                            users_map[user_id]["last_sign_in_at"] = user.last_sign_in_at
+                            users_map[user_id]["last_sign_in_at"] = to_iso_string(user.last_sign_in_at)
         except Exception as e:
             logger.debug(f"Could not fetch auth.users (expected if not using service role): {e}")
         
@@ -269,10 +285,10 @@ async def get_user_detail(user_id: str):
             user = supabase.auth.admin.get_user_by_id(user_id)
             if user and hasattr(user, 'user'):
                 email = user.user.email or email
-                if hasattr(user.user, 'created_at'):
-                    created_at = user.user.created_at
+                if hasattr(user.user, 'created_at') and user.user.created_at:
+                    created_at = to_iso_string(user.user.created_at)
                 if hasattr(user.user, 'last_sign_in_at') and user.user.last_sign_in_at:
-                    last_sign_in_at = user.user.last_sign_in_at
+                    last_sign_in_at = to_iso_string(user.user.last_sign_in_at)
         except Exception as e:
             logger.debug(f"Could not fetch user from auth: {e}")
         
