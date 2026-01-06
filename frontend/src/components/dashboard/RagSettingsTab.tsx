@@ -86,6 +86,8 @@ interface CustomPrompts {
   modified_at?: string;
 }
 
+// PromptConfig interface for API responses (used for type reference)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface PromptConfig {
   context_prompt: string | null;
   custom_prompts: CustomPrompts | null;
@@ -497,13 +499,10 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
     const providerData = AVAILABLE_PROVIDERS[newProvider as ProviderKey];
     if (!providerData) return;
     
-    const modelKeys = Object.keys(providerData.models);
-    const fastModel = modelKeys.find(
-      k => providerData.models[k as keyof typeof providerData.models].type === "fast"
-    ) || modelKeys[0];
-    const reasoningModel = modelKeys.find(
-      k => providerData.models[k as keyof typeof providerData.models].type === "reasoning"
-    ) || modelKeys[0];
+    const models = providerData.models as Record<string, { name: string; type: string; cost: string }>;
+    const modelKeys = Object.keys(models);
+    const fastModel = modelKeys.find(k => models[k].type === "fast") || modelKeys[0];
+    const reasoningModel = modelKeys.find(k => models[k].type === "reasoning") || modelKeys[0];
     
     setModelConfig({
       ...modelConfig,
