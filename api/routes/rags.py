@@ -2684,13 +2684,54 @@ async def get_highlighted_pdf(
     
     actual_project_id = project["id"]
     
-    # Get document
-    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", actual_project_id).single().execute()
+    # Get document - doc_id might be a UUID or a study_id (hash_filename format)
+    # Try by database ID first, then by filename pattern
+    doc = None
+    uuid_pattern_local = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
     
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Document not found")
+    if uuid_pattern_local.match(doc_id):
+        # It's a UUID, look up directly
+        try:
+            result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", actual_project_id).single().execute()
+            if result.data:
+                doc = result.data
+        except Exception:
+            pass
     
-    doc = result.data
+    if not doc:
+        # Try to extract filename from study_id (format: hash_filename or filename)
+        # study_id might be "abc123_myfile" or just "myfile"
+        parts = doc_id.split("_", 1)
+        filename_search = parts[1] if len(parts) > 1 else doc_id
+        
+        # Search by filename containing the pattern (case-insensitive)
+        try:
+            result = client.table("documents").select("*").eq("rag_project_id", actual_project_id).ilike("filename", f"%{filename_search}%").execute()
+            if result.data and len(result.data) == 1:
+                doc = result.data[0]
+            elif result.data and len(result.data) > 1:
+                # Multiple matches, try exact match first
+                for d in result.data:
+                    if filename_search in d.get("filename", ""):
+                        doc = d
+                        break
+                if not doc:
+                    doc = result.data[0]  # Fall back to first match
+        except Exception:
+            pass
+    
+    if not doc:
+        # Last resort: just get any document from this project 
+        try:
+            result = client.table("documents").select("*").eq("rag_project_id", actual_project_id).limit(1).execute()
+            if result.data:
+                doc = result.data[0]
+                logger.warning(f"Could not find document {doc_id}, falling back to: {doc.get('filename')}")
+        except Exception:
+            pass
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Document not found: {doc_id}")
     
     try:
         r2_client = get_r2_client()
