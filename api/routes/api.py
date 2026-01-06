@@ -88,6 +88,7 @@ def _get_project_prompt_config(project_id: str) -> dict | None:
         result = client.table("rag_projects").select(
             "context_prompt, custom_prompts"
         ).eq("id", project_id).single().execute()
+        logger.info(f"Prompt config query for {project_id}: {result.data}")
         if result.data:
             prompt_config = {}
             if result.data.get("context_prompt"):
@@ -95,7 +96,10 @@ def _get_project_prompt_config(project_id: str) -> dict | None:
             if result.data.get("custom_prompts"):
                 prompt_config["custom_prompts"] = result.data["custom_prompts"]
             if prompt_config:
+                logger.info(f"Returning prompt config: {prompt_config}")
                 return prompt_config
+            else:
+                logger.info("No context_prompt or custom_prompts found in result")
     except Exception as e:
         logger.warning(f"Failed to fetch prompt config for project {project_id}: {e}")
     return None
