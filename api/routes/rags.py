@@ -2776,23 +2776,44 @@ async def get_highlighted_pdf(
         # Add highlight if text is provided
         if text and len(text) > 10:
             pdf_page = pdf_doc[page_idx]
+            all_rects = []
             
-            # Search for the text (try first 100 chars if text is long)
-            search_text = text[:200] if len(text) > 200 else text
+            # Strategy: Search for each sentence/phrase separately
+            # This handles line breaks and text wrapping in PDFs better
+            search_text = text[:500] if len(text) > 500 else text
             
-            # Try exact match first, then partial
+            # Clean the text for better matching
+            search_text = search_text.replace('\n', ' ').replace('\r', ' ')
+            search_text = ' '.join(search_text.split())  # Normalize whitespace
+            
+            # Try full text first
             rects = pdf_page.search_for(search_text)
-            
-            if not rects and len(search_text) > 50:
-                # Try shorter excerpt
-                rects = pdf_page.search_for(search_text[:50])
-            
             if rects:
+                all_rects.extend(rects)
+            else:
+                # Split into sentences/phrases and search each
+                import re
+                sentences = re.split(r'[.!?;]|\.\s', search_text)
+                sentences = [s.strip() for s in sentences if len(s.strip()) > 15]
+                
+                for sentence in sentences[:5]:  # Limit to first 5 sentences
+                    rects = pdf_page.search_for(sentence)
+                    if rects:
+                        all_rects.extend(rects)
+                    else:
+                        # Try first 30 words of sentence
+                        words = sentence.split()[:30]
+                        partial = ' '.join(words)
+                        if len(partial) > 15:
+                            rects = pdf_page.search_for(partial)
+                            all_rects.extend(rects)
+            
+            if all_rects:
                 # Add yellow highlight annotation
-                highlight = pdf_page.add_highlight_annot(rects)
+                highlight = pdf_page.add_highlight_annot(all_rects)
                 highlight.set_colors(stroke=(1, 0.9, 0))  # Yellow
                 highlight.update()
-                logger.debug(f"Added highlight to page {page} with {len(rects)} rectangles")
+                logger.debug(f"Added highlight to page {page} with {len(all_rects)} rectangles")
             else:
                 logger.warning(f"Text not found on page {page}: {search_text[:50]}...")
         

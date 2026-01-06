@@ -68,19 +68,19 @@ function EvidenceSnippetCard({
   };
   
   return (
-    <div className="p-3 border-b bg-amber-50 dark:bg-amber-950/30">
+    <div className="p-3 border-b bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
       <div className="flex items-start gap-2">
         <FileText className="h-4 w-4 mt-0.5 text-amber-600 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
+            <span className="text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-200 dark:bg-amber-800 px-1.5 py-0.5 rounded">
               Page {page}
             </span>
             <span className="text-xs text-amber-600 dark:text-amber-400">
-              • Use Ctrl/Cmd+F to find this text
+              • Copy text below → Ctrl/Cmd+F to find
             </span>
           </div>
-          <p className="text-sm text-amber-900 dark:text-amber-100 italic line-clamp-2">
+          <p className="text-sm text-amber-900 dark:text-amber-100 italic line-clamp-4 bg-white/50 dark:bg-black/20 p-2 rounded border border-amber-200 dark:border-amber-700">
             &quot;{snippet}&quot;
           </p>
         </div>
