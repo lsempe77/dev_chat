@@ -5,6 +5,7 @@ Endpoints for the Research Workbench frontend (query, compare, suggest, filters)
 """
 
 import os
+import re
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException
 
@@ -28,9 +29,40 @@ from src.utils.logging import get_logger
 
 from .dependencies import get_agent, get_r2_client
 
+# UUID pattern for detecting if a string is a UUID
+UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Frontend API"])
+
+
+async def _resolve_project_id(rag_id: str) -> str:
+    """
+    Resolve a rag_id (which could be a UUID or slug) to the actual project UUID.
+    
+    Returns the UUID string, or raises HTTPException if not found.
+    """
+    from src.auth import get_supabase_client
+    
+    # If it's already a UUID, return as-is
+    if UUID_PATTERN.match(rag_id):
+        return rag_id
+    
+    # Otherwise, look up by slug
+    try:
+        client = get_supabase_client()
+        result = client.table("rag_projects").select("id").eq("slug", rag_id).execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0]["id"]
+        
+        # Not found by slug, return original (will fail in chat_history query)
+        logger.warning(f"Could not resolve slug '{rag_id}' to project ID")
+        return rag_id
+    except Exception as e:
+        logger.warning(f"Error resolving project ID: {e}")
+        return rag_id
 
 
 def _generate_pdf_url(document_id: str, source_path: str = None) -> str | None:
@@ -446,7 +478,7 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
     Get chat history for a RAG project.
     
     Args:
-        rag_id: The RAG project ID
+        rag_id: The RAG project ID or slug
         session_id: Optional session ID for anonymous users
         limit: Maximum number of history items to return
     """
@@ -455,10 +487,13 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
     try:
         supabase = get_supabase_client()
         
+        # Resolve slug to project ID if needed
+        project_id = await _resolve_project_id(rag_id)
+        
         # Query chat history for this project (include answer for cache)
         query = supabase.table("chat_history")\
             .select("id, query, study_count, created_at, answer, citations_used, response_data")\
-            .eq("rag_project_id", rag_id)\
+            .eq("rag_project_id", project_id)\
             .order("created_at", desc=True)\
             .limit(limit)
         
@@ -494,7 +529,7 @@ async def add_chat_history(rag_id: str, body: dict):
     Add a query to chat history.
     
     Args:
-        rag_id: The RAG project ID
+        rag_id: The RAG project ID or slug
         body: {query: str, studyCount: int, sessionId?: str, answer?: str, citationsUsed?: int}
     """
     from src.auth import get_supabase_client
@@ -502,9 +537,12 @@ async def add_chat_history(rag_id: str, body: dict):
     try:
         supabase = get_supabase_client()
         
+        # Resolve slug to project ID if needed
+        project_id = await _resolve_project_id(rag_id)
+        
         # Build insert data - only include answer/citations if columns exist
         insert_data = {
-            "rag_project_id": rag_id,
+            "rag_project_id": project_id,
             "query": body.get("query", ""),
             "study_count": body.get("studyCount", 0),
             "session_id": body.get("sessionId"),
@@ -550,11 +588,14 @@ async def delete_chat_history_item(rag_id: str, history_id: str):
     try:
         supabase = get_supabase_client()
         
+        # Resolve slug to project ID if needed
+        project_id = await _resolve_project_id(rag_id)
+        
         # Delete the history item
         result = supabase.table("chat_history")\
             .delete()\
             .eq("id", history_id)\
-            .eq("rag_project_id", rag_id)\
+            .eq("rag_project_id", project_id)\
             .execute()
         
         return {"deleted": True}
@@ -573,9 +614,12 @@ async def clear_chat_history(rag_id: str, session_id: str = None):
     try:
         supabase = get_supabase_client()
         
+        # Resolve slug to project ID if needed
+        project_id = await _resolve_project_id(rag_id)
+        
         query = supabase.table("chat_history")\
             .delete()\
-            .eq("rag_project_id", rag_id)
+            .eq("rag_project_id", project_id)
         
         if session_id:
             query = query.eq("session_id", session_id)
