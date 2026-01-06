@@ -16,6 +16,7 @@ import json
 
 from src.config.settings import settings
 from src.utils.logging import get_logger
+from src.utils.json_utils import extract_json_from_llm_response
 
 logger = get_logger(__name__)
 
@@ -269,13 +270,8 @@ Return ONLY the JSON."""
             response = await llm.acomplete(prompt)
             text = response.text.strip()
             
-            # Clean JSON
-            if '```json' in text:
-                text = text.split('```json')[1].split('```')[0]
-            elif '```' in text:
-                text = text.split('```')[1].split('```')[0]
-            
-            data = json.loads(text)
+            # Parse JSON with automatic fixing of LLM errors
+            data = extract_json_from_llm_response(text)
             
             suggestions = []
             for q in data.get('clarifying_questions', []):

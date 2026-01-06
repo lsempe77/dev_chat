@@ -24,6 +24,7 @@ from src.config.settings import settings
 from src.retrieval.context_builder import FormattedContext
 from src.retrieval.query_processor import QueryClassification
 from src.utils.logging import get_logger
+from src.utils.json_utils import extract_json_from_llm_response
 from src.generation.post_hoc_verifier import PostHocVerifier, VerificationResult
 
 logger = get_logger(__name__)
@@ -427,13 +428,8 @@ Return ONLY the JSON array, no other text."""
             response = await self.llm.acomplete(prompt)
             text = response.text.strip()
             
-            # Clean JSON
-            if '```json' in text:
-                text = text.split('```json')[1].split('```')[0]
-            elif '```' in text:
-                text = text.split('```')[1].split('```')[0]
-            
-            data = json.loads(text)
+            # Parse JSON with automatic fixing of LLM errors
+            data = extract_json_from_llm_response(text)
             
             claims = []
             for i, item in enumerate(data):

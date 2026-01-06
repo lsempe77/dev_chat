@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional
 import os
 
+from src.utils.json_utils import safe_json_loads
+
 logger = logging.getLogger(__name__)
 
 
@@ -198,14 +200,13 @@ Respond with ONLY a JSON object:
             )
             content = response.choices[0].message.content.strip()
             
-            # Parse JSON
-            import json
+            # Parse JSON with safe handling of LLM errors
             if content.startswith("```"):
                 content = content.split("```")[1]
                 if content.startswith("json"):
                     content = content[4:]
             
-            result = json.loads(content)
+            result = safe_json_loads(content)
             return (
                 result.get("supported", False),
                 result.get("confidence", 0.5),
