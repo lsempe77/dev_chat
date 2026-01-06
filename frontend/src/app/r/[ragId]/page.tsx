@@ -285,13 +285,12 @@ export default function RAGChatPage() {
     const citation = citations.find(c => c.id === citationId);
     if (!citation) return;
     
-    // If PDF is already open for same study, just update the page/highlight
+    // If PDF is already open for same study, just scroll to page (don't reload PDF)
     if (pdfViewerOpen && pdfStudyId === citation.studyId) {
+      // Only update page number - browser will scroll to that page
       setPdfPage(citation.page || 1);
       setPdfSearchText(citation.highlightText || citation.text?.slice(0, 100));
-      // Update URL for highlighted PDF
-      const highlightText = encodeURIComponent(citation.highlightText || citation.text?.slice(0, 200) || "");
-      setPdfUrl(`${API_BASE_URL}/rags/${ragId}/documents/${citation.studyId}/pdf-highlighted?page=${citation.page || 1}&text=${highlightText}`);
+      // Don't update URL to avoid reloading the PDF
       setTimeout(() => setHighlightedCitation(undefined), 3000);
       return;
     }

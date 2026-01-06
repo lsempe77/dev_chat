@@ -306,8 +306,8 @@ async def query_evidence(request: QueryRequest):
                     
                     # Get page info and highlight text for PDF navigation
                     page_num = c.get("page_start") or c.get("page")
-                    # Get first few words for highlight search (use clean_snippet which is already a string)
-                    highlight_words = " ".join(clean_snippet.split()[:10]) if clean_snippet else None
+                    # Pass full snippet for paragraph-level highlighting (up to 500 chars)
+                    highlight_text = clean_snippet[:500] if clean_snippet else None
                     
                     citation = CitationResponse(
                         id=i + 1,
@@ -315,7 +315,7 @@ async def query_evidence(request: QueryRequest):
                         text=clean_text_for_display(clean_snippet, max_length=200),
                         study=study,
                         page=page_num,
-                        highlightText=highlight_words,
+                        highlightText=highlight_text,
                     )
                     citations.append(citation)
                 
