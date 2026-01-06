@@ -2626,6 +2626,132 @@ async def get_document_pdf_url(
         raise HTTPException(status_code=500, detail=f"Failed to get PDF URL: {str(e)}")
 
 
+@router.get("/{project_id}/documents/{doc_id}/pdf-highlighted")
+async def get_highlighted_pdf(
+    project_id: str,
+    doc_id: str,
+    page: int = 1,
+    text: str = "",
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Get a PDF with highlighted text for a specific citation.
+    
+    Downloads the PDF from R2, adds yellow highlight annotation to the specified text,
+    and returns the modified PDF as a streaming response.
+    
+    Args:
+        project_id: The RAG project ID
+        doc_id: The document ID
+        page: The page number (1-indexed) where the text appears
+        text: The text to highlight (URL-encoded)
+    """
+    import io
+    from fastapi.responses import StreamingResponse
+    
+    try:
+        import pymupdf
+    except ImportError:
+        logger.error("PyMuPDF not installed. Run: pip install pymupdf")
+        raise HTTPException(status_code=500, detail="PDF highlighting not available")
+    
+    project = await get_user_project(user, project_id)
+    client = get_supabase_client()
+    
+    # Get document
+    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", project_id).single().execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    doc = result.data
+    
+    try:
+        r2_client = get_r2_client()
+        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        
+        # Find the PDF key (same logic as get_document_pdf_url)
+        possible_keys = []
+        if doc.get("r2_input_key"):
+            possible_keys.append(doc["r2_input_key"])
+        possible_keys.extend([
+            f"rags/{project_id}/input-pdfs/{doc['filename']}.pdf",
+            f"rags/{project_id}/input-pdfs/{doc['filename']}",
+            f"input-pdfs/{doc['filename']}",
+            f"input-pdfs/{doc.get('original_filename', '')}",
+            f"input-pdfs/{doc_id}.pdf",
+        ])
+        
+        r2_key = None
+        for key in possible_keys:
+            try:
+                r2_client.head_object(Bucket=bucket_name, Key=key)
+                r2_key = key
+                break
+            except ClientError:
+                continue
+        
+        if not r2_key:
+            raise HTTPException(status_code=404, detail="PDF not found in storage")
+        
+        # Download PDF content
+        response = r2_client.get_object(Bucket=bucket_name, Key=r2_key)
+        pdf_bytes = response['Body'].read()
+        
+        # Open PDF with PyMuPDF and add highlights
+        pdf_doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        
+        # Validate page number
+        page_idx = page - 1  # PyMuPDF uses 0-indexed pages
+        if page_idx < 0 or page_idx >= len(pdf_doc):
+            page_idx = 0  # Fallback to first page
+        
+        # Add highlight if text is provided
+        if text and len(text) > 10:
+            pdf_page = pdf_doc[page_idx]
+            
+            # Search for the text (try first 100 chars if text is long)
+            search_text = text[:200] if len(text) > 200 else text
+            
+            # Try exact match first, then partial
+            rects = pdf_page.search_for(search_text)
+            
+            if not rects and len(search_text) > 50:
+                # Try shorter excerpt
+                rects = pdf_page.search_for(search_text[:50])
+            
+            if rects:
+                # Add yellow highlight annotation
+                highlight = pdf_page.add_highlight_annot(rects)
+                highlight.set_colors(stroke=(1, 0.9, 0))  # Yellow
+                highlight.update()
+                logger.debug(f"Added highlight to page {page} with {len(rects)} rectangles")
+            else:
+                logger.warning(f"Text not found on page {page}: {search_text[:50]}...")
+        
+        # Save to bytes
+        output = io.BytesIO()
+        pdf_doc.save(output)
+        pdf_doc.close()
+        output.seek(0)
+        
+        # Return as streaming response with page anchor
+        return StreamingResponse(
+            output,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename=highlighted_{doc_id}.pdf",
+                "Cache-Control": "max-age=300",  # Cache for 5 minutes
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate highlighted PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to highlight PDF: {str(e)}")
+
+
 # =============================================================================
 # Per-RAG Danger Zone Endpoints
 # =============================================================================

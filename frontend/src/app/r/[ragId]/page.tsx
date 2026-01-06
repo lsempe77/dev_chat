@@ -285,29 +285,34 @@ export default function RAGChatPage() {
     const citation = citations.find(c => c.id === citationId);
     if (!citation) return;
     
+    // If PDF is already open for same study, just update the page/highlight
+    if (pdfViewerOpen && pdfStudyId === citation.studyId) {
+      setPdfPage(citation.page || 1);
+      setPdfSearchText(citation.highlightText || citation.text?.slice(0, 100));
+      // Update URL for highlighted PDF
+      const highlightText = encodeURIComponent(citation.highlightText || citation.text?.slice(0, 200) || "");
+      setPdfUrl(`${API_BASE_URL}/rags/${ragId}/documents/${citation.studyId}/pdf-highlighted?page=${citation.page || 1}&text=${highlightText}`);
+      setTimeout(() => setHighlightedCitation(undefined), 3000);
+      return;
+    }
+    
+    // Scroll to study card in Evidence panel (if visible)
     const studyElement = document.getElementById(`study-${citation.studyId}`);
     if (studyElement) {
       studyElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     
-    if (pdfViewerOpen && pdfStudyId === citation.studyId) {
-      setTimeout(() => setHighlightedCitation(undefined), 3000);
-      return;
-    }
-    
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/rags/${ragId}/documents/${citation.studyId}/pdf-url`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setPdfUrl(data.url);
-        setPdfPage(citation.page || 1);
-        setPdfTitle(citation.study?.title || citation.studyId);
-        setPdfStudyId(citation.studyId);
-        setPdfSearchText(citation.highlightText || citation.text?.slice(0, 50));
-        setPdfViewerOpen(true);
-      }
+      // Use highlighted PDF endpoint
+      const highlightText = encodeURIComponent(citation.highlightText || citation.text?.slice(0, 200) || "");
+      const highlightedUrl = `${API_BASE_URL}/rags/${ragId}/documents/${citation.studyId}/pdf-highlighted?page=${citation.page || 1}&text=${highlightText}`;
+      
+      setPdfUrl(highlightedUrl);
+      setPdfPage(citation.page || 1);
+      setPdfTitle(citation.study?.title || citation.studyId);
+      setPdfStudyId(citation.studyId);
+      setPdfSearchText(citation.highlightText || citation.text?.slice(0, 100));
+      setPdfViewerOpen(true);
     } catch (err) {
       console.error("Failed to load PDF:", err);
     }
@@ -554,21 +559,69 @@ export default function RAGChatPage() {
                 />
               }
               rightPanel={
-                <EvidencePanel
-                  studies={studies}
-                  citations={citations}
-                  highlightedCitation={highlightedCitation}
-                  selectedStudies={selectedStudies}
-                  onSelectStudy={handleSelectStudy}
-                  onExcludeStudy={(study) => {
-                    setStudies((prev) => prev.filter((s) => s.id !== study.id));
-                  }}
-                  onOpenPdf={(study) => {
-                    if (study.pdfUrl) window.open(study.pdfUrl, "_blank");
-                  }}
-                  query={query}
-                  answer={answer}
-                />
+                pdfViewerOpen && pdfUrl ? (
+                  // PDF Viewer Panel (replaces Evidence when viewing a citation)
+                  <div className="h-full flex flex-col">
+                    <div className="flex items-center justify-between p-3 border-b bg-card">
+                      <h3 className="font-medium text-sm truncate flex-1 mr-2">
+                        📄 {pdfTitle}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={closePdfViewer}
+                          className="gap-1.5"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Evidence
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => window.open(pdfUrl, '_blank')}
+                          title="Open in new tab"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {pdfSearchText && (
+                      <EvidenceSnippetCard 
+                        snippet={pdfSearchText}
+                        page={pdfPage}
+                        title={pdfTitle}
+                      />
+                    )}
+                    
+                    <div className="flex-1">
+                      <PDFViewer
+                        url={pdfUrl}
+                        initialPage={pdfPage}
+                        searchText={pdfSearchText}
+                        hideToolbar
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  // Evidence Panel (default view)
+                  <EvidencePanel
+                    studies={studies}
+                    citations={citations}
+                    highlightedCitation={highlightedCitation}
+                    selectedStudies={selectedStudies}
+                    onSelectStudy={handleSelectStudy}
+                    onExcludeStudy={(study) => {
+                      setStudies((prev) => prev.filter((s) => s.id !== study.id));
+                    }}
+                    onOpenPdf={(study) => {
+                      if (study.pdfUrl) window.open(study.pdfUrl, "_blank");
+                    }}
+                    query={query}
+                    answer={answer}
+                  />
+                )
               }
             />
           </>
@@ -612,49 +665,6 @@ export default function RAGChatPage() {
           }
         }}
       />
-
-      {/* PDF Viewer Side Panel */}
-      {pdfViewerOpen && pdfUrl && (
-        <div className="fixed inset-y-0 right-0 w-1/2 bg-background border-l shadow-xl z-50 flex flex-col">
-          <div className="flex items-center justify-between p-3 border-b bg-card">
-            <h3 className="font-medium text-sm truncate flex-1 mr-2">{pdfTitle}</h3>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => window.open(pdfUrl, '_blank')}
-                title="Open in new tab"
-              >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={closePdfViewer}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          
-          {pdfSearchText && (
-            <EvidenceSnippetCard 
-              snippet={pdfSearchText}
-              page={pdfPage}
-              title={pdfTitle}
-            />
-          )}
-          
-          <div className="flex-1">
-            <PDFViewer
-              url={pdfUrl}
-              initialPage={pdfPage}
-              searchText={pdfSearchText}
-              hideToolbar
-            />
-          </div>
-        </div>
-      )}
       </div>
     </div>
   );
