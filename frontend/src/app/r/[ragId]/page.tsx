@@ -616,7 +616,14 @@ export default function RAGChatPage() {
                       setStudies((prev) => prev.filter((s) => s.id !== study.id));
                     }}
                     onOpenPdf={(study) => {
-                      if (study.pdfUrl) window.open(study.pdfUrl, "_blank");
+                      // Open PDF inline (not new window)
+                      const url = `${API_BASE_URL}/rags/${ragId}/documents/${study.id}/pdf-highlighted?page=1&text=`;
+                      setPdfUrl(url);
+                      setPdfPage(1);
+                      setPdfTitle(study.title || study.id);
+                      setPdfStudyId(study.id);
+                      setPdfSearchText(undefined);
+                      setPdfViewerOpen(true);
                     }}
                     query={query}
                     answer={answer}
