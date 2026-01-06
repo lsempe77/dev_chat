@@ -595,6 +595,7 @@ async def delete_chat_history_item(rag_id: str, history_id: str):
         
         # Resolve slug to project ID if needed
         project_id = await _resolve_project_id(rag_id)
+        logger.info(f"Deleting chat history: rag_id={rag_id}, history_id={history_id}, project_id={project_id}")
         
         # Delete the history item
         result = supabase.table("chat_history")\
@@ -603,7 +604,9 @@ async def delete_chat_history_item(rag_id: str, history_id: str):
             .eq("rag_project_id", project_id)\
             .execute()
         
-        return {"deleted": True}
+        logger.info(f"Delete result: {result.data}")
+        
+        return {"deleted": True, "deleted_count": len(result.data) if result.data else 0}
     except Exception as e:
         logger.error(f"Failed to delete chat history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
