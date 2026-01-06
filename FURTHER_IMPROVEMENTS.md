@@ -331,13 +331,17 @@ After analyzing seven leading AI research platforms, this document maps actionab
 
 ---
 
-## 🚀 Priority 1: Citation Highlighting in PDFs (Quick Win)
+## ✅ Priority 1: Citation Highlighting in PDFs (DONE)
 
-### Current State
-- Users can click citations to open PDFs at the right page
-- No visual highlighting of the exact text that supports the claim
+### Implementation (January 6, 2026)
+- ✅ PyMuPDF endpoint: `/rags/{id}/documents/{doc_id}/pdf-highlighted`
+- ✅ Inline PDF viewer replaces Evidence panel with toggle button
+- ✅ Full Qdrant chunk text (1500 chars) used for highlighting
+- ✅ Overlapping 6-word groups for better PDF text matching
+- ✅ Evidence snippet card with page number and copy button
+- ✅ Public RAG support without authentication
 
-### Improvement: PyMuPDF Text Highlighting
+### Original Plan (Completed)
 When a user clicks a citation, generate a PDF with the source text highlighted.
 
 **Implementation:**
@@ -853,9 +857,9 @@ pipeline.connect("prompt", "llm")
 ### Phase 1: Quick Wins (Week 1-2)
 | Feature | Effort | Impact |
 |---------|--------|--------|
-| PDF Citation Highlighting | 4h | High |
+| ~~PDF Citation Highlighting~~ | ~~4h~~ | ✅ Done |
 | Study Design Classification | 8h | High |
-| **Total** | **12h** | |
+| **Total** | **8h remaining** | |
 
 ### Phase 2: Evidence Quality (Week 3-4)
 | Feature | Effort | Impact |

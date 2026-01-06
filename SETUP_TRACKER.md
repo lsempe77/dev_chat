@@ -47,6 +47,8 @@
 - [x] Page-aware chunking (256 words)
 - [x] Clickable citations → PDF page
 - [x] Post-hoc verification (NLI-based)
+- [x] PDF citation highlighting (PyMuPDF yellow highlights)
+- [x] Inline PDF viewer (replaces Evidence panel)
 
 ### Evaluation Framework
 - [x] Test cases with ground truth (`evaluation/test_cases.json`)
@@ -62,8 +64,10 @@
 - [x] "Mark as reviewed" checkbox
 - [x] Compact panel layout when narrow
 - [x] Chat history persistence (Supabase)
+- [x] Chat history response caching (citations, studies, evidenceHealth)
 - [x] Compare modal (side-by-side study comparison)
 - [x] View PDF in citations (correct R2 paths)
+- [x] Evidence snippet card with copy-to-clipboard
 
 ### Backend
 - [x] Processing jobs tracking with progress
@@ -160,7 +164,7 @@ devchat_v2_sota/
 - [ ] Expand golden test suite (currently 8 queries)
 
 ### Feature Improvements (See FURTHER_IMPROVEMENTS.md)
-- [ ] PDF Citation Highlighting (4h) - PyMuPDF text highlighting
+- [x] PDF Citation Highlighting (4h) - PyMuPDF text highlighting ✅ Done
 - [ ] Smart Citations (12h) - Scite-style support/contrast classification
 - [ ] Consensus Meter (16h) - Visual evidence agreement display
 - [ ] Study Design Classification (8h) - RCT vs quasi-exp vs observational
@@ -447,6 +451,20 @@ Observability (Langfuse)
 
 
 ## 📝 Recent Changes
+
+### January 6, 2026 (Late Evening)
+- **PDF Citation Highlighting** - Complete implementation:
+  - PyMuPDF endpoint: `/rags/{id}/documents/{doc_id}/pdf-highlighted`
+  - Inline PDF viewer replaces Evidence panel (toggle button to switch)
+  - Full Qdrant chunk text (1500 chars) used for highlighting
+  - Overlapping 6-word groups for better PDF text matching
+  - Evidence snippet card with page number and copy button
+  - Document lookup by study_id pattern (not just UUID)
+  - Public RAG support without authentication
+- **Chat History Caching Fix** - Citations now robustly cached:
+  - `responseData` (citations, studies, evidenceHealth) saved to Supabase
+  - Auto re-runs search if cache missing (ensures blue citation bubbles)
+  - Delete endpoint fixed with logging
 
 ### January 6, 2026 (Evening)
 - **Prompt Customization Testing** - Multiple bugs fixed during end-to-end testing:
