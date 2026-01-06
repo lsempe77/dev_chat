@@ -2778,8 +2778,8 @@ async def get_highlighted_pdf(
             pdf_page = pdf_doc[page_idx]
             all_rects = []
             
-            # Clean the text for better matching
-            search_text = text[:500] if len(text) > 500 else text
+            # Clean the text for better matching - use up to 1500 chars (full chunk)
+            search_text = text[:1500] if len(text) > 1500 else text
             search_text = search_text.replace('\n', ' ').replace('\r', ' ')
             search_text = ' '.join(search_text.split())  # Normalize whitespace
             

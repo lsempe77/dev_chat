@@ -306,8 +306,13 @@ async def query_evidence(request: QueryRequest):
                     
                     # Get page info and highlight text for PDF navigation
                     page_num = c.get("page_start") or c.get("page")
-                    # Pass full snippet for paragraph-level highlighting (up to 500 chars)
-                    highlight_text = clean_snippet[:500] if clean_snippet else None
+                    # Use full_text from Qdrant chunk (not truncated snippet) for better highlighting
+                    full_chunk_text = c.get("full_text", "")
+                    if isinstance(full_chunk_text, list):
+                        full_chunk_text = " ".join(str(t) for t in full_chunk_text)
+                    full_chunk_text = str(full_chunk_text) if full_chunk_text else ""
+                    # Clean but don't truncate - let the PDF endpoint handle it
+                    highlight_text = full_chunk_text[:1500] if full_chunk_text else (clean_snippet[:500] if clean_snippet else None)
                     
                     citation = CitationResponse(
                         id=i + 1,

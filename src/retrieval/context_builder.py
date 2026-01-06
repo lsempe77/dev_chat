@@ -440,6 +440,7 @@ class ContextBuilder:
                     "url": meta.get("url"),
                     "doi": meta.get("doi"),
                     "snippet": clean_text_for_display(result.text, 300),
+                    "full_text": result.text,  # Full chunk text for PDF highlighting
                     "score": result.score,
                     "page_start": meta.get("page_start"),
                     "page_end": meta.get("page_end"),
