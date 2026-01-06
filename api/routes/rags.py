@@ -2778,44 +2778,54 @@ async def get_highlighted_pdf(
             pdf_page = pdf_doc[page_idx]
             all_rects = []
             
-            # Strategy: Search for each sentence/phrase separately
-            # This handles line breaks and text wrapping in PDFs better
-            search_text = text[:500] if len(text) > 500 else text
-            
             # Clean the text for better matching
+            search_text = text[:500] if len(text) > 500 else text
             search_text = search_text.replace('\n', ' ').replace('\r', ' ')
             search_text = ' '.join(search_text.split())  # Normalize whitespace
             
-            # Try full text first
-            rects = pdf_page.search_for(search_text)
-            if rects:
+            # Strategy: Search for overlapping word groups (6-8 words)
+            # PDFs often have line breaks that prevent long text matches
+            words = search_text.split()
+            
+            if len(words) <= 8:
+                # Short text - try to find it directly
+                rects = pdf_page.search_for(search_text)
                 all_rects.extend(rects)
             else:
-                # Split into sentences/phrases and search each
-                import re
-                sentences = re.split(r'[.!?;]|\.\s', search_text)
-                sentences = [s.strip() for s in sentences if len(s.strip()) > 15]
+                # For longer text, search for word groups with overlap
+                group_size = 6  # Words per group
+                step = 4  # Overlap by 2 words
                 
-                for sentence in sentences[:5]:  # Limit to first 5 sentences
-                    rects = pdf_page.search_for(sentence)
+                for i in range(0, len(words) - group_size + 1, step):
+                    phrase = ' '.join(words[i:i + group_size])
+                    rects = pdf_page.search_for(phrase)
                     if rects:
                         all_rects.extend(rects)
-                    else:
-                        # Try first 30 words of sentence
-                        words = sentence.split()[:30]
-                        partial = ' '.join(words)
-                        if len(partial) > 15:
-                            rects = pdf_page.search_for(partial)
-                            all_rects.extend(rects)
+                
+                # Also try the last group if we didn't cover it
+                if len(words) > group_size:
+                    last_phrase = ' '.join(words[-group_size:])
+                    rects = pdf_page.search_for(last_phrase)
+                    if rects:
+                        all_rects.extend(rects)
             
             if all_rects:
-                # Add yellow highlight annotation
+                # Add yellow highlight annotation for all found rectangles
                 highlight = pdf_page.add_highlight_annot(all_rects)
                 highlight.set_colors(stroke=(1, 0.9, 0))  # Yellow
                 highlight.update()
-                logger.debug(f"Added highlight to page {page} with {len(all_rects)} rectangles")
+                logger.info(f"Added highlight to page {page} with {len(all_rects)} rectangles from {len(words)} words")
             else:
-                logger.warning(f"Text not found on page {page}: {search_text[:50]}...")
+                # Last resort: try just the first 5 words
+                fallback = ' '.join(words[:5])
+                rects = pdf_page.search_for(fallback)
+                if rects:
+                    highlight = pdf_page.add_highlight_annot(rects)
+                    highlight.set_colors(stroke=(1, 0.9, 0))
+                    highlight.update()
+                    logger.info(f"Added fallback highlight with first 5 words")
+                else:
+                    logger.warning(f"Text not found on page {page}: {search_text[:50]}...")
         
         # Save to bytes
         output = io.BytesIO()
