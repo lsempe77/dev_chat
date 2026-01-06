@@ -435,6 +435,42 @@ Observability (Langfuse)
 
 ## 📝 Recent Changes
 
+### January 6, 2026
+- **Context Prompts & Prompt Customization** - Code Complete ⚠️ *UNTESTED*
+  - SQL migration `003_prompt_config.sql` ready
+  - Backend: 5 new endpoints for prompt config (GET/PATCH/DELETE)
+  - ClaimLedgerSynthesizer: accepts `prompt_config` with context/custom prompts
+  - Frontend: Prompt Customization card in Settings tab
+  - Safety: `acknowledge_risk` checkbox required for custom prompts
+- **Per-RAG Model Selection** - Previously complete ⚠️ *UNTESTED*
+- **TypeScript fixes** - Fixed type errors in RagSettingsTab.tsx
+- **Backend tests passing** - All 43 pytest tests pass
+
+### 🧪 TEST PLAN (January 7, 2026)
+The following features need end-to-end testing before production use:
+
+1. **Run SQL Migrations:**
+   - `scripts/migrations/002_model_config.sql` (model selection)
+   - `scripts/migrations/003_prompt_config.sql` (prompt customization)
+
+2. **Per-RAG Model Selection:**
+   - [ ] Verify Settings tab shows provider/model dropdowns
+   - [ ] Change model and save
+   - [ ] Run a query and confirm correct model is used in logs
+   - [ ] Test with different providers (OpenAI, Anthropic, Google)
+
+3. **Context Prompts:**
+   - [ ] Add a context prompt in Settings
+   - [ ] Run a query and verify context appears in synthesis
+   - [ ] Clear context prompt and verify default behavior
+
+4. **Custom Prompts (Advanced):**
+   - [ ] Expand custom prompts section
+   - [ ] Verify warning messages display
+   - [ ] Try saving without acknowledgment (should fail)
+   - [ ] Save with acknowledgment
+   - [ ] Reset to defaults and verify
+
 ### January 5, 2026
 - **Admin Panel Phase 4 Complete** - Users & RAGs tab working
   - Backend: `/admin/users` endpoint with Supabase auth integration
