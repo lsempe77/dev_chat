@@ -254,7 +254,7 @@ export default function RAGChatPage() {
         evidenceHealth: data.evidenceHealth || defaultEvidenceHealth,
       };
       
-      const savedItem = await addChatHistory(ragId, searchQuery, studyCount, sessionId, answerText, citationsCount, responseData);
+      const savedItem = await addChatHistory(project.id, searchQuery, studyCount, sessionId, answerText, citationsCount, responseData);
       
       if (savedItem) {
         // Add to local state (at the beginning, remove duplicates)
@@ -391,15 +391,16 @@ export default function RAGChatPage() {
   }, [handleSearch]);
 
   const handleDeleteHistoryItem = useCallback(async (id: string) => {
+    if (!project) return;
     // Delete from API
-    await deleteChatHistoryItem(ragId, id);
+    await deleteChatHistoryItem(project.id, id);
     
     // Update local state
     setChatHistory(prev => prev.filter(h => h.id !== id));
     if (currentQueryId === id) {
       setCurrentQueryId(undefined);
     }
-  }, [currentQueryId, ragId]);
+  }, [currentQueryId, project]);
 
   const handleNewChat = useCallback(() => {
     handleReset();
