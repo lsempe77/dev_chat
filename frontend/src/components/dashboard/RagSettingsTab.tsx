@@ -447,14 +447,11 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
     setIsSavingCustomPrompts(true);
     setPromptError(null);
     try {
-      const customPrompts: Record<string, string> = {};
-      if (customExtractionPrompt) customPrompts.extraction = customExtractionPrompt;
-      if (customSynthesisPrompt) customPrompts.synthesis = customSynthesisPrompt;
-      
       const res = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}/prompts/custom`, {
         method: "PATCH",
         body: JSON.stringify({
-          custom_prompts: Object.keys(customPrompts).length > 0 ? customPrompts : null,
+          extraction: customExtractionPrompt || null,
+          synthesis: customSynthesisPrompt || null,
           acknowledge_risk: true,
         }),
       });
