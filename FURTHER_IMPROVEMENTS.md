@@ -6,19 +6,328 @@
 
 ---
 
+## 📊 RAG Techniques Audit: Where Do You Stand?
+
+### Current DevChat Implementation vs. State-of-the-Art
+
+| Technique | DevChat | SOTA | Status | Priority |
+|-----------|---------|------|--------|----------|
+| **Hybrid Search (Dense + Sparse)** | ✅ Cohere + BM25 | ✅ Same | ✅ **Current** | - |
+| **Reranking** | ✅ Cohere rerank-v3.5 | ✅ Same | ✅ **Current** | - |
+| **Two-Pass Synthesis (ALCE)** | ✅ Claim Ledger | ✅ Same | ✅ **Current** | - |
+| **Post-Hoc Verification (NLI)** | ✅ MiniCheck | ✅ Same | ✅ **Current** | - |
+| **Page-Aware Chunking** | ✅ 256 words | ✅ Same | ✅ **Current** | - |
+| **Metadata Filtering** | ✅ Year, country, sector | ✅ Same | ✅ **Current** | - |
+| **Contextual Retrieval** | ⚠️ Partial | ✅ Anthropic's method | 🔴 **Gap** | High |
+| **HyDE (Hypothetical Doc Embedding)** | ⚠️ Optional | ✅ Standard | ⚠️ **Partial** | Medium |
+| **Parent-Child Chunking** | ❌ Not implemented | ✅ PaperQA2 | 🔴 **Gap** | High |
+| **Agentic RAG (Iterative)** | ❌ Single-shot | ✅ PaperQA2 | 🔴 **Gap** | High |
+| **Contextual Summarization (RCS)** | ❌ Not implemented | ✅ PaperQA2 | 🔴 **Gap** | High |
+| **Multimodal (Images/Tables)** | ❌ Text-only | ✅ PaperQA2 | 🔴 **Gap** | Medium |
+| **Late Chunking** | ❌ Not implemented | ✅ Emerging | 🟡 **Future** | Low |
+| **Self-RAG / Corrective RAG** | ❌ Not implemented | ✅ Emerging | 🟡 **Future** | Low |
+
+### Verdict: You're 70% there, but missing key innovations
+
+**What You Have (Excellent):**
+- Hybrid search with BM25 - matches Anthropic's recommendation
+- Cohere rerank - matches PaperQA2 and Anthropic's best practice
+- Two-pass Claim Ledger - advanced technique most tools don't have
+- Post-hoc MiniCheck verification - cutting edge NLI-based grounding
+
+**What You're Missing (High Impact):**
+1. **Contextual Retrieval** - Anthropic's 49% improvement technique
+2. **Parent-Child Chunking** - Small chunks for search, expand for context
+3. **Contextual Summarization (RCS)** - LLM summarizes each chunk before synthesis
+4. **Agentic RAG** - Iterative search refinement
+
+---
+
+## 🔴 Critical Gap #1: Contextual Retrieval (Anthropic's 49% Improvement)
+
+### What It Is
+During indexing, prepend each chunk with LLM-generated context explaining its role in the document.
+
+### Current DevChat
+```
+Chunk: "The program increased household consumption by 23% over the control group."
+```
+
+### With Contextual Retrieval
+```
+Chunk: "This chunk is from a 2019 RCT of the Bangladesh BRAC Ultra-Poor Graduation 
+program, specifically from the Results section discussing consumption outcomes. 
+The program increased household consumption by 23% over the control group."
+```
+
+### Implementation (During Modal Processing)
+```python
+async def add_contextual_prefix(chunk: str, full_document: str, metadata: dict) -> str:
+    """Add contextual prefix to chunk before embedding."""
+    prompt = f"""<document>
+{full_document[:8000]}
+</document>
+
+Here is a chunk from this document:
+<chunk>
+{chunk}
+</chunk>
+
+Provide a short context (2-3 sentences) to situate this chunk within the document.
+Include: document type, section, and key entities mentioned.
+Answer only with the context, nothing else."""
+    
+    context = await llm.complete(prompt)
+    return f"{context}\n\n{chunk}"
+```
+
+### Impact
+- **Anthropic's tests:** 49% reduction in retrieval failures
+- **With reranking:** 67% reduction in retrieval failures
+
+### Effort: ~8 hours (Modal processing changes)
+
+---
+
+## 🔴 Critical Gap #2: Parent-Child Chunking
+
+### What It Is
+Create small chunks for precise retrieval, but expand to parent chunks for synthesis context.
+
+### Current DevChat
+- 256-word chunks for both retrieval AND synthesis
+- Problem: Small chunks lose context
+
+### PaperQA2 Approach
+- **Child chunks:** 128-256 tokens (for search)
+- **Parent chunks:** 1000-2000 tokens (for synthesis)
+- When a child matches, expand to parent for LLM context
+
+### Implementation
+```python
+@dataclass
+class ChunkWithParent:
+    child_id: str
+    child_text: str  # Small, for embedding
+    parent_id: str
+    parent_text: str  # Large, for synthesis
+    page_numbers: List[int]
+
+class ParentChildChunker:
+    def __init__(self, child_size: int = 200, parent_size: int = 1000):
+        self.child_size = child_size
+        self.parent_size = parent_size
+    
+    def chunk(self, document: str) -> List[ChunkWithParent]:
+        # Create overlapping parent chunks
+        parents = self._create_parents(document)
+        
+        # Split each parent into children
+        chunks = []
+        for parent in parents:
+            children = self._split_into_children(parent)
+            for child in children:
+                chunks.append(ChunkWithParent(
+                    child_id=child.id,
+                    child_text=child.text,
+                    parent_id=parent.id,
+                    parent_text=parent.text,
+                    page_numbers=parent.pages
+                ))
+        return chunks
+```
+
+### Qdrant Schema Change
+```python
+# Store child for retrieval, parent for expansion
+payload = {
+    "text": child_text,           # Embedded
+    "parent_text": parent_text,   # Stored but not embedded
+    "parent_id": parent_id,
+    "page_numbers": [1, 2]
+}
+```
+
+### Impact
+- Better retrieval precision (small chunks match better)
+- Better synthesis context (large chunks for LLM)
+
+### Effort: ~12 hours (chunking + Qdrant schema + retrieval changes)
+
+---
+
+## 🔴 Critical Gap #3: Contextual Summarization (RCS)
+
+### What It Is (PaperQA2's Key Innovation)
+Before using a chunk for synthesis, create an LLM summary of how it relates to the query.
+
+### Current DevChat Flow
+```
+Query → Retrieve chunks → Pass raw chunks to synthesis LLM
+```
+
+### PaperQA2 Flow (with RCS)
+```
+Query → Retrieve chunks → For each chunk: LLM creates relevance summary → 
+        Score summaries → Pass top summaries to synthesis LLM
+```
+
+### Implementation
+```python
+async def create_contextual_summary(
+    chunk: str, 
+    query: str,
+    metadata: dict
+) -> tuple[str, float]:
+    """
+    Create a summary of the chunk in context of the query.
+    Returns (summary, relevance_score).
+    """
+    prompt = f"""Question: {query}
+
+Document excerpt from "{metadata.get('title', 'Unknown')}" ({metadata.get('year', 'n.d.')}):
+{chunk}
+
+Task: Summarize ONLY the information from this excerpt that is relevant to answering the question.
+If nothing is relevant, respond with "Not relevant."
+
+Return JSON:
+{{
+    "summary": "...",
+    "relevance_score": 0.0-1.0,
+    "key_findings": ["...", "..."]
+}}"""
+    
+    response = await llm.complete(prompt)
+    data = json.loads(response)
+    return data["summary"], data["relevance_score"]
+```
+
+### Why This Matters
+1. **Filters irrelevant chunks** before synthesis (cheaper, faster)
+2. **Extracts only relevant info** from each chunk
+3. **LLM scoring** is more nuanced than embedding similarity
+4. **Summaries are easier** for synthesis LLM to process
+
+### Integration with Claim Ledger
+Your Claim Ledger extraction is already close to RCS! The difference:
+- **RCS:** Summarize relevance, then synthesize
+- **Claim Ledger:** Extract claims with quotes, then synthesize
+
+Consider: Add relevance scoring to claim extraction, filter low-relevance claims.
+
+### Effort: ~8 hours (new step between retrieval and synthesis)
+
+---
+
+## 🔴 Critical Gap #4: Agentic RAG (Multi-Step)
+
+### What It Is
+Instead of single-shot retrieval, let an LLM agent decide when to search again.
+
+### Current DevChat
+```
+User Query → Single Search → Rerank → Synthesize → Answer
+```
+
+### PaperQA2 Agentic Flow
+```
+User Query → Agent decides: Search Tool
+          → Agent reviews results: "Not enough evidence"
+          → Agent: Search with different keywords
+          → Agent reviews: "Found 5 relevant papers"
+          → Agent: Gather Evidence Tool (create summaries)
+          → Agent: "Need more on methodology"
+          → Agent: Search again
+          → Agent: Generate Answer Tool
+          → Final Answer
+```
+
+### Implementation Sketch
+```python
+class AgenticRAG:
+    tools = [
+        SearchTool(),        # Search vector DB
+        GatherEvidenceTool(), # Create RCS summaries
+        GenerateAnswerTool()  # Final synthesis
+    ]
+    
+    async def run(self, query: str, max_iterations: int = 3) -> str:
+        context = AgentContext(query=query, evidence=[])
+        
+        for i in range(max_iterations):
+            # Agent decides next action
+            action = await self.agent_llm.decide(
+                query=query,
+                current_evidence=context.evidence,
+                tools=self.tools
+            )
+            
+            if action.tool == "generate_answer":
+                return await self.generate_answer(context)
+            
+            # Execute tool
+            result = await action.tool.execute(action.params)
+            context.update(result)
+            
+            # Check if we have enough evidence
+            if self._sufficient_evidence(context):
+                break
+        
+        return await self.generate_answer(context)
+```
+
+### Benefits
+- Handles complex, multi-part questions
+- Can recognize when initial search is insufficient
+- More thorough evidence coverage
+- Better for systematic review use cases
+
+### Effort: ~20 hours (significant architecture change)
+
+---
+
+## 🟡 Future Techniques (Lower Priority)
+
+### Late Chunking (Emerging)
+Embed the full document, then chunk the embeddings (not the text).
+- **Status:** Experimental, not widely adopted
+- **Skip for now**
+
+### Self-RAG / Corrective RAG
+LLM self-critiques and corrects its retrieval.
+- **You already have this** via MiniCheck post-hoc verification
+- **No action needed**
+
+### RAPTOR (Hierarchical Summarization)
+Create a tree of summaries at different abstraction levels.
+- **Complex to implement**
+- **Lower priority** - your Claim Ledger approach may be sufficient
+
+### GraphRAG
+Build knowledge graphs from documents for relationship queries.
+- **Overkill** for your current use case
+- **Future consideration** for complex policy analysis
+
+---
+
 ## 🎯 Executive Summary
 
-After analyzing seven leading AI research platforms, this document maps actionable improvements for DevChat. The goal: become the **definitive tool for evidence-based development research**, combining the best features from:
+### RAG Improvement Priorities (NEW)
 
-| Tool | Key Strength | What We Can Learn |
-|------|--------------|-------------------|
-| **PaperQA2** | Superhuman scientific QA with grounded citations | Agentic RAG, contextual summarization, multimodal support |
-| **Haystack** | Modular, production-ready AI pipelines | Component architecture, agents, enterprise scalability |
-| **Elicit** | Systematic review automation at scale | Research reports, screening workflows, 1000+ paper analysis |
-| **Scite** | Smart Citations (supporting/contrasting) | Citation context classification, evidence quality scoring |
-| **Consensus** | Visual consensus meters, study design filters | Meta-analysis visualization, study type classification |
-| **Humata** | Simple Q&A with highlighted citations | PDF highlighting, embeddable widgets |
-| **PyMuPDF** | Programmatic PDF text highlighting | Visual citation evidence in PDFs |
+| Priority | Technique | Effort | Impact | Source |
+|----------|-----------|--------|--------|--------|
+| 🔴 1 | **Contextual Retrieval** | 8h | 49% fewer failures | Anthropic |
+| 🔴 2 | **Parent-Child Chunking** | 12h | Better context | PaperQA2 |
+| 🔴 3 | **Contextual Summarization (RCS)** | 8h | Higher precision | PaperQA2 |
+| 🔴 4 | **Agentic RAG** | 20h | Complex queries | PaperQA2 |
+| 🟡 5 | Multimodal (images/tables) | 24h | More content | PaperQA2 |
+
+**Total RAG improvements: ~72 hours**
+
+### Feature Improvement Priorities (Competitive)
+
+After analyzing seven leading AI research platforms, this document maps actionable improvements for DevChat. The goal: become the **definitive tool for evidence-based development research**, combining the best features from:
 
 ---
 
