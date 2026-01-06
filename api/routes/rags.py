@@ -2632,7 +2632,6 @@ async def get_highlighted_pdf(
     doc_id: str,
     page: int = 1,
     text: str = "",
-    user: AuthenticatedUser = Depends(get_current_user),
 ):
     """
     Get a PDF with highlighted text for a specific citation.
@@ -2640,13 +2639,16 @@ async def get_highlighted_pdf(
     Downloads the PDF from R2, adds yellow highlight annotation to the specified text,
     and returns the modified PDF as a streaming response.
     
+    No auth required for public projects. For private projects, returns 403.
+    
     Args:
-        project_id: The RAG project ID
+        project_id: The RAG project ID or slug
         doc_id: The document ID
         page: The page number (1-indexed) where the text appears
         text: The text to highlight (URL-encoded)
     """
     import io
+    import re
     from fastapi.responses import StreamingResponse
     
     try:
@@ -2655,11 +2657,35 @@ async def get_highlighted_pdf(
         logger.error("PyMuPDF not installed. Run: pip install pymupdf")
         raise HTTPException(status_code=500, detail="PDF highlighting not available")
     
-    project = await get_user_project(user, project_id)
     client = get_supabase_client()
     
+    # Resolve project_id (could be UUID or slug)
+    uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+    is_uuid = bool(uuid_pattern.match(project_id))
+    
+    project = None
+    if is_uuid:
+        result = client.table("rag_projects").select("*").eq("id", project_id).execute()
+        if result.data:
+            project = result.data[0]
+    
+    if not project:
+        # Try by slug
+        result = client.table("rag_projects").select("*").eq("slug", project_id).execute()
+        if result.data:
+            project = result.data[0]
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="RAG project not found")
+    
+    # Check if public (no auth required for public projects)
+    if not project.get("is_public", False):
+        raise HTTPException(status_code=403, detail="This RAG is private. Authentication required.")
+    
+    actual_project_id = project["id"]
+    
     # Get document
-    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", project_id).single().execute()
+    result = client.table("documents").select("*").eq("id", doc_id).eq("rag_project_id", actual_project_id).single().execute()
     
     if not result.data:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -2675,8 +2701,8 @@ async def get_highlighted_pdf(
         if doc.get("r2_input_key"):
             possible_keys.append(doc["r2_input_key"])
         possible_keys.extend([
-            f"rags/{project_id}/input-pdfs/{doc['filename']}.pdf",
-            f"rags/{project_id}/input-pdfs/{doc['filename']}",
+            f"rags/{actual_project_id}/input-pdfs/{doc['filename']}.pdf",
+            f"rags/{actual_project_id}/input-pdfs/{doc['filename']}",
             f"input-pdfs/{doc['filename']}",
             f"input-pdfs/{doc.get('original_filename', '')}",
             f"input-pdfs/{doc_id}.pdf",
