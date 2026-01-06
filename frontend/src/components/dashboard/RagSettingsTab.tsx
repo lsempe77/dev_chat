@@ -191,6 +191,11 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   const [isResettingPrompts, setIsResettingPrompts] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [customPromptAck, setCustomPromptAck] = useState(false);
+  const [promptHistory, setPromptHistory] = useState<Array<{
+    extraction?: string;
+    synthesis?: string;
+    saved_at: string;
+  }>>([]);
   const [defaultPrompts, setDefaultPrompts] = useState<{
     extraction: { prompt: string; placeholders: Record<string, string>; instructions: string };
     synthesis: { prompt: string; placeholders: Record<string, string>; instructions: string };
@@ -315,7 +320,12 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
         if (data.custom_prompts) {
           setCustomExtractionPrompt(data.custom_prompts.extraction || "");
           setCustomSynthesisPrompt(data.custom_prompts.synthesis || "");
+        } else {
+          setCustomExtractionPrompt("");
+          setCustomSynthesisPrompt("");
         }
+        // Load history
+        setPromptHistory(data.history || []);
       }
     } catch (err) {
       console.error("Failed to fetch prompt config:", err);
@@ -1208,6 +1218,47 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
                     </Button>
                   )}
                 </div>
+                
+                {/* Prompt History */}
+                {promptHistory.length > 0 && (
+                  <details className="mt-4 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-medium">
+                      📜 Prompt History ({promptHistory.length} previous version{promptHistory.length > 1 ? 's' : ''})
+                    </summary>
+                    <div className="mt-2 space-y-2 max-h-[200px] overflow-y-auto">
+                      {promptHistory.map((entry, index) => (
+                        <div key={index} className="p-2 bg-muted rounded border flex justify-between items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(entry.saved_at).toLocaleString()}
+                            </p>
+                            {entry.extraction && (
+                              <p className="text-xs truncate">
+                                <strong>Extraction:</strong> {entry.extraction.slice(0, 50)}...
+                              </p>
+                            )}
+                            {entry.synthesis && (
+                              <p className="text-xs truncate">
+                                <strong>Synthesis:</strong> {entry.synthesis.slice(0, 50)}...
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => {
+                              setCustomExtractionPrompt(entry.extraction || "");
+                              setCustomSynthesisPrompt(entry.synthesis || "");
+                            }}
+                          >
+                            Restore
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
           </div>

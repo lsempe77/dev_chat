@@ -75,11 +75,19 @@ class ModelConfig(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=1.0, description="LLM temperature")
 
 
+class PromptHistoryEntry(BaseModel):
+    """A historical version of custom prompts."""
+    extraction: Optional[str] = None
+    synthesis: Optional[str] = None
+    saved_at: str
+
+
 class CustomPrompts(BaseModel):
     """Custom prompts for extraction and synthesis (advanced feature)."""
     extraction: Optional[str] = Field(None, max_length=10000, description="Custom extraction prompt")
     synthesis: Optional[str] = Field(None, max_length=10000, description="Custom synthesis prompt")
     modified_at: Optional[str] = Field(None, description="When prompts were last modified")
+    history: Optional[List[PromptHistoryEntry]] = Field(default=None, description="Previous prompt versions (max 10)")
 
 
 class PromptConfig(BaseModel):
@@ -504,6 +512,7 @@ class PromptConfigResponse(BaseModel):
     context_prompt: Optional[str] = None
     custom_prompts: Optional[CustomPrompts] = None
     has_custom_prompts: bool = False
+    history: Optional[List[PromptHistoryEntry]] = None
     warning: Optional[str] = None
 
 
@@ -631,19 +640,25 @@ async def get_project_prompts(
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> PromptConfigResponse:
     """
-    Get prompt configuration for a project.
+    Get prompt configuration for a project, including history.
     """
     project = await get_user_project(user, project_id)
     
     custom_prompts = None
+    history = None
     if project.get("custom_prompts"):
-        custom_prompts = CustomPrompts(**project["custom_prompts"])
+        prompts_data = project["custom_prompts"]
+        # Extract history before creating CustomPrompts
+        if prompts_data.get("history"):
+            history = [PromptHistoryEntry(**h) for h in prompts_data["history"]]
+        custom_prompts = CustomPrompts(**prompts_data)
     
     return PromptConfigResponse(
         context_prompt=project.get("context_prompt"),
         custom_prompts=custom_prompts,
-        has_custom_prompts=custom_prompts is not None,
-        warning="Custom prompts are enabled. Citation quality may differ from defaults." if custom_prompts else None,
+        has_custom_prompts=bool(custom_prompts and (custom_prompts.extraction or custom_prompts.synthesis)),
+        history=history,
+        warning="Custom prompts are enabled. Citation quality may differ from defaults." if custom_prompts and (custom_prompts.extraction or custom_prompts.synthesis) else None,
     )
 
 
@@ -703,6 +718,8 @@ async def update_custom_prompts(
     - Proper claim extraction with supporting quotes
     
     Only modify if you understand the ALCE claim ledger pipeline.
+    
+    History is preserved - previous prompts are saved and can be restored.
     """
     if not update.acknowledge_risk:
         raise HTTPException(
@@ -711,22 +728,42 @@ async def update_custom_prompts(
                    "Custom prompts may break citation quality."
         )
     
-    await get_user_project(user, project_id)
+    project = await get_user_project(user, project_id)
     
     from datetime import datetime
+    
+    # Get existing custom_prompts to preserve history
+    existing_prompts = project.get("custom_prompts") or {}
+    history = existing_prompts.get("history", [])
+    
+    # If there are current prompts, save them to history before overwriting
+    if existing_prompts.get("extraction") or existing_prompts.get("synthesis"):
+        history_entry = {
+            "extraction": existing_prompts.get("extraction"),
+            "synthesis": existing_prompts.get("synthesis"),
+            "saved_at": existing_prompts.get("modified_at", datetime.utcnow().isoformat()),
+        }
+        history.insert(0, history_entry)  # Most recent first
+        # Keep only last 10 versions
+        history = history[:10]
     
     custom_prompts_data = {
         "extraction": update.extraction,
         "synthesis": update.synthesis,
         "modified_at": datetime.utcnow().isoformat(),
+        "history": history,
     }
     
-    # Remove None values
-    custom_prompts_data = {k: v for k, v in custom_prompts_data.items() if v is not None}
+    # Remove None values (but keep history)
+    custom_prompts_data = {k: v for k, v in custom_prompts_data.items() if v is not None or k == "history"}
     
-    # If both are None/empty, clear custom prompts entirely
+    # If both are None/empty, clear custom prompts entirely (but keep history for restore)
     if not update.extraction and not update.synthesis:
-        custom_prompts_data = None
+        if history:
+            # Keep history even when clearing current prompts
+            custom_prompts_data = {"history": history, "modified_at": datetime.utcnow().isoformat()}
+        else:
+            custom_prompts_data = None
     
     client = get_supabase_client()
     
