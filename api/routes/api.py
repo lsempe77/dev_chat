@@ -70,7 +70,7 @@ def _generate_pdf_url(document_id: str, source_path: str = None) -> str | None:
 def _get_project_model_config(project_id: str) -> dict | None:
     """Fetch model configuration for a project from Supabase."""
     try:
-        from src.database.supabase_client import get_supabase_client
+        from src.auth import get_supabase_client
         client = get_supabase_client()
         result = client.table("rag_projects").select("model_config").eq("id", project_id).single().execute()
         if result.data and result.data.get("model_config"):
@@ -83,7 +83,7 @@ def _get_project_model_config(project_id: str) -> dict | None:
 def _get_project_prompt_config(project_id: str) -> dict | None:
     """Fetch prompt configuration for a project from Supabase."""
     try:
-        from src.database.supabase_client import get_supabase_client
+        from src.auth import get_supabase_client
         client = get_supabase_client()
         result = client.table("rag_projects").select(
             "context_prompt, custom_prompts"
