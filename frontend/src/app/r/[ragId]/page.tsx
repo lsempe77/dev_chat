@@ -223,7 +223,7 @@ export default function RAGChatPage() {
         body: JSON.stringify({
           query: searchQuery,
           collection: project.qdrant_collection,
-          project_id: ragId,  // Pass project ID for model config lookup
+          project_id: project.id,  // Use actual UUID, not slug
           settings: searchSettings,
         }),
       });
