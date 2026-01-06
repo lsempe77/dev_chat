@@ -75,7 +75,7 @@
 
 | Metric | Score | Target | Status |
 |--------|-------|--------|--------|
-| **Faithfulness** | 0.699 | 0.70+ | ✅ At Target |
+| **Faithfulness** | 0.699 | 0.70+ | Not good enough |
 | **Citation Recall** | 1.000 | 0.70 | ✅ Perfect |
 | **Citation Precision** | 1.000 | 0.70 | ✅ Perfect |
 | **Overall Score** | 0.900 | N/A | ✅ Excellent |
@@ -231,8 +231,6 @@ A comprehensive admin dashboard for 3ie staff to monitor costs, usage, users, RA
   - Updates trace with output and flushes on completion
 - [x] Add Langfuse dashboard link to admin UI
 
-**Effort:** ~3 hours (actual: 2 hours)
-
 #### Phase 3: Admin Overview Dashboard (UI) ✅ DONE
 **Goal:** At-a-glance view of system health and costs
 
@@ -262,8 +260,6 @@ Components:
 
 **Status:** Complete - Overview tab now first tab in Admin panel
 
-**Effort:** ~4 hours
-
 #### Phase 4: User & RAG Management ✅ DONE
 **Goal:** View all users, their RAGs, usage, and take action
 
@@ -283,8 +279,6 @@ Components:
   - `GET /admin/users` - list all users with stats
   - `GET /admin/users/{id}` - user details with RAGs
   - `GET /admin/rags` - list all RAG projects
-
-**Effort:** ~4 hours
 
 #### Phase 5: Prompt Quality & Debugging ✅ DONE
 **Goal:** Monitor and improve answer quality
@@ -319,8 +313,6 @@ Components:
 - Add user feedback tracking (👍/👎)
 - Create A/B experiments for synthesis prompts
 
-**Effort:** ~4 hours
-
 #### Phase 6: Cost Alerts & Quotas (Optional)
 **Goal:** Prevent runaway costs
 
@@ -331,7 +323,6 @@ Components:
 | Email alerts | Notify admin when limits approached |
 | Auto-throttle | Slow down/block when limits hit |
 
-**Effort:** ~6 hours
 
 ---
 

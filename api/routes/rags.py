@@ -522,30 +522,107 @@ class CustomPromptsUpdate(BaseModel):
     )
 
 
-# Default prompts for reference
-DEFAULT_EXTRACTION_PROMPT = """Extract claims from the following source that are relevant to the query.
-For each claim:
-1. Extract the factual claim
-2. Include the exact supporting quote from the source
-3. Classify the claim type (finding, methodology, context, limitation)
-4. Rate confidence (high=exact quote, medium=paraphrased, low=inferred)
+# Default prompts for reference - these MUST match the actual prompts in src/generation/claim_ledger.py
+DEFAULT_EXTRACTION_PROMPT = """You are extracting verifiable claims from a research study.
 
-Query: {query}
-Source [{source_id}]: {source_title}
-Content: {content}
-"""
+USER QUESTION: {query}
 
-DEFAULT_SYNTHESIS_PROMPT = """Write a comprehensive answer to the query using ONLY the verified claims from the ledger.
-CRITICAL RULES:
-1. Every factual statement MUST have an inline citation [N]
-2. Only use claims from the provided ledger
-3. Group related findings thematically
-4. Acknowledge limitations and gaps in evidence
+STUDY TEXT (Source [{source_id}]):
+{source_text}
 
-Query: {query}
-Claim Ledger:
-{claims}
-"""
+Extract ALL claims from this text that are relevant to answering the user's question.
+
+For EACH claim, you MUST provide:
+1. A clear, atomic factual statement
+2. The EXACT quote from the text that supports it (word for word)
+3. The type of claim
+4. Your confidence based on how directly the quote supports the claim
+
+Return JSON array:
+[
+    {{
+        "claim_text": "Clear statement of the finding or fact",
+        "supporting_quote": "Exact words from the text that prove this claim",
+        "claim_type": "finding|methodology|context|limitation",
+        "confidence": "high|medium|low"
+    }}
+]
+
+CLAIM TYPES:
+- finding: Results, effects, outcomes, conclusions
+- methodology: Study design, sample size, methods used  
+- context: Location, population, time period, intervention details
+- limitation: Caveats, weaknesses, generalizability concerns
+
+CONFIDENCE LEVELS:
+- high: Quote directly states the claim
+- medium: Quote strongly implies the claim
+- low: Claim is inferred from context
+
+RULES:
+- Extract 3-8 claims per source (focus on most relevant)
+- Supporting quotes must be EXACT text from the source (copy-paste)
+- Each claim should be one clear fact (atomic)
+- Focus on claims that help answer the user's question
+- Include at least one finding-type claim if any findings exist
+
+Return ONLY the JSON array, no other text."""
+
+DEFAULT_SYNTHESIS_PROMPT = """You are writing a research synthesis answer.
+
+USER QUESTION: {query}
+
+I found {num_sources} studies and extracted verified claims from them.
+
+{ledger_context}
+
+WRITING INSTRUCTIONS:
+
+1. **Opening**: "I found {num_sources} studies relevant to your question."
+
+2. **Answer**: Write a comprehensive answer using ONLY claims from the ledger above.
+   - Every fact you state MUST come from a verified claim in the ledger
+   - Cite using the SOURCE NUMBER in brackets: [1], [2], [3], etc.
+   - Do NOT use claim IDs like [1a] or [1b] - just use [1], [2], etc.
+   - Include specific effect sizes and numbers from the claims
+   - Be substantive (300-500 words)
+   - USE THE EXACT WORDING from claims whenever possible - do not paraphrase
+   - Do NOT add inferences like "this suggests" or "this indicates"
+
+3. **Structure** (use markdown headers):
+   - Key Findings (cite the finding-type claims)
+   - Study Contexts (where/when/whom from context-type claims)
+   - Limitations (any limitation-type claims)
+
+4. **Citation Rules** (CRITICAL):
+   - Use ONLY source numbers: [1], [2], [3] - NOT claim IDs like [1a], [1b]
+   - Every statement MUST have a [N] citation
+   - You may combine claims: "Studies found positive effects [1, 3]..."
+   - Do NOT make claims that aren't in the ledger
+   - Do NOT add a References section at the end
+   - Do NOT list author names or study titles at the end
+   - Do NOT add any "Note:" or "Additional evidence" sections
+
+REMEMBER: 
+- You can ONLY state facts that appear in the verified claims ledger above.
+- Use [1], [2], [3] format - NOT [1a], [1b], [1c] format.
+- Any uncited claim or claim not in the ledger is a failure.
+- END your answer after the Limitations section - NO references or notes after that.
+
+Write your answer:"""
+
+# Placeholder documentation for custom prompts
+EXTRACTION_PLACEHOLDERS = {
+    "query": "The user's question (required)",
+    "source_id": "The source number, e.g. 1, 2, 3 (required)", 
+    "source_text": "The text content from the study, truncated to ~6000 chars (required)",
+}
+
+SYNTHESIS_PLACEHOLDERS = {
+    "query": "The user's question (required)",
+    "num_sources": "Total number of retrieved sources (required)",
+    "ledger_context": "The formatted claim ledger with all extracted claims (required)",
+}
 
 
 @router.get("/{project_id}/prompts", response_model=PromptConfigResponse)
@@ -715,12 +792,33 @@ async def get_default_prompts():
     Get the default extraction and synthesis prompts for reference.
     
     Use these as a starting point if you want to create custom prompts.
+    IMPORTANT: Your custom prompts MUST include ALL the required placeholders
+    or the system will fail when processing queries.
     """
     return {
-        "extraction": DEFAULT_EXTRACTION_PROMPT,
-        "synthesis": DEFAULT_SYNTHESIS_PROMPT,
-        "warning": "Modifying these prompts may significantly impact citation quality. "
-                   "The defaults have been tuned for high faithfulness and accurate citations.",
+        "extraction": {
+            "prompt": DEFAULT_EXTRACTION_PROMPT,
+            "placeholders": EXTRACTION_PLACEHOLDERS,
+            "instructions": (
+                "Your custom extraction prompt MUST include these placeholders: "
+                "{query}, {source_id}, {source_text}. "
+                "The prompt should instruct the LLM to return a JSON array of claims."
+            ),
+        },
+        "synthesis": {
+            "prompt": DEFAULT_SYNTHESIS_PROMPT,
+            "placeholders": SYNTHESIS_PLACEHOLDERS,
+            "instructions": (
+                "Your custom synthesis prompt MUST include these placeholders: "
+                "{query}, {num_sources}, {ledger_context}. "
+                "The prompt should instruct the LLM to cite sources using [1], [2], etc."
+            ),
+        },
+        "warning": (
+            "⚠️ Modifying these prompts may significantly impact citation quality. "
+            "The defaults have been tuned for high faithfulness and accurate citations. "
+            "Missing placeholders will cause errors."
+        ),
     }
 
 

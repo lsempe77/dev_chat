@@ -191,7 +191,11 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   const [isResettingPrompts, setIsResettingPrompts] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [customPromptAck, setCustomPromptAck] = useState(false);
-  const [defaultPrompts, setDefaultPrompts] = useState<{ extraction: string; synthesis: string } | null>(null);
+  const [defaultPrompts, setDefaultPrompts] = useState<{
+    extraction: { prompt: string; placeholders: Record<string, string>; instructions: string };
+    synthesis: { prompt: string; placeholders: Record<string, string>; instructions: string };
+    warning: string;
+  } | null>(null);
   
   // Zotero state
   const [zoteroModalOpen, setZoteroModalOpen] = useState(false);
@@ -1095,18 +1099,47 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
                 {/* Show default prompts for reference */}
                 {defaultPrompts && (
                   <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-medium">
                       View default prompts for reference
                     </summary>
-                    <div className="mt-2 space-y-2 max-h-[200px] overflow-y-auto p-2 bg-background rounded border">
-                      <p className="font-medium">Extraction Prompt:</p>
-                      <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
-                        {defaultPrompts.extraction.slice(0, 500)}...
-                      </pre>
-                      <p className="font-medium mt-2">Synthesis Prompt:</p>
-                      <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
-                        {defaultPrompts.synthesis.slice(0, 500)}...
-                      </pre>
+                    <div className="mt-2 space-y-4 max-h-[400px] overflow-y-auto p-3 bg-background rounded border">
+                      {/* Extraction Prompt */}
+                      <div>
+                        <p className="font-medium text-sm mb-1">Extraction Prompt</p>
+                        <p className="text-muted-foreground text-xs mb-2 italic">
+                          {defaultPrompts.extraction.instructions}
+                        </p>
+                        <div className="mb-2 p-2 bg-blue-50 rounded text-xs">
+                          <strong>Required placeholders:</strong>
+                          <ul className="list-disc ml-4 mt-1">
+                            {Object.entries(defaultPrompts.extraction.placeholders).map(([key, desc]) => (
+                              <li key={key}><code className="bg-blue-100 px-1 rounded">{`{${key}}`}</code> - {desc}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <pre className="whitespace-pre-wrap text-xs text-muted-foreground bg-muted p-2 rounded max-h-[150px] overflow-y-auto">
+                          {defaultPrompts.extraction.prompt}
+                        </pre>
+                      </div>
+                      
+                      {/* Synthesis Prompt */}
+                      <div>
+                        <p className="font-medium text-sm mb-1">Synthesis Prompt</p>
+                        <p className="text-muted-foreground text-xs mb-2 italic">
+                          {defaultPrompts.synthesis.instructions}
+                        </p>
+                        <div className="mb-2 p-2 bg-blue-50 rounded text-xs">
+                          <strong>Required placeholders:</strong>
+                          <ul className="list-disc ml-4 mt-1">
+                            {Object.entries(defaultPrompts.synthesis.placeholders).map(([key, desc]) => (
+                              <li key={key}><code className="bg-blue-100 px-1 rounded">{`{${key}}`}</code> - {desc}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <pre className="whitespace-pre-wrap text-xs text-muted-foreground bg-muted p-2 rounded max-h-[150px] overflow-y-auto">
+                          {defaultPrompts.synthesis.prompt}
+                        </pre>
+                      </div>
                     </div>
                   </details>
                 )}
@@ -1116,7 +1149,7 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
                   <Textarea
                     value={customExtractionPrompt}
                     onChange={(e) => setCustomExtractionPrompt(e.target.value)}
-                    placeholder="Leave empty to use default. Use placeholders: {query}, {source_id}, {source_text}"
+                    placeholder="Leave empty to use default. REQUIRED placeholders: {query}, {source_id}, {source_text}. Must return JSON array of claims."
                     className="min-h-[120px] font-mono text-xs"
                   />
                 </div>
@@ -1126,7 +1159,7 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
                   <Textarea
                     value={customSynthesisPrompt}
                     onChange={(e) => setCustomSynthesisPrompt(e.target.value)}
-                    placeholder="Leave empty to use default. Use placeholders: {query}, {num_sources}, {ledger_context}, etc."
+                    placeholder="Leave empty to use default. REQUIRED placeholders: {query}, {num_sources}, {ledger_context}. Must cite with [1], [2], etc."
                     className="min-h-[120px] font-mono text-xs"
                   />
                 </div>
