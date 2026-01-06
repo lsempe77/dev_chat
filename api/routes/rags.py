@@ -75,6 +75,26 @@ class ModelConfig(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=1.0, description="LLM temperature")
 
 
+class CustomPrompts(BaseModel):
+    """Custom prompts for extraction and synthesis (advanced feature)."""
+    extraction: Optional[str] = Field(None, max_length=10000, description="Custom extraction prompt")
+    synthesis: Optional[str] = Field(None, max_length=10000, description="Custom synthesis prompt")
+    modified_at: Optional[str] = Field(None, description="When prompts were last modified")
+
+
+class PromptConfig(BaseModel):
+    """Prompt configuration for a RAG project."""
+    context_prompt: Optional[str] = Field(
+        None, 
+        max_length=2000, 
+        description="Domain-specific instructions (e.g., 'You are a health economics expert')"
+    )
+    custom_prompts: Optional[CustomPrompts] = Field(
+        None, 
+        description="Advanced: Custom extraction/synthesis prompts. May break citation quality!"
+    )
+
+
 class RAGProjectCreate(BaseModel):
     """Request to create a new RAG project."""
     name: str = Field(..., min_length=1, max_length=100, description="Project name")
@@ -105,6 +125,8 @@ class RAGProjectResponse(BaseModel):
     document_count: int
     chunk_count: int
     model_config_data: Optional[ModelConfig] = None
+    context_prompt: Optional[str] = None
+    custom_prompts: Optional[CustomPrompts] = None
     created_at: datetime
     updated_at: datetime
 
@@ -171,6 +193,8 @@ async def list_rag_projects(
             document_count=p.get("document_count", 0),
             chunk_count=p.get("chunk_count", 0),
             model_config_data=ModelConfig(**p["model_config"]) if p.get("model_config") else None,
+            context_prompt=p.get("context_prompt"),
+            custom_prompts=CustomPrompts(**p["custom_prompts"]) if p.get("custom_prompts") else None,
             created_at=p["created_at"],
             updated_at=p["updated_at"],
         )
@@ -256,6 +280,8 @@ async def create_rag_project(
             document_count=0,
             chunk_count=0,
             model_config_data=ModelConfig(**project["model_config"]) if project.get("model_config") else None,
+            context_prompt=project.get("context_prompt"),
+            custom_prompts=CustomPrompts(**project["custom_prompts"]) if project.get("custom_prompts") else None,
             created_at=project["created_at"],
             updated_at=project["updated_at"],
         )
@@ -367,6 +393,8 @@ async def update_rag_project(
         document_count=project.get("document_count", 0),
         chunk_count=project.get("chunk_count", 0),
         model_config_data=ModelConfig(**project["model_config"]) if project.get("model_config") else None,
+        context_prompt=project.get("context_prompt"),
+        custom_prompts=CustomPrompts(**project["custom_prompts"]) if project.get("custom_prompts") else None,
         created_at=project["created_at"],
         updated_at=project["updated_at"],
     )
@@ -465,6 +493,235 @@ async def update_project_model_config(
         )
     
     return ModelConfigResponse(model_config_data=config)
+
+
+# =============================================================================
+# Prompt Configuration Endpoints
+# =============================================================================
+
+class PromptConfigResponse(BaseModel):
+    """Response for prompt configuration."""
+    context_prompt: Optional[str] = None
+    custom_prompts: Optional[CustomPrompts] = None
+    has_custom_prompts: bool = False
+    warning: Optional[str] = None
+
+
+class ContextPromptUpdate(BaseModel):
+    """Update just the context prompt (safe operation)."""
+    context_prompt: Optional[str] = Field(None, max_length=2000)
+
+
+class CustomPromptsUpdate(BaseModel):
+    """Update custom prompts (dangerous - requires acknowledgment)."""
+    extraction: Optional[str] = Field(None, max_length=10000)
+    synthesis: Optional[str] = Field(None, max_length=10000)
+    acknowledge_risk: bool = Field(
+        ..., 
+        description="Must be true to confirm understanding that custom prompts may break citation quality"
+    )
+
+
+# Default prompts for reference
+DEFAULT_EXTRACTION_PROMPT = """Extract claims from the following source that are relevant to the query.
+For each claim:
+1. Extract the factual claim
+2. Include the exact supporting quote from the source
+3. Classify the claim type (finding, methodology, context, limitation)
+4. Rate confidence (high=exact quote, medium=paraphrased, low=inferred)
+
+Query: {query}
+Source [{source_id}]: {source_title}
+Content: {content}
+"""
+
+DEFAULT_SYNTHESIS_PROMPT = """Write a comprehensive answer to the query using ONLY the verified claims from the ledger.
+CRITICAL RULES:
+1. Every factual statement MUST have an inline citation [N]
+2. Only use claims from the provided ledger
+3. Group related findings thematically
+4. Acknowledge limitations and gaps in evidence
+
+Query: {query}
+Claim Ledger:
+{claims}
+"""
+
+
+@router.get("/{project_id}/prompts", response_model=PromptConfigResponse)
+async def get_project_prompts(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> PromptConfigResponse:
+    """
+    Get prompt configuration for a project.
+    """
+    project = await get_user_project(user, project_id)
+    
+    custom_prompts = None
+    if project.get("custom_prompts"):
+        custom_prompts = CustomPrompts(**project["custom_prompts"])
+    
+    return PromptConfigResponse(
+        context_prompt=project.get("context_prompt"),
+        custom_prompts=custom_prompts,
+        has_custom_prompts=custom_prompts is not None,
+        warning="Custom prompts are enabled. Citation quality may differ from defaults." if custom_prompts else None,
+    )
+
+
+@router.patch("/{project_id}/prompts/context", response_model=PromptConfigResponse)
+async def update_context_prompt(
+    project_id: str,
+    update: ContextPromptUpdate,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> PromptConfigResponse:
+    """
+    Update the context prompt for a project.
+    
+    Context prompts are safe to modify - they add domain-specific instructions
+    without replacing the core extraction/synthesis logic.
+    
+    Example: "You are a health economics expert. Focus on cost-effectiveness studies."
+    """
+    await get_user_project(user, project_id)
+    
+    client = get_supabase_client()
+    
+    result = client.table("rag_projects").update({
+        "context_prompt": update.context_prompt
+    }).eq("id", project_id).execute()
+    
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update context prompt"
+        )
+    
+    project = result.data[0]
+    custom_prompts = CustomPrompts(**project["custom_prompts"]) if project.get("custom_prompts") else None
+    
+    return PromptConfigResponse(
+        context_prompt=project.get("context_prompt"),
+        custom_prompts=custom_prompts,
+        has_custom_prompts=custom_prompts is not None,
+    )
+
+
+@router.patch("/{project_id}/prompts/custom", response_model=PromptConfigResponse)
+async def update_custom_prompts(
+    project_id: str,
+    update: CustomPromptsUpdate,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> PromptConfigResponse:
+    """
+    Update custom extraction/synthesis prompts.
+    
+    ⚠️ WARNING: This is an advanced feature!
+    
+    Modifying these prompts can significantly impact citation quality.
+    The default prompts have been carefully tuned for:
+    - High faithfulness (claims match sources)
+    - Accurate citations (inline [N] references)
+    - Proper claim extraction with supporting quotes
+    
+    Only modify if you understand the ALCE claim ledger pipeline.
+    """
+    if not update.acknowledge_risk:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must acknowledge the risk by setting acknowledge_risk=true. "
+                   "Custom prompts may break citation quality."
+        )
+    
+    await get_user_project(user, project_id)
+    
+    from datetime import datetime
+    
+    custom_prompts_data = {
+        "extraction": update.extraction,
+        "synthesis": update.synthesis,
+        "modified_at": datetime.utcnow().isoformat(),
+    }
+    
+    # Remove None values
+    custom_prompts_data = {k: v for k, v in custom_prompts_data.items() if v is not None}
+    
+    # If both are None/empty, clear custom prompts entirely
+    if not update.extraction and not update.synthesis:
+        custom_prompts_data = None
+    
+    client = get_supabase_client()
+    
+    result = client.table("rag_projects").update({
+        "custom_prompts": custom_prompts_data
+    }).eq("id", project_id).execute()
+    
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update custom prompts"
+        )
+    
+    project = result.data[0]
+    custom_prompts = CustomPrompts(**project["custom_prompts"]) if project.get("custom_prompts") else None
+    
+    return PromptConfigResponse(
+        context_prompt=project.get("context_prompt"),
+        custom_prompts=custom_prompts,
+        has_custom_prompts=custom_prompts is not None,
+        warning="Custom prompts are now enabled. Monitor your citation quality closely." if custom_prompts else None,
+    )
+
+
+@router.delete("/{project_id}/prompts/custom", response_model=PromptConfigResponse)
+async def reset_custom_prompts(
+    project_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> PromptConfigResponse:
+    """
+    Reset custom prompts to defaults.
+    
+    This removes any custom extraction/synthesis prompts and restores
+    the default behavior optimized for citation quality.
+    """
+    await get_user_project(user, project_id)
+    
+    client = get_supabase_client()
+    
+    result = client.table("rag_projects").update({
+        "custom_prompts": None
+    }).eq("id", project_id).execute()
+    
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset custom prompts"
+        )
+    
+    project = result.data[0]
+    
+    return PromptConfigResponse(
+        context_prompt=project.get("context_prompt"),
+        custom_prompts=None,
+        has_custom_prompts=False,
+        warning=None,
+    )
+
+
+@router.get("/prompts/defaults")
+async def get_default_prompts():
+    """
+    Get the default extraction and synthesis prompts for reference.
+    
+    Use these as a starting point if you want to create custom prompts.
+    """
+    return {
+        "extraction": DEFAULT_EXTRACTION_PROMPT,
+        "synthesis": DEFAULT_SYNTHESIS_PROMPT,
+        "warning": "Modifying these prompts may significantly impact citation quality. "
+                   "The defaults have been tuned for high faithfulness and accurate citations.",
+    }
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

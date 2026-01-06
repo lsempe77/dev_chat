@@ -138,12 +138,16 @@ devchat_v2_sota/
   - [x] Cost tracking per model for accurate projections
   - [ ] **Deploy:** Run `scripts/migrations/002_model_config.sql` in Supabase
   - [ ] **Test:** Verify model switching works end-to-end
-- [ ] **Context Prompts & Prompt Customization** 🔜 HIGH VALUE
-  - [ ] Add `context_prompt` field to `rag_projects` (domain instructions)
-  - [ ] Add `custom_prompts` JSONB for extraction/synthesis override
-  - [ ] Settings UI with textarea + warning alerts
-  - [ ] Pass context prompt to synthesis pipeline
-  - [ ] Prompt reset to defaults option
+- [x] **Context Prompts & Prompt Customization** ✅ UNTESTED
+  - [x] Add `context_prompt` field to `rag_projects` (domain instructions)
+  - [x] Add `custom_prompts` JSONB for extraction/synthesis override
+  - [x] Settings UI with textarea + warning alerts (collapsible advanced section)
+  - [x] Pass context prompt and custom prompts to ClaimLedgerSynthesizer
+  - [x] Prompt reset to defaults option
+  - [x] Safety feature: `acknowledge_risk` required for custom prompt changes
+  - [x] Backend endpoints: GET/PATCH/DELETE `/rags/{id}/prompts/*`
+  - [ ] **Deploy:** Run `scripts/migrations/003_prompt_config.sql` in Supabase
+  - [ ] **Test:** Verify context prompts affect synthesis output
 - [ ] Advanced search filters in chat
 - [x] Export citations (CSV, JSON, BibTeX) ✅ Done
 

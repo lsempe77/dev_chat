@@ -25,6 +25,10 @@ import {
   Check,
   Library,
   Cpu,
+  MessageSquare,
+  Undo2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { ConnectZoteroModal } from "./ConnectZoteroModal";
@@ -74,6 +78,18 @@ interface ModelConfig {
   model: string;
   reasoning_model: string;
   temperature: number;
+}
+
+interface CustomPrompts {
+  extraction?: string;
+  synthesis?: string;
+  modified_at?: string;
+}
+
+interface PromptConfig {
+  context_prompt: string | null;
+  custom_prompts: CustomPrompts | null;
+  has_custom_prompts: boolean;
 }
 
 const DEFAULT_MODEL_CONFIG: ModelConfig = {
@@ -161,6 +177,19 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   );
   const [isSavingModelConfig, setIsSavingModelConfig] = useState(false);
   const [modelConfigError, setModelConfigError] = useState<string | null>(null);
+  
+  // Prompt configuration state
+  const [contextPrompt, setContextPrompt] = useState("");
+  const [customExtractionPrompt, setCustomExtractionPrompt] = useState("");
+  const [customSynthesisPrompt, setCustomSynthesisPrompt] = useState("");
+  const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
+  const [showCustomPrompts, setShowCustomPrompts] = useState(false);
+  const [isSavingContextPrompt, setIsSavingContextPrompt] = useState(false);
+  const [isSavingCustomPrompts, setIsSavingCustomPrompts] = useState(false);
+  const [isResettingPrompts, setIsResettingPrompts] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [customPromptAck, setCustomPromptAck] = useState(false);
+  const [defaultPrompts, setDefaultPrompts] = useState<{ extraction: string; synthesis: string } | null>(null);
   
   // Zotero state
   const [zoteroModalOpen, setZoteroModalOpen] = useState(false);
@@ -269,6 +298,42 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
     fetchZoteroStatus();
   }, [fetchZoteroStatus]);
   
+  // Fetch prompt configuration
+  const fetchPromptConfig = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}/prompts`);
+      if (res.ok) {
+        const data = await res.json();
+        setContextPrompt(data.context_prompt || "");
+        setHasCustomPrompts(data.has_custom_prompts || false);
+        if (data.custom_prompts) {
+          setCustomExtractionPrompt(data.custom_prompts.extraction || "");
+          setCustomSynthesisPrompt(data.custom_prompts.synthesis || "");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch prompt config:", err);
+    }
+  }, [ragId]);
+  
+  // Fetch default prompts for reference
+  const fetchDefaultPrompts = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/rags/prompts/defaults`);
+      if (res.ok) {
+        const data = await res.json();
+        setDefaultPrompts(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch default prompts:", err);
+    }
+  }, []);
+  
+  useEffect(() => {
+    fetchPromptConfig();
+    fetchDefaultPrompts();
+  }, [fetchPromptConfig, fetchDefaultPrompts]);
+  
   // Update local state when project changes
   useEffect(() => {
     setEditName(project.name);
@@ -340,6 +405,90 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
       setModelConfigError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setIsSavingModelConfig(false);
+    }
+  };
+  
+  // Save context prompt (safe operation)
+  const handleSaveContextPrompt = async () => {
+    setIsSavingContextPrompt(true);
+    setPromptError(null);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}/prompts/context`, {
+        method: "PATCH",
+        body: JSON.stringify({ context_prompt: contextPrompt || null }),
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Failed to save context prompt");
+      }
+      
+      await fetchPromptConfig();
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setIsSavingContextPrompt(false);
+    }
+  };
+  
+  // Save custom prompts (requires acknowledgment)
+  const handleSaveCustomPrompts = async () => {
+    if (!customPromptAck) {
+      setPromptError("You must acknowledge the risk before saving custom prompts");
+      return;
+    }
+    
+    setIsSavingCustomPrompts(true);
+    setPromptError(null);
+    try {
+      const customPrompts: Record<string, string> = {};
+      if (customExtractionPrompt) customPrompts.extraction = customExtractionPrompt;
+      if (customSynthesisPrompt) customPrompts.synthesis = customSynthesisPrompt;
+      
+      const res = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}/prompts/custom`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          custom_prompts: Object.keys(customPrompts).length > 0 ? customPrompts : null,
+          acknowledge_risk: true,
+        }),
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Failed to save custom prompts");
+      }
+      
+      await fetchPromptConfig();
+      setCustomPromptAck(false);
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setIsSavingCustomPrompts(false);
+    }
+  };
+  
+  // Reset custom prompts to defaults
+  const handleResetPrompts = async () => {
+    setIsResettingPrompts(true);
+    setPromptError(null);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}/prompts/custom`, {
+        method: "DELETE",
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Failed to reset prompts");
+      }
+      
+      setCustomExtractionPrompt("");
+      setCustomSynthesisPrompt("");
+      setHasCustomPrompts(false);
+      setShowCustomPrompts(false);
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : "Failed to reset");
+    } finally {
+      setIsResettingPrompts(false);
     }
   };
   
@@ -848,6 +997,191 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
               "Save Model Configuration"
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Prompt Customization */}
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            Prompt Customization
+          </CardTitle>
+          <CardDescription>
+            Customize how the AI processes and synthesizes research evidence
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {promptError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+              {promptError}
+            </div>
+          )}
+          
+          {/* Context Prompt - Safe */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-medium">Context Prompt</Label>
+              <Badge variant="secondary" className="text-xs">Safe</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Provide domain-specific context that will be prepended to all AI prompts. 
+              Use this to inform the AI about your research area, terminology, or focus.
+            </p>
+            <Textarea
+              value={contextPrompt}
+              onChange={(e) => setContextPrompt(e.target.value)}
+              placeholder="Example: This research collection focuses on education interventions in low-income countries. Prioritize findings about learning outcomes, school attendance, and teacher quality..."
+              className="min-h-[100px]"
+              maxLength={2000}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">{contextPrompt.length}/2000 characters</span>
+              <Button onClick={handleSaveContextPrompt} disabled={isSavingContextPrompt} size="sm">
+                {isSavingContextPrompt ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Context Prompt"
+                )}
+              </Button>
+            </div>
+          </div>
+          
+          <hr className="my-4" />
+          
+          {/* Custom Prompts - Dangerous */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Label className="text-base font-medium">Custom System Prompts</Label>
+                <Badge variant="destructive" className="text-xs">Advanced</Badge>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCustomPrompts(!showCustomPrompts)}
+              >
+                {showCustomPrompts ? (
+                  <>
+                    <ChevronUp className="h-4 w-4 mr-1" />
+                    Hide
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4 mr-1" />
+                    Show
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            {hasCustomPrompts && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>This project is using custom prompts. Citation accuracy may differ from defaults.</span>
+              </div>
+            )}
+            
+            {showCustomPrompts && (
+              <div className="space-y-4 p-4 bg-muted/50 rounded-lg border">
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+                  <strong>⚠️ Warning:</strong> Custom prompts override the carefully tuned default prompts. 
+                  This can significantly impact citation accuracy and response quality. Only modify if you 
+                  understand the claim ledger extraction/synthesis pipeline.
+                </div>
+                
+                {/* Show default prompts for reference */}
+                {defaultPrompts && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                      View default prompts for reference
+                    </summary>
+                    <div className="mt-2 space-y-2 max-h-[200px] overflow-y-auto p-2 bg-background rounded border">
+                      <p className="font-medium">Extraction Prompt:</p>
+                      <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
+                        {defaultPrompts.extraction.slice(0, 500)}...
+                      </pre>
+                      <p className="font-medium mt-2">Synthesis Prompt:</p>
+                      <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
+                        {defaultPrompts.synthesis.slice(0, 500)}...
+                      </pre>
+                    </div>
+                  </details>
+                )}
+                
+                <div className="space-y-2">
+                  <Label>Custom Extraction Prompt</Label>
+                  <Textarea
+                    value={customExtractionPrompt}
+                    onChange={(e) => setCustomExtractionPrompt(e.target.value)}
+                    placeholder="Leave empty to use default. Use placeholders: {query}, {source_id}, {source_text}"
+                    className="min-h-[120px] font-mono text-xs"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Custom Synthesis Prompt</Label>
+                  <Textarea
+                    value={customSynthesisPrompt}
+                    onChange={(e) => setCustomSynthesisPrompt(e.target.value)}
+                    placeholder="Leave empty to use default. Use placeholders: {query}, {num_sources}, {ledger_context}, etc."
+                    className="min-h-[120px] font-mono text-xs"
+                  />
+                </div>
+                
+                {/* Acknowledgment checkbox */}
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded">
+                  <input
+                    type="checkbox"
+                    id="customPromptAck"
+                    checked={customPromptAck}
+                    onChange={(e) => setCustomPromptAck(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <label htmlFor="customPromptAck" className="text-sm text-amber-700">
+                    I understand that custom prompts can break citation accuracy and I accept responsibility for testing the results.
+                  </label>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleSaveCustomPrompts} 
+                    disabled={isSavingCustomPrompts || !customPromptAck} 
+                    variant="destructive"
+                    size="sm"
+                  >
+                    {isSavingCustomPrompts ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Custom Prompts"
+                    )}
+                  </Button>
+                  
+                  {hasCustomPrompts && (
+                    <Button 
+                      onClick={handleResetPrompts} 
+                      disabled={isResettingPrompts}
+                      variant="outline"
+                      size="sm"
+                    >
+                      {isResettingPrompts ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Undo2 className="h-4 w-4 mr-2" />
+                      )}
+                      Reset to Defaults
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

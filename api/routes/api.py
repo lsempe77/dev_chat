@@ -80,6 +80,27 @@ def _get_project_model_config(project_id: str) -> dict | None:
     return None
 
 
+def _get_project_prompt_config(project_id: str) -> dict | None:
+    """Fetch prompt configuration for a project from Supabase."""
+    try:
+        from src.database.supabase_client import get_supabase_client
+        client = get_supabase_client()
+        result = client.table("rag_projects").select(
+            "context_prompt, custom_prompts"
+        ).eq("id", project_id).single().execute()
+        if result.data:
+            prompt_config = {}
+            if result.data.get("context_prompt"):
+                prompt_config["context_prompt"] = result.data["context_prompt"]
+            if result.data.get("custom_prompts"):
+                prompt_config["custom_prompts"] = result.data["custom_prompts"]
+            if prompt_config:
+                return prompt_config
+    except Exception as e:
+        logger.warning(f"Failed to fetch prompt config for project {project_id}: {e}")
+    return None
+
+
 @router.post("/query", response_model=QueryResponse)
 async def query_evidence(request: QueryRequest):
     """
@@ -167,10 +188,16 @@ async def query_evidence(request: QueryRequest):
                 
                 # Fetch project-specific model configuration if project_id provided
                 model_config = None
+                prompt_config = None
                 if request.project_id:
                     model_config = _get_project_model_config(request.project_id)
                     if model_config:
                         logger.info(f"Using project model config: {model_config.get('provider')}/{model_config.get('model')}")
+                    prompt_config = _get_project_prompt_config(request.project_id)
+                    if prompt_config:
+                        has_context = bool(prompt_config.get("context_prompt"))
+                        has_custom = bool(prompt_config.get("custom_prompts"))
+                        logger.info(f"Using project prompt config: context={has_context}, custom={has_custom}")
                 
                 # Call the agent with settings and model config
                 response = await agent.chat(
@@ -178,6 +205,7 @@ async def query_evidence(request: QueryRequest):
                     include_citations=True,
                     search_settings=agent_settings,
                     model_config=model_config,
+                    prompt_config=prompt_config,
                 )
                 
                 # Convert backend response to frontend format

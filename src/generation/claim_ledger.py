@@ -110,21 +110,40 @@ class ClaimLedgerSynthesizer:
     2. Then writing using only the verified claim mappings (strong model)
     """
     
-    def __init__(self, llm=None, writing_llm=None, model_config: Optional[Dict] = None):
+    def __init__(
+        self, 
+        llm=None, 
+        writing_llm=None, 
+        model_config: Optional[Dict] = None,
+        prompt_config: Optional[Dict] = None,
+    ):
         """
-        Initialize with optional model configuration.
+        Initialize with optional model and prompt configuration.
         
         Args:
             llm: Pre-configured LLM for extraction (overrides model_config)
             writing_llm: Pre-configured LLM for writing (overrides model_config)
             model_config: Dict with provider, model, reasoning_model, temperature
                           If provided, used to configure LLMs dynamically
+            prompt_config: Dict with context_prompt and/or custom_prompts
+                          context_prompt: Domain instructions prepended to prompts
+                          custom_prompts: {extraction: str, synthesis: str} overrides
         """
         self.llm = llm  # For extraction (can be fast)
         self.writing_llm = writing_llm  # For writing (needs to be strong)
         self.model_config = model_config or {}
+        self.prompt_config = prompt_config or {}
         self._setup_llms()
         self._llm_semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
+        
+        # Extract prompt configuration
+        self.context_prompt = self.prompt_config.get("context_prompt", "")
+        custom = self.prompt_config.get("custom_prompts") or {}
+        self.custom_extraction_prompt = custom.get("extraction")
+        self.custom_synthesis_prompt = custom.get("synthesis")
+        
+        if self.custom_extraction_prompt or self.custom_synthesis_prompt:
+            logger.warning("Using custom prompts - citation quality may differ from defaults")
     
     def _setup_llms(self):
         """Initialize LLMs using OpenRouter with optional model config override."""
@@ -322,16 +341,11 @@ class ClaimLedgerSynthesizer:
         
         return ledger
     
-    async def _extract_claims_single_source(
-        self,
-        source_id: int,
-        source_text: str,
-        title: str,
-        query: str,
-    ) -> List[VerifiedClaim]:
-        """Extract claims with supporting quotes from a single source."""
-        
-        prompt = f"""You are extracting verifiable claims from a research study.
+    def _get_default_extraction_prompt(
+        self, source_id: int, source_text: str, query: str
+    ) -> str:
+        """Build the default extraction prompt."""
+        return f"""You are extracting verifiable claims from a research study.
 
 USER QUESTION: {query}
 
@@ -375,6 +389,39 @@ RULES:
 - Include at least one finding-type claim if any findings exist
 
 Return ONLY the JSON array, no other text."""
+
+    async def _extract_claims_single_source(
+        self,
+        source_id: int,
+        source_text: str,
+        title: str,
+        query: str,
+    ) -> List[VerifiedClaim]:
+        """Extract claims with supporting quotes from a single source."""
+        
+        # Build prompt: use custom if provided, otherwise default
+        if self.custom_extraction_prompt:
+            # Custom prompt should include placeholders: {query}, {source_id}, {source_text}
+            try:
+                prompt = self.custom_extraction_prompt.format(
+                    query=query,
+                    source_id=source_id,
+                    source_text=source_text[:6000],
+                )
+            except KeyError as e:
+                logger.warning(f"Custom extraction prompt missing placeholder {e}, using default")
+                prompt = self._get_default_extraction_prompt(source_id, source_text, query)
+        else:
+            prompt = self._get_default_extraction_prompt(source_id, source_text, query)
+        
+        # Prepend context prompt if provided
+        if self.context_prompt:
+            prompt = f"""DOMAIN CONTEXT:
+{self.context_prompt}
+
+---
+
+{prompt}"""
 
         try:
             response = await self.llm.acomplete(prompt)
@@ -436,20 +483,18 @@ Return ONLY the JSON array, no other text."""
         
         return sections[:num_sources]
     
-    async def _write_from_ledger(
+    def _get_default_synthesis_prompt(
         self,
         query: str,
-        ledger: SourceToClaimLedger,
         num_sources: int,
+        ledger: 'SourceToClaimLedger',
+        ledger_context: str,
     ) -> str:
-        """
-        Pass 2: Write answer using ONLY the verified claims from the ledger.
-        """
-        ledger_context = ledger.to_writing_context()
+        """Build the default synthesis prompt."""
         sources_with_claims = len(ledger.get_sources_with_claims())
         claim_summary = ledger.get_claim_count_summary()
         
-        prompt = f"""You are writing a research synthesis answer.
+        return f"""You are writing a research synthesis answer.
 
 USER QUESTION: {query}
 
@@ -493,6 +538,49 @@ REMEMBER:
 - END your answer after the Limitations section - NO references or notes after that.
 
 Write your answer:"""
+
+    async def _write_from_ledger(
+        self,
+        query: str,
+        ledger: SourceToClaimLedger,
+        num_sources: int,
+    ) -> str:
+        """
+        Pass 2: Write answer using ONLY the verified claims from the ledger.
+        """
+        ledger_context = ledger.to_writing_context()
+        sources_with_claims = len(ledger.get_sources_with_claims())
+        claim_summary = ledger.get_claim_count_summary()
+        
+        # Build prompt: use custom if provided, otherwise default
+        if self.custom_synthesis_prompt:
+            # Custom prompt should include placeholders:
+            # {query}, {num_sources}, {num_claims}, {sources_with_claims},
+            # {claim_summary}, {ledger_context}, {source_ids}
+            try:
+                prompt = self.custom_synthesis_prompt.format(
+                    query=query,
+                    num_sources=num_sources,
+                    num_claims=len(ledger.claims),
+                    sources_with_claims=sources_with_claims,
+                    claim_summary=claim_summary,
+                    ledger_context=ledger_context,
+                    source_ids=list(ledger.get_sources_with_claims()),
+                )
+            except KeyError as e:
+                logger.warning(f"Custom synthesis prompt missing placeholder {e}, using default")
+                prompt = self._get_default_synthesis_prompt(query, num_sources, ledger, ledger_context)
+        else:
+            prompt = self._get_default_synthesis_prompt(query, num_sources, ledger, ledger_context)
+        
+        # Prepend context prompt if provided
+        if self.context_prompt:
+            prompt = f"""DOMAIN CONTEXT:
+{self.context_prompt}
+
+---
+
+{prompt}"""
 
         try:
             # Use regular LLM (GPT-4o-mini works well for this)
