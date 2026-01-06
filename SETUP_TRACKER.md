@@ -159,10 +159,30 @@ devchat_v2_sota/
 - [ ] Create A/B experiments for synthesis prompts
 - [ ] Expand golden test suite (currently 8 queries)
 
-### Future Exploration
-- [ ] RAPTOR hierarchical summarization
-- [ ] GraphRAG for complex relationships
-- [ ] ColBERTv2 for better retrieval
+### Feature Improvements (See FURTHER_IMPROVEMENTS.md)
+- [ ] PDF Citation Highlighting (4h) - PyMuPDF text highlighting
+- [ ] Smart Citations (12h) - Scite-style support/contrast classification
+- [ ] Consensus Meter (16h) - Visual evidence agreement display
+- [ ] Study Design Classification (8h) - RCT vs quasi-exp vs observational
+- [ ] Systematic Review Workflow (40h) - Elicit-style automation
+- [ ] Research Reports (30h) - Auto-generated literature reviews
+
+### RAG Techniques & Architecture
+See **[FURTHER_IMPROVEMENTS.md](FURTHER_IMPROVEMENTS.md)** for comprehensive roadmap including:
+
+| Status | Technique | Priority |
+|--------|-----------|----------|
+| ✅ Have | Hybrid Search (Dense + Sparse) | - |
+| ✅ Have | Cohere Reranking | - |
+| ✅ Have | Two-Pass Claim Ledger (ALCE) | - |
+| ✅ Have | Post-Hoc MiniCheck Verification | - |
+| 🔴 Gap | Contextual Retrieval (Anthropic) | High |
+| 🔴 Gap | Parent-Child Chunking | High |
+| 🔴 Gap | Contextual Summarization (RCS) | High |
+| 🔴 Gap | Agentic RAG (Multi-Step) | High |
+| 🟡 Future | RAPTOR, GraphRAG, Late Chunking | Low |
+
+**Verdict:** 70% SOTA, missing 4 key innovations (~48h to implement)
 
 ---
 
@@ -523,3 +543,4 @@ See `CHANGELOG.md` for complete history.
 - **API Health:** https://3iechat.up.railway.app/health
 - **Repository:** https://github.com/lsempe77/dev_chat
 - **Modal App:** https://modal.com/apps/3ieimpact/main/deployed/devchat-mineru
+- **Roadmap:** [FURTHER_IMPROVEMENTS.md](FURTHER_IMPROVEMENTS.md) - RAG techniques audit & competitive analysis
