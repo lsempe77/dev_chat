@@ -365,8 +365,8 @@ export default function RAGChatPage() {
 
   // Chat history handlers - use cached response if available, otherwise re-search
   const handleSelectHistoryItem = useCallback((item: ChatHistoryItem) => {
-    // If we have a cached full response, restore it completely (no API call needed)
-    if (item.responseData) {
+    // If we have a cached full response with citations, restore it completely (no API call needed)
+    if (item.responseData && item.responseData.citations && item.responseData.citations.length > 0) {
       setQuery(item.query);
       setAnswer(item.answer || "");
       // Cast cached citations to Citation[] - the cache stores a compatible subset
@@ -378,18 +378,9 @@ export default function RAGChatPage() {
       setHasSearched(true);
       setCurrentQueryId(item.id);
       setError(null);
-    } else if (item.answer) {
-      // Fallback: only answer cached (legacy), show answer but no citations/studies
-      setQuery(item.query);
-      setAnswer(item.answer);
-      setHasSearched(true);
-      setCurrentQueryId(item.id);
-      setCitations([]);
-      setStudies([]);
-      setSuggestions([]);
-      setError(null);
     } else {
-      // No cached data, re-run the search
+      // No cached citations - re-run the search to get fresh citations and references
+      // This ensures blue citation bubbles and PDF links work
       handleSearch(item.query);
     }
   }, [handleSearch]);
