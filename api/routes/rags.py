@@ -8,7 +8,7 @@ Each RAG project corresponds to a separate Qdrant collection.
 import hashlib
 import os
 import difflib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 from uuid import UUID
 
@@ -1636,6 +1636,22 @@ async def list_project_jobs(
     """List processing jobs for a RAG project."""
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
+    
+    # Clean up stale jobs: mark as failed if "running" for > 30 minutes
+    stale_threshold = datetime.utcnow() - timedelta(minutes=30)
+    try:
+        stale_jobs = client.table("processing_jobs").select("id").eq("rag_project_id", project_id).eq("status", "running").lt("started_at", stale_threshold.isoformat()).execute()
+        if stale_jobs.data:
+            stale_ids = [j["id"] for j in stale_jobs.data]
+            for stale_id in stale_ids:
+                client.table("processing_jobs").update({
+                    "status": "failed",
+                    "error_message": "Timed out - no progress for 30+ minutes",
+                    "completed_at": datetime.utcnow().isoformat(),
+                }).eq("id", stale_id).execute()
+            logger.info(f"Cleaned up {len(stale_ids)} stale jobs for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Failed to clean up stale jobs: {e}")
     
     result = client.table("processing_jobs").select("*").eq("rag_project_id", project_id).order("created_at", desc=True).limit(50).execute()
     

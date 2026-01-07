@@ -141,16 +141,15 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
       });
       if (response.ok) {
         const data = await response.json();
-        // Find the most recent running job
         const jobs: ProcessingJob[] = data.jobs || [];
-        const runningJob = jobs.find(j => j.status === "running");
-        const recentJob = jobs[0]; // Most recent
+        const recentJob = jobs[0]; // Most recent (API returns sorted by created_at desc)
         
-        // If there's a running job, or a recently completed one (within 10s), show it
-        if (runningJob) {
-          setActiveJob(runningJob);
-        } else if (recentJob && (Date.now() - new Date(recentJob.created_at).getTime()) < 60000) {
-          setActiveJob(recentJob);
+        // Always prefer the most recent job to avoid showing stale "running" jobs
+        // Show it if: it's running, OR it completed within the last 60 seconds
+        if (recentJob) {
+          const isRecent = (Date.now() - new Date(recentJob.created_at).getTime()) < 60000;
+          const isActive = recentJob.status === "running" || (recentJob.status === "completed" && isRecent);
+          setActiveJob(isActive ? recentJob : null);
         } else {
           setActiveJob(null);
         }
