@@ -1756,11 +1756,12 @@ async def trigger_processing(
                     
         except Exception as e:
             logger.error(f"Modal webhook error: {e}")
+            logger.error(f"Unhandled exception: {e}")
             # Fall through to manual processing message
     
     # If no Modal webhook or it failed, return instructions for manual trigger
     r2_prefix = f"rags/{project_id}/input-pdfs/"
-    qdrant_collection = project.qdrant_collection
+    qdrant_collection = project.get("qdrant_collection") if isinstance(project, dict) else project.qdrant_collection
     
     return ProcessResponse(
         message=f"Documents marked as queued. Run Modal manually: modal run infrastructure/modal_mineru.py::orchestrate_rag --project-id {project_id}",
