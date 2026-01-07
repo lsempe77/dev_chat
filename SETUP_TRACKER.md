@@ -1,7 +1,7 @@
 # DevChat v2.0 - Setup & Progress Tracker
 
 **Created:** December 17, 2025  
-**Last Updated:** January 6, 2026  
+**Last Updated:** January 7, 2026  
 **Status:** ✅ Production | ✅ Multi-Tenant | ✅ Hybrid Search | ✅ Sparse Vectors
 
 ---
@@ -12,7 +12,7 @@
 |-----------|--------|---------|
 | **Frontend (Vercel)** | ✅ Live | https://dev-chat-frontend.vercel.app/ |
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
-| **PDF Processing (Modal)** | ✅ Working | MinerU + dense/sparse indexing |
+| **PDF Processing (Modal)** | ✅ Working | MinerU + modular modal_lib (refactored) |
 | **Vector DB (Qdrant)** | ✅ Connected | Per-project collections with hybrid search |
 | **Auth (Supabase)** | ✅ Working | JWT auth, RLS policies |
 | **Multi-Tenant RAG** | ✅ Done | Users create/manage own projects |
@@ -112,6 +112,16 @@ devchat_v2_sota/
 ├── src/                    # Core Python libraries
 ├── frontend/               # Next.js app
 ├── infrastructure/         # Modal, Docker
+│   ├── modal_mineru.py     # Entry point (~230 lines)
+│   └── modal_lib/          # Modular pipeline (8 modules)
+│       ├── config.py       # App, image, secrets
+│       ├── extraction.py   # MinerU PDF extraction
+│       ├── chunking.py     # Page-aware chunking
+│       ├── embedding.py    # Dense + sparse vectors
+│       ├── indexing.py     # Qdrant upsert
+│       ├── metadata.py     # Enrichment pipeline
+│       ├── processing.py   # Full orchestration
+│       └── utils.py        # Logging, helpers
 ├── evaluation/             # Citation metrics & tests
 ├── scripts/                # Active utility scripts
 │   └── archive/           # Old scripts (reference)
@@ -132,8 +142,17 @@ devchat_v2_sota/
 - [x] **Bibliography Import System** ✅ Phases 1-3 complete
 - [x] **3ie Admin Panel** ✅ Phases 1-5 complete (Overview, Langfuse, Users & RAGs, Quality)
 - [x] **Quality Monitoring** (Phase 5) ✅ Complete with baseline metrics
+- [x] **Modal Pipeline Refactoring** ✅ Complete (modal_lib/ package, 8 modules, .spawn() for async)
 
 ### Medium Priority
+- [x] **Study Design Classification** ✅ Complete
+  - [x] StudyDesign enum with 22 types (RCT, DiD, qualitative, etc.)
+  - [x] LLM classifier with Qdrant full-text fallback
+  - [x] Batch classification script: `scripts/run_study_design_classification.py`
+  - [x] Frontend badge component: `StudyDesignBadge.tsx`
+  - [x] 96 documents classified (81 with design, 15 unknown)
+  - [ ] Integrate into ingestion pipeline (auto-classify on ingest)
+  - [ ] Add study design filter dropdown in Evidence panel
 - [x] **Per-RAG Model Selection** ✅ Code Complete ⚠️ *Untested - needs SQL migration + end-to-end testing*
   - [x] Add `model_config` JSONB to `rag_projects` table (provider, model, reasoning_model, temperature)
   - [x] Settings tab UI: dropdown for provider (OpenAI, Claude, Gemini) + models
@@ -165,9 +184,18 @@ devchat_v2_sota/
 
 ### Feature Improvements (See FURTHER_IMPROVEMENTS.md)
 - [x] PDF Citation Highlighting (4h) - PyMuPDF text highlighting ✅ Done
+- [x] Study Design Classification (8h) - RCT vs quasi-exp vs observational ✅ Done
+- [ ] **Document Enrichment Pipeline (58h)** - Structured extraction for quantitative queries:
+  - [ ] Study Design Integration (2h) - Hook into Modal ingest pipeline
+  - [ ] Geographic Extraction (4h) - Countries, regions, urban/rural
+  - [ ] Intervention Extraction (6h) - Type, amount, duration, target population
+  - [ ] Methods Extraction (6h) - Sample sizes, timeline, pre-registration
+  - [ ] Effect Size Extraction (12h) - Parse result tables, validate ranges
+  - [ ] Quantitative Query Agent (10h) - Filter/aggregate/compare structured data
+  - [ ] Validation & Review UI (8h) - Confidence badges, human-in-the-loop
+  - [ ] Frontend filters (10h) - Filter by design, country, intervention
 - [ ] Smart Citations (12h) - Scite-style support/contrast classification
 - [ ] Consensus Meter (16h) - Visual evidence agreement display
-- [ ] Study Design Classification (8h) - RCT vs quasi-exp vs observational
 - [ ] Systematic Review Workflow (40h) - Elicit-style automation
 - [ ] Research Reports (30h) - Auto-generated literature reviews
 
@@ -451,6 +479,41 @@ Observability (Langfuse)
 
 
 ## 📝 Recent Changes
+
+### January 7, 2026
+- **Modal Pipeline Refactoring** - Complete modular architecture:
+  - Refactored monolithic `modal_mineru.py` (1700+ lines) into `modal_lib/` package (8 modules)
+  - `config.py` - Modal app, image, secrets configuration
+  - `extraction.py` - MinerU PDF extraction with GPU
+  - `chunking.py` - Page-aware text chunking (256 words)
+  - `embedding.py` - Cohere embed-v4 dense + BM25 sparse vectors
+  - `indexing.py` - Qdrant upsert with hybrid vectors
+  - `metadata.py` - CrossRef/OpenAlex enrichment + LLM gap-fill
+  - `processing.py` - Full pipeline orchestration
+  - `utils.py` - Logging, callbacks, helpers
+  - Entry point `modal_mineru.py` now ~230 lines (87% reduction)
+  - Successfully tested: 97/97 PDFs processed
+- **Webhook Timeout Fix** - Background processing for Modal:
+  - Changed `trigger_processing` from `.remote()` (blocking) to `.spawn()` (async)
+  - Prevents Railway HTTP timeout (30-60s) from cancelling long jobs
+  - Webhook returns immediately with `call_id` and `status: "processing"`
+- **Stale Job Prevention** - Auto-cleanup mechanism:
+  - Backend: Jobs running > 30 minutes auto-marked as `failed` in `list_project_jobs`
+  - Frontend: `RagProcessingTab` now prefers most recent job (not just any "running" job)
+  - Fixes UI getting stuck on stale "Processing X/Y" display
+- **Bug Fixes:**
+  - Fixed `project.qdrant_collection` → `project.get("qdrant_collection")` (dict access error)
+  - Fixed Modal container import: added `.add_local_python_source("modal_lib")` to base_image
+  - Added `timedelta` import to rags.py for stale job cleanup
+
+- **Study Design Classification** - Complete implementation:
+  - Created `StudyDesign` enum with 22 comprehensive types in `src/config/study_designs.py`
+  - Built LLM classifier service in `src/ingestion/study_design_classifier.py`
+  - Added Qdrant full-text fallback for documents without abstracts
+  - Batch script `scripts/run_study_design_classification.py` with `--force` flag
+  - Frontend `StudyDesignBadge.tsx` component with color-coded badges
+  - Classified 96 documents: 34 RCT, 10 DiD, 7 qualitative, 6 theory, etc. (15 unknown)
+  - Integrated into ingestion pipeline for auto-classification on new documents
 
 ### January 6, 2026 (Late Evening)
 - **PDF Citation Highlighting** - Complete implementation:

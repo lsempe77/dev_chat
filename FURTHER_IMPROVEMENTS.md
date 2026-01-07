@@ -2,7 +2,25 @@
 
 **Purpose:** Map features from leading AI research tools to make DevChat the best-in-class evidence synthesis platform for development research.
 
-**Date:** January 6, 2026
+**Date:** January 7, 2026
+
+---
+
+## ✅ Infrastructure Improvements (DONE)
+
+### Modal Pipeline Refactoring (January 7, 2026)
+- ✅ Refactored monolithic `modal_mineru.py` (1700+ lines) into `modal_lib/` package
+- ✅ 8 focused modules: config, extraction, chunking, embedding, indexing, metadata, processing, utils
+- ✅ Entry point now ~230 lines (87% code reduction)
+- ✅ Background processing via `.spawn()` - prevents webhook timeout
+- ✅ Stale job auto-cleanup (jobs > 30 min marked as failed)
+- ✅ Successfully tested with 97/97 PDFs processed
+
+**Benefits:**
+- Easier to maintain and extend (each module < 200 lines)
+- Ready for Contextual Retrieval integration (just modify `chunking.py`)
+- Ready for Parent-Child chunking (modify `chunking.py` + `indexing.py`)
+- Async webhook prevents Railway timeout issues
 
 ---
 
@@ -748,68 +766,431 @@ class ResearchReportGenerator:
 
 ---
 
-## 🚀 Priority 9: Study Design Classification (Consensus-Inspired)
+## ✅ Priority 9: Study Design Classification (Consensus-Inspired) - COMPLETE
 
-### Current State
-- `item_type` field captures document type (article, report, etc.)
-- No classification of study design/methodology
+### Implementation (January 7, 2026)
+- ✅ `StudyDesign` enum created with 22 comprehensive design types
+- ✅ Evidence weights defined (RCT=1.0, DiD=0.8, Qualitative=0.4, etc.)
+- ✅ LLM classification prompt and service implemented
+- ✅ Classification script: `scripts/run_study_design_classification.py`
+- ✅ Qdrant full-text fallback when abstract missing
+- ✅ Frontend `StudyDesignBadge` component with color-coded badges
+- ✅ 96 documents classified (81 with design, 15 unknown)
+- ⏳ Pending: Study design filter dropdown in Evidence panel
+- ⏳ Pending: Integrate into ingestion pipeline for auto-classification
 
-### Improvement: Auto-Classify Study Design
+### Implementation Files:
+- `src/config/study_designs.py` - Full taxonomy with 22 design types + evidence weights
+- `src/ingestion/study_design_classifier.py` - LLM classification with Qdrant fallback
+- `scripts/run_study_design_classification.py` - Batch classification script
+- `frontend/src/components/workbench/StudyDesignBadge.tsx` - Color-coded badge component
 
-**New Metadata Fields:**
-```python
-class StudyDesign(str, Enum):
-    RCT = "randomized_controlled_trial"
-    QUASI_EXPERIMENTAL = "quasi_experimental"
-    REGRESSION_DISCONTINUITY = "regression_discontinuity"
-    DIFFERENCE_IN_DIFFERENCES = "difference_in_differences"
-    INSTRUMENTAL_VARIABLE = "instrumental_variable"
-    PROPENSITY_SCORE = "propensity_score_matching"
-    INTERRUPTED_TIME_SERIES = "interrupted_time_series"
-    OBSERVATIONAL = "observational"
-    QUALITATIVE = "qualitative"
-    MIXED_METHODS = "mixed_methods"
-    SYSTEMATIC_REVIEW = "systematic_review"
-    META_ANALYSIS = "meta_analysis"
-    MODELING = "modeling_simulation"
-    DESCRIPTIVE = "descriptive"
-```
+### Classification Results (96 documents):
+| Study Design | Count |
+|--------------|-------|
+| RCT | 34 |
+| Unknown | 15 |
+| Difference-in-Differences | 10 |
+| Qualitative | 7 |
+| Theory | 6 |
+| Panel | 4 |
+| Cluster RCT | 4 |
+| Cohort | 3 |
+| Descriptive | 3 |
+| Other designs | 10 |
 
-**Classification Prompt:**
-```
-Analyze this research paper abstract and methodology section.
-Classify the primary study design using this hierarchy:
-
-EXPERIMENTAL:
-- Randomized Controlled Trial (RCT): Random assignment to treatment/control
-- Cluster RCT: Randomization at group level
-
-QUASI-EXPERIMENTAL:
-- Regression Discontinuity: Cutoff-based assignment
-- Difference-in-Differences: Before/after with comparison group
-- Instrumental Variable: Uses exogenous variation
-- Propensity Score Matching: Statistical matching
-
-OBSERVATIONAL:
-- Cohort study: Follows groups over time
-- Cross-sectional: Point-in-time measurement
-
-... [full taxonomy]
-
-Return: {"study_design": "...", "confidence": 0.0-1.0, "evidence_snippets": [...]}
-```
-
-**UI Enhancement:**
-- Filter documents by study design in metadata view
-- Weight RCTs higher in consensus calculations
-- Show study design badges on citations
-
-**Effort:** ~8 hours
+**Effort:** ~8h (complete)
 **Impact:** High - Critical for evidence quality assessment
 
 ---
 
-## 🚀 Priority 10: Haystack Integration (Future Architecture)
+## 🚀 Priority 10: Document Enrichment Pipeline (Structured Data Extraction)
+
+### Overview
+A unified pipeline that runs **after PDF processing** to extract structured, searchable metadata from documents. This enables quantitative queries, filtering by geography/intervention, and meta-analysis preparation.
+
+### Current State
+- ✅ MinerU extracts text from PDFs with good quality
+- ✅ CrossRef/OpenAlex enrichment for bibliographic metadata
+- ✅ Study Design Classification (just built - needs pipeline integration)
+- ❌ Tables converted to markdown but not structured
+- ❌ Effect sizes, sample sizes, outcomes not extracted
+- ❌ No ability to answer quantitative queries
+
+### Architecture: Document Enrichment Pipeline
+
+```
+PDF Upload → MinerU Extract → Metadata Resolve → ENRICHMENT PIPELINE → Index to Qdrant
+                                                        ↓
+                                              ┌─────────────────────┐
+                                              │  Enrichment Agents  │
+                                              ├─────────────────────┤
+                                              │ 1. Study Design     │ ← Already built!
+                                              │ 2. Geography        │
+                                              │ 3. Intervention     │
+                                              │ 4. Effect Sizes     │
+                                              │ 5. Sample/Methods   │
+                                              └─────────────────────┘
+                                                        ↓
+                                              Store in documents.metadata
+                                              + Qdrant payload for filtering
+```
+
+### Implementation Location
+**File:** `infrastructure/modal_mineru.py` - line ~1159
+
+```python
+# After: enriched_metadata = resolve_metadata(...)
+# Before: embed_and_index(...)
+
+# NEW: Document Enrichment Pipeline
+enriched_metadata = await run_enrichment_pipeline(
+    content=result["content"],
+    metadata=enriched_metadata,
+    tables=result.get("tables", []),  # If MinerU extracts tables
+)
+```
+
+---
+
+### Enrichment Agent 1: Study Design Classification ✅ READY
+
+**Status:** Code complete, needs Modal integration
+
+**Files:**
+- `src/config/study_designs.py` - 22 design types with evidence weights
+- `src/ingestion/study_design_classifier.py` - LLM classifier
+
+**Integration:**
+```python
+from src.ingestion.study_design_classifier import classify_study_design
+
+study_design, confidence, reasoning = await classify_study_design(
+    title=metadata.get("title"),
+    abstract=metadata.get("abstract") or content[:8000]  # Fallback to full text
+)
+enriched_metadata["study_design"] = study_design
+enriched_metadata["study_design_confidence"] = confidence
+enriched_metadata["study_design_reasoning"] = reasoning
+```
+
+**Effort:** 2h (just integration)
+
+---
+
+### Enrichment Agent 2: Geographic Extraction
+
+**Goal:** Extract countries, regions, and geographic scope
+
+**Output Schema:**
+```python
+@dataclass
+class GeographicExtraction:
+    countries: List[str]           # ["Bangladesh", "Ethiopia", "Peru"]
+    regions: List[str]             # ["South Asia", "Sub-Saharan Africa"]
+    sub_national: List[str]        # ["Punjab province", "Oromia region"]
+    urban_rural: str               # "urban", "rural", "mixed", "unknown"
+    geographic_scope: str          # "single_country", "multi_country", "global"
+```
+
+**Prompt Template:**
+```
+Extract geographic information from this research document.
+
+Title: {title}
+Abstract: {abstract}
+
+Return JSON:
+{
+    "countries": ["list of countries where study was conducted"],
+    "regions": ["geographic regions (e.g., South Asia, Sub-Saharan Africa)"],
+    "sub_national": ["provinces, states, districts if mentioned"],
+    "urban_rural": "urban|rural|mixed|unknown",
+    "geographic_scope": "single_country|multi_country|global"
+}
+```
+
+**Validation:** Cross-check extracted countries against known country list
+
+**Effort:** 4h
+
+---
+
+### Enrichment Agent 3: Intervention Extraction
+
+**Goal:** Extract intervention details for filtering and comparison
+
+**Output Schema:**
+```python
+@dataclass
+class InterventionExtraction:
+    intervention_type: str          # From taxonomy: "cash_transfer", "training", etc.
+    intervention_category: str      # "social_protection", "education", "health"
+    intervention_description: str   # Brief description
+    transfer_amount: Optional[str]  # "$20/month", "500 USD lump sum"
+    transfer_frequency: str         # "monthly", "quarterly", "lump_sum"
+    duration_months: Optional[int]  # 24
+    conditionality: str             # "conditional", "unconditional", "labeled"
+    target_population: str          # "Ultra-poor households", "Adolescent girls"
+    implementing_org: Optional[str] # "BRAC", "Government of Ethiopia"
+```
+
+**Intervention Taxonomy:**
+```python
+INTERVENTION_TYPES = [
+    # Social Protection
+    "cash_transfer", "asset_transfer", "food_transfer", "voucher",
+    # Livelihoods
+    "skills_training", "financial_literacy", "savings_group", "microcredit",
+    # Education
+    "school_feeding", "scholarship", "teacher_training", "curriculum",
+    # Health
+    "nutrition_supplement", "vaccination", "health_education", "facility_upgrade",
+    # Agriculture
+    "input_subsidy", "extension_service", "irrigation", "market_access",
+    # Governance
+    "information_campaign", "community_mobilization", "decentralization",
+    # Infrastructure
+    "road_construction", "electrification", "water_sanitation",
+    # Other
+    "multi_component", "unknown"
+]
+```
+
+**Effort:** 6h
+
+---
+
+### Enrichment Agent 4: Effect Size Extraction
+
+**Goal:** Extract quantitative results for meta-analysis and comparison
+
+**Output Schema:**
+```python
+@dataclass
+class EffectSizeExtraction:
+    outcome: str                    # "household_consumption", "school_enrollment"
+    outcome_category: str           # "economic", "education", "health"
+    effect_size: float              # 0.23
+    effect_type: str                # "smd", "percentage_point", "odds_ratio", "percent_change"
+    confidence_interval: tuple      # (0.15, 0.31)
+    standard_error: Optional[float] # 0.04
+    p_value: Optional[float]        # 0.001
+    significance: str               # "significant", "not_significant", "marginal"
+    sample_size_treatment: int      # 1500
+    sample_size_control: int        # 1500
+    timepoint: str                  # "12_months", "24_months", "endline"
+    subgroup: Optional[str]         # "female_headed", "bottom_tercile"
+    table_source: Optional[str]     # "Table 3, Column 2"
+```
+
+**Extraction Strategy:**
+1. **Table Detection:** Identify results tables in document
+2. **Table Parsing:** Extract structured data from markdown tables
+3. **LLM Interpretation:** Have LLM interpret each row
+4. **Validation:** Check numeric values are plausible (effect sizes typically -2 to 2 for SMD)
+
+**Effort:** 12h (most complex agent)
+
+---
+
+### Enrichment Agent 5: Sample & Methods Extraction
+
+**Goal:** Extract methodological details for evidence assessment
+
+**Output Schema:**
+```python
+@dataclass
+class MethodsExtraction:
+    sample_size_total: int          # 3000
+    sample_size_treatment: int      # 1500
+    sample_size_control: int        # 1500
+    unit_of_randomization: str      # "individual", "household", "village", "school"
+    attrition_rate: Optional[float] # 0.08
+    baseline_year: Optional[int]    # 2013
+    endline_year: Optional[int]     # 2016
+    data_sources: List[str]         # ["household_survey", "admin_data", "qualitative"]
+    pre_registered: Optional[bool]  # True
+    pre_registration_id: Optional[str]  # "AEARCTR-0000123"
+```
+
+**Effort:** 6h
+
+---
+
+### Quantitative Query Agent
+
+**Goal:** Answer queries using structured metadata
+
+**Example Queries:**
+| Query | Uses | Response |
+|-------|------|----------|
+| "What are effect sizes for cash transfers on school enrollment?" | effect_sizes + intervention_type | Table of effects |
+| "Which countries have graduation program studies?" | countries + intervention_type | Country list |
+| "Compare RCT vs quasi-experimental effects" | study_design + effect_sizes | Comparison table |
+| "Show studies with sample size > 1000" | sample_size | Filtered list |
+| "What's the average effect on consumption?" | effect_sizes + outcome | Aggregate stats |
+
+**Implementation:**
+```python
+class QuantitativeQueryAgent:
+    tools = [
+        FilterByMetadataTool(),       # Filter docs by structured fields
+        AggregateEffectsTool(),       # Calculate averages, ranges
+        CompareGroupsTool(),          # Compare by study design, country
+        GenerateTableTool(),          # Format results as table
+        GenerateForestPlotTool(),     # Visual effect size display
+    ]
+```
+
+**Effort:** 10h
+
+---
+
+### Accuracy & Validation Strategy
+
+**Problem:** LLM extraction can hallucinate or make errors
+
+**Solutions:**
+
+1. **Confidence Scoring:**
+   - Each extraction includes confidence score (0-1)
+   - Low confidence items flagged for human review
+   - UI shows confidence badges
+
+2. **Source Validation:**
+   - For effect sizes: validate against plausible ranges
+   - For countries: validate against known country list
+   - For years: validate in reasonable range (1990-2026)
+
+3. **Human-in-the-Loop:**
+   - Metadata Review UI already exists
+   - Add "Extracted Fields" tab showing all enrichments
+   - Mark as reviewed checkbox for each section
+
+4. **Cross-Validation:**
+   - Compare extracted DOI metadata with LLM extraction
+   - Flag discrepancies for review
+
+5. **Batch Quality Checks:**
+   - Periodic sampling of extractions
+   - Compute accuracy on validated subset
+   - Retrain prompts if accuracy drops
+
+---
+
+### Storage Schema Update
+
+```python
+# documents.metadata JSONB
+{
+    # Existing bibliographic
+    "title": "...",
+    "authors": [...],
+    "doi": "...",
+    
+    # NEW: Study Design (already implemented)
+    "study_design": "rct",
+    "study_design_confidence": 0.95,
+    "study_design_reasoning": "...",
+    
+    # NEW: Geographic
+    "countries": ["Bangladesh", "Ethiopia"],
+    "regions": ["South Asia", "Sub-Saharan Africa"],
+    "urban_rural": "rural",
+    
+    # NEW: Intervention
+    "intervention_type": "graduation_program",
+    "intervention_category": "social_protection",
+    "transfer_amount": "USD 500 asset + 24 months stipend",
+    "target_population": "Ultra-poor households",
+    
+    # NEW: Effects (array)
+    "effect_sizes": [
+        {
+            "outcome": "household_consumption",
+            "outcome_category": "economic",
+            "effect": 0.23,
+            "effect_type": "smd",
+            "ci_lower": 0.15,
+            "ci_upper": 0.31,
+            "timepoint": "36_months",
+            "extraction_confidence": 0.85
+        }
+    ],
+    
+    # NEW: Methods
+    "sample_size_treatment": 1500,
+    "sample_size_control": 1500,
+    "baseline_year": 2013,
+    "endline_year": 2016,
+    
+    # NEW: Quality flags
+    "enrichment_status": "complete",  # "pending", "partial", "complete", "failed"
+    "enrichment_reviewed": false,
+    "enrichment_timestamp": "2026-01-07T..."
+}
+```
+
+---
+
+### Frontend Enhancements
+
+1. **Metadata Review Tab:**
+   - Show all extracted fields with confidence badges
+   - Edit/correct any extraction
+   - "Mark as Reviewed" per section
+
+2. **Study Cards:**
+   - Display study design badge (already done)
+   - Add country flags/chips
+   - Show effect size summary
+
+3. **Evidence Panel Filters:**
+   - Filter by study design (dropdown)
+   - Filter by country (multi-select)
+   - Filter by intervention type
+   - Filter by effect size range
+
+4. **Quantitative View:**
+   - Effect size comparison table
+   - Forest plot visualization
+   - Export to CSV for meta-analysis
+
+---
+
+### Implementation Roadmap
+
+| Phase | Agent | Effort | Dependencies |
+|-------|-------|--------|--------------|
+| 1a | Study Design Integration | 2h | Already built |
+| 1b | Geographic Extraction | 4h | None |
+| 1c | Frontend filters | 4h | 1a, 1b |
+| 2a | Intervention Extraction | 6h | None |
+| 2b | Methods Extraction | 6h | None |
+| 3a | Effect Size Extraction | 12h | Table parsing |
+| 3b | Quantitative Query Agent | 10h | 3a |
+| 3c | Forest Plot UI | 6h | 3a, 3b |
+| 4 | Validation & Review UI | 8h | All above |
+| **Total** | | **58h** | |
+
+### Priority Order
+1. **Study Design + Geography** (10h) - Quick wins, high value for filtering
+2. **Intervention + Methods** (12h) - Important for comparison queries
+3. **Effect Sizes + Quantitative Agent** (28h) - Complex but transformative
+4. **Validation & Review** (8h) - Critical for accuracy
+
+---
+
+### Impact Summary
+- **Very High** - Enables quantitative evidence synthesis
+- Unique differentiator: No competitor does structured effect extraction
+- Opens door to automated meta-analysis preparation
+- Enables queries like "What's the average effect of cash transfers on school enrollment across RCTs in Sub-Saharan Africa?"
+
+---
+
+## 🚀 Priority 11: Haystack Integration (Future Architecture)
 
 ### Current State
 - Custom-built pipeline with Cohere + Qdrant + OpenRouter
@@ -855,18 +1236,19 @@ pipeline.connect("prompt", "llm")
 ## 📊 Implementation Roadmap
 
 ### Phase 1: Quick Wins (Week 1-2)
-| Feature | Effort | Impact |
-|---------|--------|--------|
-| ~~PDF Citation Highlighting~~ | ~~4h~~ | ✅ Done |
-| Study Design Classification | 8h | High |
-| **Total** | **8h remaining** | |
+| Feature | Effort | Impact | Status |
+|---------|--------|--------|--------|
+| ~~PDF Citation Highlighting~~ | ~~4h~~ | High | ✅ Done |
+| ~~Study Design Classification~~ | ~~8h~~ | High | ✅ Done |
+| **Total** | **0h remaining** | | |
 
-### Phase 2: Evidence Quality (Week 3-4)
+### Phase 2: Evidence Quality (Week 3-6)
 | Feature | Effort | Impact |
 |---------|--------|--------|
+| Document Enrichment Pipeline | 58h | Very High |
 | Smart Citations (support/contrast) | 12h | Very High |
 | Consensus Meter | 16h | Very High |
-| **Total** | **28h** | |
+| **Total** | **86h** | |
 
 ### Phase 3: Advanced Features (Month 2)
 | Feature | Effort | Impact |
