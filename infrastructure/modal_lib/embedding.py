@@ -55,8 +55,13 @@ Here is a chunk from this document:
 </chunk>
 
 Provide a short context (2-3 sentences) to situate this chunk within the document.
-Include: document type (RCT, qualitative study, review, etc.), section if identifiable, 
-and key entities (program name, country, intervention type).
+You MUST include:
+1. Document type (RCT, quasi-experimental study, qualitative study, review, working paper, etc.)
+2. The SPECIFIC SECTION this chunk is from (e.g., Introduction, Literature Review, Methodology, Data, Results, Discussion, Conclusion, References, Appendix, Tables)
+3. Key entities (program name, country, intervention type)
+
+Example format: "This chunk is from the [Results/Methodology/etc.] section of a [study type] evaluating [program] in [country]. It discusses [specific topic]."
+
 Answer ONLY with the context, nothing else."""
 
     try:
@@ -80,24 +85,57 @@ Answer ONLY with the context, nothing else."""
         return context
     except Exception as e:
         print(f"    Warning: Contextual prefix failed: {e}")
-        # Fallback to metadata-based prefix
-        return _generate_fallback_prefix(metadata)
+        # Fallback to metadata-based prefix with section estimation
+        return _generate_fallback_prefix(metadata, chunk)
 
 
-def _generate_fallback_prefix(metadata: dict) -> str:
+def _generate_fallback_prefix(metadata: dict, chunk_text: str = "") -> str:
     """Generate a simple context prefix from metadata when LLM fails."""
     title = metadata.get("title", "Unknown document")
     year = metadata.get("year", "n.d.")
     study_design = metadata.get("study_design", "")
     countries = metadata.get("countries", [])
     
-    parts = [f"From '{title}' ({year})."]
+    # Try to estimate section from chunk content
+    section = _estimate_section(chunk_text)
+    
+    parts = []
+    if section:
+        parts.append(f"This chunk is from the {section} section of")
+    else:
+        parts.append("From")
+    
+    parts[0] += f" '{title}' ({year})."
+    
     if study_design:
         parts.append(f"Study design: {study_design}.")
     if countries:
         parts.append(f"Countries: {', '.join(countries[:3])}.")
     
     return " ".join(parts)
+
+
+def _estimate_section(text: str) -> str:
+    """Estimate document section from text content using keyword matching."""
+    text_lower = text.lower()
+    
+    # Section indicators (order matters - check more specific first)
+    section_keywords = {
+        "References": ["et al.", "journal of", "doi:", "vol.", "pp.", "isbn", "working paper"],
+        "Methodology": ["randomized", "sample size", "regression", "data collection", "survey", "questionnaire", "control group", "treatment group"],
+        "Results": ["table ", "figure ", "statistically significant", "coefficient", "p-value", "standard error", "percentage point", "increased by", "decreased by"],
+        "Introduction": ["this paper", "this study", "we examine", "we analyze", "literature has", "previous research"],
+        "Discussion": ["findings suggest", "results indicate", "implications", "limitation", "future research"],
+        "Conclusion": ["in conclusion", "to conclude", "in summary", "we find that", "our findings"],
+        "Appendix": ["appendix", "supplementary", "robustness check"],
+    }
+    
+    for section, keywords in section_keywords.items():
+        matches = sum(1 for kw in keywords if kw in text_lower)
+        if matches >= 2:
+            return section
+    
+    return ""
 
 
 def add_contextual_prefixes_batch(
