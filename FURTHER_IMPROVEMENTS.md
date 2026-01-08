@@ -36,7 +36,7 @@
 | **Post-Hoc Verification (NLI)** | ✅ MiniCheck | ✅ Same | ✅ **Current** | - |
 | **Page-Aware Chunking** | ✅ 256 words | ✅ Same | ✅ **Current** | - |
 | **Metadata Filtering** | ✅ Year, country, sector | ✅ Same | ✅ **Current** | - |
-| **Contextual Retrieval** | ⚠️ Partial | ✅ Anthropic's method | 🔴 **Gap** | High |
+| **Contextual Retrieval** | ✅ GPT-4o-mini | ✅ Anthropic's method | ✅ **DONE** | - |
 | **HyDE (Hypothetical Doc Embedding)** | ⚠️ Optional | ✅ Standard | ⚠️ **Partial** | Medium |
 | **Parent-Child Chunking** | ❌ Not implemented | ✅ PaperQA2 | 🔴 **Gap** | High |
 | **Agentic RAG (Iterative)** | ❌ Single-shot | ✅ PaperQA2 | 🔴 **Gap** | High |
@@ -54,56 +54,48 @@
 - Post-hoc MiniCheck verification - cutting edge NLI-based grounding
 
 **What You're Missing (High Impact):**
-1. **Contextual Retrieval** - Anthropic's 49% improvement technique
+1. ~~**Contextual Retrieval** - Anthropic's 49% improvement technique~~ ✅ **DONE (Jan 8, 2026)**
 2. **Parent-Child Chunking** - Small chunks for search, expand for context
 3. **Contextual Summarization (RCS)** - LLM summarizes each chunk before synthesis
 4. **Agentic RAG** - Iterative search refinement
 
 ---
 
-## 🔴 Critical Gap #1: Contextual Retrieval (Anthropic's 49% Improvement)
+## ✅ COMPLETED: Contextual Retrieval (Anthropic's 49% Improvement)
 
-### What It Is
-During indexing, prepend each chunk with LLM-generated context explaining its role in the document.
+**Implemented:** January 8, 2026
 
-### Current DevChat
+### What Was Done
+During indexing, each chunk is now prepended with LLM-generated context explaining its role in the document.
+
+### Implementation Details
+- **Location:** `infrastructure/modal_lib/embedding.py`
+- **Model:** GPT-4o-mini via OpenRouter (fast, cheap, high quality)
+- **Parallel processing:** ThreadPoolExecutor with 5 workers for speed
+- **Fallback:** Metadata-based prefix if LLM fails
+
+### New Qdrant Payload Fields
+- `text` - Original chunk text (preserved)
+- `contextual_prefix` - The LLM-generated 2-3 sentence context
+- `text_with_context` - Combined prefix + original text (what's embedded)
+
+### Example Contextual Prefix
 ```
-Chunk: "The program increased household consumption by 23% over the control group."
-```
-
-### With Contextual Retrieval
-```
-Chunk: "This chunk is from a 2019 RCT of the Bangladesh BRAC Ultra-Poor Graduation 
-program, specifically from the Results section discussing consumption outcomes. 
-The program increased household consumption by 23% over the control group."
-```
-
-### Implementation (During Modal Processing)
-```python
-async def add_contextual_prefix(chunk: str, full_document: str, metadata: dict) -> str:
-    """Add contextual prefix to chunk before embedding."""
-    prompt = f"""<document>
-{full_document[:8000]}
-</document>
-
-Here is a chunk from this document:
-<chunk>
-{chunk}
-</chunk>
-
-Provide a short context (2-3 sentences) to situate this chunk within the document.
-Include: document type, section, and key entities mentioned.
-Answer only with the context, nothing else."""
-    
-    context = await llm.complete(prompt)
-    return f"{context}\n\n{chunk}"
+"This chunk is part of a working paper that presents a multi-arm randomized 
+controlled trial (RCT) evaluating the Government of Zambia's Supporting Women's 
+Livelihoods (SWL) program, which aims to alleviate poverty among extremely poor 
+women in rural areas through a combination of financial capital, skills training, 
+and mentorship."
 ```
 
-### Impact
+### Results
+- **97 PDFs reprocessed** with contextual retrieval enabled
+- **6,769 chunks** indexed with contextual prefixes
+- **0 failures** during processing
+
+### Expected Impact
 - **Anthropic's tests:** 49% reduction in retrieval failures
-- **With reranking:** 67% reduction in retrieval failures
-
-### Effort: ~8 hours (Modal processing changes)
+- **With reranking (which we have):** 67% reduction in retrieval failures
 
 ---
 

@@ -1,8 +1,8 @@
 # DevChat v2.0 - Setup & Progress Tracker
 
 **Created:** December 17, 2025  
-**Last Updated:** January 7, 2026  
-**Status:** ✅ Production | ✅ Multi-Tenant | ✅ Hybrid Search | ✅ Sparse Vectors
+**Last Updated:** January 8, 2026  
+**Status:** ✅ Production | ✅ Multi-Tenant | ✅ Hybrid Search | ✅ Contextual Retrieval
 
 ---
 
@@ -12,7 +12,7 @@
 |-----------|--------|---------|
 | **Frontend (Vercel)** | ✅ Live | https://dev-chat-frontend.vercel.app/ |
 | **Backend (Railway)** | ✅ Live | https://3iechat.up.railway.app |
-| **PDF Processing (Modal)** | ✅ Working | MinerU + modular modal_lib (refactored) |
+| **PDF Processing (Modal)** | ✅ Working | MinerU + modular modal_lib + Contextual Retrieval |
 | **Vector DB (Qdrant)** | ✅ Connected | Per-project collections with hybrid search |
 | **Auth (Supabase)** | ✅ Working | JWT auth, RLS policies |
 | **Multi-Tenant RAG** | ✅ Done | Users create/manage own projects |
@@ -34,6 +34,7 @@
 - [x] BM25-style sparse vectors
 - [x] Cohere rerank-v3.5
 - [x] Metadata filtering (year, country, sector)
+- [x] **Contextual Retrieval** (Anthropic's 49% improvement) - Added Jan 8, 2026
 
 ### Metadata Pipeline
 - [x] CrossRef/OpenAlex automatic enrichment
@@ -143,6 +144,8 @@ devchat_v2_sota/
 - [x] **3ie Admin Panel** ✅ Phases 1-5 complete (Overview, Langfuse, Users & RAGs, Quality)
 - [x] **Quality Monitoring** (Phase 5) ✅ Complete with baseline metrics
 - [x] **Modal Pipeline Refactoring** ✅ Complete (modal_lib/ package, 8 modules, .spawn() for async)
+- [] **Security** (https://medium.com/data-science-collective/5-ways-your-ai-agent-will-get-hacked-and-how-to-stop-each-one-f4069efba029)
+
 
 ### Medium Priority
 - [x] **Study Design Classification** ✅ Complete

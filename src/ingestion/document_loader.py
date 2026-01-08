@@ -31,6 +31,8 @@ class StudyMetadata(BaseModel):
     country: Optional[str] = None
     region: Optional[str] = None
     study_type: Optional[str] = None
+    study_design: Optional[str] = None  # LLM-classified: rct, did, qualitative, etc.
+    study_design_confidence: Optional[float] = None  # 0.0-1.0
     confidence_rating: Optional[str] = None
     intervention_type: Optional[str] = None
     abstract: Optional[str] = None

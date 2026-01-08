@@ -149,6 +149,7 @@ class QdrantIndexer:
             ("country", models.PayloadSchemaType.KEYWORD),
             ("region", models.PayloadSchemaType.KEYWORD),
             ("study_type", models.PayloadSchemaType.KEYWORD),
+            ("study_design", models.PayloadSchemaType.KEYWORD),  # LLM-classified: rct, did, qualitative
             ("confidence_rating", models.PayloadSchemaType.KEYWORD),
         ]
         

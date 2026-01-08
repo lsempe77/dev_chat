@@ -1,5 +1,6 @@
 export { SplitLayout } from "./SplitLayout";
 export { StudyCard } from "./StudyCard";
+export { StudyDesignBadge, getEvidenceWeight, getStudyDesignCategory } from "./StudyDesignBadge";
 export { FilterChips } from "./FilterChips";
 export { FilterDrawer } from "./FilterDrawer";
 export { SettingsDrawer, defaultSettings } from "./SettingsDrawer";

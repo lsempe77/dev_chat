@@ -1,5 +1,48 @@
 // Types for the Research Workbench
 
+// Study design classification types
+export type StudyDesignCategory = 
+  | "experimental" 
+  | "quasi-experimental" 
+  | "observational" 
+  | "qualitative" 
+  | "synthesis" 
+  | "other";
+
+export type StudyDesign =
+  // Experimental
+  | "rct"
+  | "cluster_rct"
+  | "stepped_wedge"
+  // Quasi-experimental
+  | "regression_discontinuity"
+  | "difference_in_differences"
+  | "synthetic_control"
+  | "instrumental_variable"
+  | "propensity_score"
+  | "propensity_score_matching"
+  | "interrupted_time_series"
+  | "matching"
+  | "natural_experiment"
+  // Observational
+  | "cohort"
+  | "case_control"
+  | "cross_sectional"
+  | "panel"
+  | "descriptive"
+  // Qualitative
+  | "qualitative"
+  | "mixed_methods"
+  | "case_study"
+  | "ethnography"
+  // Synthesis
+  | "systematic_review"
+  | "meta_analysis"
+  // Other
+  | "modeling"
+  | "theory"
+  | "unknown";
+
 export interface Study {
   id: string;
   title: string;
@@ -8,6 +51,8 @@ export interface Study {
   country: string;
   sector: string;
   studyType: string;
+  studyDesign?: StudyDesign;  // LLM-classified study design
+  studyDesignConfidence?: number;  // 0.0-1.0
   confidence: "high" | "medium" | "low";
   snippet: string;
   score: number;

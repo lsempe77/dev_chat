@@ -510,13 +510,16 @@ def _generate_sparse_vector(text: str):
     
     term_counts = Counter(words)
     
-    indices = []
-    values = []
-    
+    # Use a dict to handle hash collisions - aggregate values for same index
+    index_values = {}
     for term, count in term_counts.items():
         term_idx = abs(hash(term)) % 1000000
-        indices.append(term_idx)
-        values.append(float(count))
+        # If collision, add the counts together
+        index_values[term_idx] = index_values.get(term_idx, 0.0) + float(count)
+    
+    # Convert to sorted lists (Qdrant requires unique indices)
+    indices = sorted(index_values.keys())
+    values = [index_values[idx] for idx in indices]
     
     return SparseVector(indices=indices, values=values)
 

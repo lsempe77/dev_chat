@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Study } from "@/types";
 import { FileText, GitCompare, X, ExternalLink } from "lucide-react";
+import { StudyDesignBadge } from "./StudyDesignBadge";
 
 interface StudyCardProps {
   study: Study;
@@ -65,6 +66,12 @@ export function StudyCard({
       </CardHeader>
       <CardContent className="pt-0">
         <div className="flex flex-wrap gap-1 mb-2">
+          {study.studyDesign && (
+            <StudyDesignBadge 
+              design={study.studyDesign} 
+              confidence={study.studyDesignConfidence}
+            />
+          )}
           <Badge variant="secondary" className="text-xs">
             {study.country}
           </Badge>
