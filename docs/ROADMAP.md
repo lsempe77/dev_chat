@@ -22,22 +22,28 @@
 
 ### Short-Term
 
-1. **Improve Faithfulness** - 8h
+1. **Embedding Model Comparison: Cohere vs Voyage 4** - 6h
+   - Benchmark Voyage AI 4 (launched Jan 15, 2026) against current Cohere embed-v4
+   - Metrics: retrieval accuracy, speed, cost per 1M tokens
+   - Test on DevChat's academic literature domain
+   - Files: `evaluation/benchmark_embeddings.py`
+
+2. **Improve Faithfulness** - 8h
    - Current: 66.47%, Target: 70%+
    - Prompt tuning in Langfuse experiments
    - A/B test synthesis prompts
 
-2. **Contextual Summarization (RCS)** - 8h
+3. **Contextual Summarization (RCS)** - 8h
    - Before synthesis, LLM summarizes each chunk's relevance to query
    - Filters low-relevance chunks before passing to Claim Ledger
    - Files: `src/rag/retrieval.py`, `src/generation/claim_ledger.py`
 
-3. **Smart Citations** - 12h
+4. **Smart Citations** - 12h
    - Classify citations as supporting/contrasting using OpenAlex data
    - Display: "38 Supporting | 3 Contrasting" badges
    - Files: New `src/enrichment/citation_classifier.py`
 
-4. **Consensus Meter** - 16h
+5. **Consensus Meter** - 16h
    - Visual: "Strong Support: 85%, 17/20 studies"
    - Extend ClaimLedger to track support/contradict per citation
    - Files: `src/generation/claim_ledger.py`, frontend component
