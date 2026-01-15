@@ -1,5 +1,29 @@
 # Copilot Instructions for DevChat
 
+## ⚠️ IMPORTANT: Documentation Maintenance
+
+**This project has 4 key documentation files that MUST be kept synchronized:**
+
+1. **README.md** (Root) - Project overview, features, quick start, learning resources
+   - Update when: Adding major features, changing architecture, new tutorials
+   - Audience: New users, potential contributors, GitHub visitors
+
+2. **SETUP_TRACKER.md** (Root) - Current implementation status, what's working NOW
+   - Update when: Features complete, infrastructure changes, configuration updates
+   - Format: Status tables (✅ Done, 🚧 In Progress, ❌ Not Started)
+
+3. **docs/ROADMAP.md** - Future plans, upcoming features, priorities
+   - Update when: Planning new features, changing priorities, completing roadmap items
+   - Remove items once complete (move to SETUP_TRACKER)
+
+4. **tutorials/** - Learning path for understanding the codebase
+   - Update when: Code patterns change, new features need explanation
+   - Keep examples synchronized with actual code
+
+**After ANY significant code change, ask yourself: "Do the docs need updating?"**
+
+---
+
 ## Project Overview
 
 DevChat is a RAG-powered research workbench for academic literature. It uses:
