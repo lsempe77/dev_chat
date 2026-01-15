@@ -16,7 +16,7 @@
 | Frontend (Vercel) | ✅ Live | <https://dev-chat-frontend.vercel.app/> |
 | Backend (Railway) | ✅ Live | <https://3iechat.up.railway.app> |
 | PDF Processing (Modal) | ✅ Working | MineRU + modal_lib + Contextual Retrieval |
-| Vector DB (Qdrant) | ✅ Connected | 6,769 chunks, hybrid search |
+| Vector DB (Qdrant) | ✅ Connected | chunks, hybrid search |
 | Auth (Supabase) | ✅ Working | JWT auth, RLS policies |
 | Storage (R2) | ✅ Working | Cloudflare R2 for PDFs |
 | Observability (Langfuse) | ✅ Working | Full tracing |
@@ -32,9 +32,9 @@
 | Claim Ledger Synthesis | ✅ Done | Two-pass extraction with citations |
 | MiniCheck Verification | ✅ Done | Post-hoc NLI grounding |
 | PDF Citation Highlighting | ✅ Done | PyMuPDF with page numbers |
-| Contextual Retrieval | ✅ Done | 49% fewer retrieval failures |
+| Contextual Retrieval | ✅ Done | Claude mentions 49% fewer retrieval failures |
 | Parent-Child Chunking | ✅ Done | Small chunks search, parent context |
-| Study Design Classification | ✅ Done | 22 types, 96 docs classified |
+| Study Design Classification | ✅ Done | 22 types |
 | Chat History | ✅ Done | Persistent with response caching |
 | Zotero Integration | ✅ Done | Sync collections, import PDFs |
 | Bibliography Import | ✅ Done | RIS/BibTeX/CSV with matching |
@@ -151,6 +151,3 @@ LANGFUSE_* (host, public/secret key)
 | Langfuse | <https://cloud.langfuse.com/> |
 | Supabase | <https://supabase.com/dashboard> |
 
----
-
-Last updated: January 15, 2026
