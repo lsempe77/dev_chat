@@ -196,6 +196,7 @@ def embed_and_index(
     content_list: Optional[list] = None,
     collection_name: Optional[str] = None,
     enable_contextual: bool = True,
+    enable_parent_child: bool = True,
 ) -> int:
     """
     Chunk content, generate embeddings, and upsert to Qdrant.
@@ -208,6 +209,11 @@ def embed_and_index(
     - Each chunk gets an LLM-generated context prefix
     - The contextualized text is embedded (improves retrieval by ~49%)
     - Original text is preserved separately for synthesis
+    
+    With enable_parent_child=True, applies Parent-Child Chunking (PaperQA2):
+    - Child chunks (~200 words) are embedded for precise search
+    - Parent chunks (~1000 words) provide context for synthesis
+    - When a child matches, the full parent is returned to the LLM
     
     Returns:
         Number of chunks indexed
@@ -234,14 +240,26 @@ def embed_and_index(
     # Ensure payload indexes
     _ensure_payload_indexes(qdrant, collection_name)
     
-    # Chunk content
-    CHUNK_SIZE = 256
-    CHUNK_OVERLAP = 50
-    
-    if content_list:
+    # Chunk content - choose strategy
+    if content_list and enable_parent_child:
+        # Parent-Child Chunking (PaperQA2 approach)
+        print(f"  Using Parent-Child chunking from {len(content_list)} content items...")
+        chunks_with_pages = chunk_content_parent_child(
+            content_list,
+            child_size=200,
+            parent_size=1000,
+            child_overlap=40,
+        )
+    elif content_list:
+        # Original page-aware chunking
+        CHUNK_SIZE = 256
+        CHUNK_OVERLAP = 50
         print(f"  Using page-aware chunking from {len(content_list)} content items (chunk_size={CHUNK_SIZE})...")
         chunks_with_pages = chunk_content_with_pages(content_list, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
     else:
+        # Legacy simple chunking
+        CHUNK_SIZE = 256
+        CHUNK_OVERLAP = 50
         print(f"  Using simple chunking (chunk_size={CHUNK_SIZE}, no page info available)")
         simple_chunks = chunk_content(content, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
         # Convert to dict format for consistency
@@ -309,8 +327,11 @@ def embed_and_index(
             }
             
             # Build payload - store both original and contextualized text
+            # With parent-child chunking, also store parent_text and parent_id
             payload = {
-                "text": chunk_data["text"],  # Original text (for synthesis/display)
+                "text": chunk_data["text"],  # Child text (for display/citation)
+                "parent_text": chunk_data.get("parent_text", chunk_data["text"]),  # Parent text (for synthesis)
+                "parent_id": chunk_data.get("parent_id", ""),  # Parent ID (for deduplication)
                 "contextual_prefix": chunk_data.get("contextual_prefix", ""),  # Just the prefix
                 "text_with_context": chunk_data.get("text_with_context", chunk_data["text"]),  # Full contextualized
                 "doc_id": doc_id,
@@ -449,6 +470,99 @@ def chunk_content(text: str, chunk_size: int = 256, overlap: int = 50) -> List[s
             chunks.append(chunk)
     
     return chunks
+
+
+def chunk_content_parent_child(
+    content_list: list,
+    child_size: int = 200,
+    parent_size: int = 1000,
+    child_overlap: int = 40,
+) -> List[Dict[str, Any]]:
+    """
+    Create parent-child chunks for improved retrieval (PaperQA2 technique).
+    
+    - Child chunks (~200 words) are embedded for precise search
+    - Parent chunks (~1000 words) provide context for synthesis
+    - When a child matches, the full parent is returned to the LLM
+    
+    Args:
+        content_list: MinerU content list with page_idx for each item
+        child_size: Target child chunk size in words (embedded)
+        parent_size: Target parent chunk size in words (for synthesis)
+        child_overlap: Word overlap between child chunks
+        
+    Returns:
+        List of child chunk dicts with 'text', 'parent_text', 'parent_id', page info
+    """
+    import uuid
+    
+    if not content_list or not isinstance(content_list, list):
+        return []
+    
+    # Step 1: Flatten content into word stream with page tracking
+    word_stream = []  # [(word, page_idx), ...]
+    
+    for item in content_list:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text", "") or item.get("content", "") or ""
+        if not text.strip():
+            continue
+        page_idx = item.get("page_idx", 0)
+        for word in text.split():
+            word_stream.append((word, page_idx))
+    
+    if not word_stream:
+        return []
+    
+    # Step 2: Create parent chunks
+    parents = []
+    for i in range(0, len(word_stream), parent_size):
+        parent_words_pages = word_stream[i:i + parent_size]
+        if not parent_words_pages:
+            continue
+            
+        parent_text = " ".join([w for w, _ in parent_words_pages])
+        parent_pages = sorted(set([p for _, p in parent_words_pages]))
+        
+        parents.append({
+            "parent_id": str(uuid.uuid4())[:8],
+            "text": parent_text,
+            "page_start": parent_pages[0] + 1,
+            "page_end": parent_pages[-1] + 1,
+            "pages": [p + 1 for p in parent_pages],
+            "word_start": i,
+            "word_end": min(i + parent_size, len(word_stream)),
+        })
+    
+    # Step 3: Create child chunks within each parent
+    children = []
+    
+    for parent in parents:
+        parent_word_stream = word_stream[parent["word_start"]:parent["word_end"]]
+        
+        # Create overlapping children within this parent
+        step = child_size - child_overlap
+        for j in range(0, len(parent_word_stream), step):
+            child_words_pages = parent_word_stream[j:j + child_size]
+            if not child_words_pages:
+                continue
+                
+            child_text = " ".join([w for w, _ in child_words_pages])
+            child_pages = sorted(set([p for _, p in child_words_pages]))
+            
+            if child_text.strip():
+                children.append({
+                    "text": child_text,  # Child text (embedded)
+                    "parent_text": parent["text"],  # Full parent (for synthesis)
+                    "parent_id": parent["parent_id"],
+                    "page_start": child_pages[0] + 1,
+                    "page_end": child_pages[-1] + 1,
+                    "pages": [p + 1 for p in child_pages],
+                })
+    
+    print(f"  Parent-Child chunking: {len(parents)} parents → {len(children)} children")
+    return children
 
 
 def chunk_content_with_pages(

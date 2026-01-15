@@ -2,22 +2,22 @@
 
 ## Status: ✅ COMPLETED
 
-**Refactoring completed on**: 2025-01-XX
+**Refactoring completed on**: January 7, 2026
 
 ### Results
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `modal_mineru.py` | 216 | Entry point, CLI, HTTP endpoints |
+| `modal_mineru.py` | 215 | Entry point, CLI, HTTP endpoints |
 | `modal_lib/__init__.py` | 101 | Re-exports |
-| `modal_lib/config.py` | 52 | App, image, secrets, constants |
+| `modal_lib/config.py` | 53 | App, image, secrets, constants |
 | `modal_lib/utils.py` | 108 | R2 client, sanitization |
 | `modal_lib/extraction.py` | 281 | MinerU PDF extraction |
 | `modal_lib/metadata.py` | 450 | CrossRef, OpenAlex, LLM |
-| `modal_lib/embedding.py` | 343 | Chunking, embedding, Qdrant |
-| `modal_lib/processing.py` | 657 | GPU PDF processing functions |
+| `modal_lib/embedding.py` | 647 | Chunking, embedding, Qdrant, Contextual Retrieval |
+| `modal_lib/processing.py` | 659 | GPU PDF processing functions |
 | `modal_lib/orchestration.py` | 536 | Batch orchestration |
-| **Total** | **2,744** | (vs 2,913 original - cleaner organization) |
+| **Total** | **3,050** | (grew from 2,744 due to Contextual Retrieval) |
 
 **Backup**: `modal_mineru_backup.py` (2,913 lines) - can be deleted after verification
 

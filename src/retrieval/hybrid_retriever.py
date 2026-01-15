@@ -266,8 +266,9 @@ class HybridRetriever:
             else:
                 text = str(raw_text) if raw_text else ""
             
-            # Handle parent_text similarly
-            raw_parent = r.payload.get("parent_text_full")
+            # Handle parent_text for parent-child chunking
+            # Try new field name first, fall back to legacy
+            raw_parent = r.payload.get("parent_text") or r.payload.get("parent_text_full")
             if isinstance(raw_parent, list):
                 parent_text = " ".join(str(t) for t in raw_parent)
             else:
@@ -295,8 +296,8 @@ class HybridRetriever:
             else:
                 text = str(raw_text) if raw_text else ""
             
-            # Handle parent_text similarly
-            raw_parent = p.payload.get("parent_text_full") if p.payload else None
+            # Handle parent_text for parent-child chunking
+            raw_parent = p.payload.get("parent_text") or p.payload.get("parent_text_full") if p.payload else None
             if isinstance(raw_parent, list):
                 parent_text = " ".join(str(t) for t in raw_parent)
             else:

@@ -586,6 +586,8 @@ def process_pdf_rag(pdf_key: str, project_id: str, qdrant_collection: str) -> di
             "year": result.get("year"),
             "abstract": result.get("abstract"),
             "content": result["content"],
+            "tables": result.get("tables", []),
+            "formulas": result.get("formulas", []),
             "page_count": result.get("page_count", 0),
         }
         output_data = sanitize_dict(output_data)

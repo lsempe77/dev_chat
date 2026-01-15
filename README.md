@@ -258,8 +258,9 @@ devchat_v2_sota/
 
 | Document | Description |
 |----------|-------------|
-| [SETUP_TRACKER.md](SETUP_TRACKER.md) | Detailed progress and implementation notes |
-| [EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) | Citation quality evaluation approach |
+| [SETUP_TRACKER.md](SETUP_TRACKER.md) | Status dashboard and next steps |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Feature roadmap and priorities |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | Citation quality evaluation approach |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ---
@@ -274,14 +275,20 @@ devchat_v2_sota/
 - [x] Langfuse observability integration
 - [x] Zotero bibliography sync
 - [x] Quality monitoring with baseline metrics
-- [x] Per-RAG model selection (GPT-4o / Claude / Gemini) ⚠️ *untested*
+- [x] Per-RAG model selection (GPT-4o / Claude / Gemini)
+- [x] Context prompts (domain-specific instructions)
+- [x] Prompt customization (extraction/synthesis prompts per project)
+- [x] PDF citation highlighting with inline viewer
+- [x] Study design classification (22 types)
+- [x] Contextual retrieval (Anthropic's 49% improvement)
+- [x] Parent-child chunking
+- [x] Extraction Pipeline V2 SOTA (100% table match)
 
 ### 🔜 Coming Soon
-- [ ] **Context prompts** - RAG owners add domain-specific instructions
-- [ ] **Prompt customization** - Modify extraction/synthesis prompts per project
+- [ ] **Study design filter** - Filter evidence by RCT, DiD, etc.
 - [ ] **User feedback** - 👍/👎 on responses for quality improvement
-- [ ] **A/B experiments** - Compare prompts and models in Langfuse
-- [ ] **Advanced search filters** - Year, country, methodology in chat
+- [ ] **Smart citations** - Support/contrast classification
+- [ ] **Consensus meter** - Visual evidence agreement
 
 ### 🔮 Future Exploration
 - [ ] RAPTOR hierarchical summarization

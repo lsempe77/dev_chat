@@ -202,8 +202,8 @@ export function QualityTab() {
             <Info className="h-4 w-4" />
             <AlertDescription>
               Baseline metrics from evaluation runs. Current values are from the MiniCheck test suite 
-              documented in <a href="https://github.com/lsempe77/dev_chat/blob/main/docs/EVALUATION_FRAMEWORK.md" 
-              target="_blank" rel="noopener noreferrer" className="underline">EVALUATION_FRAMEWORK.md</a>.
+              documented in <a href="https://github.com/lsempe77/dev_chat/blob/main/docs/EVALUATION.md" 
+              target="_blank" rel="noopener noreferrer" className="underline">EVALUATION.md</a>.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -351,12 +351,12 @@ export function QualityTab() {
         <AlertDescription>
           For details on the evaluation methodology, see{" "}
           <a
-            href="https://github.com/lsempe77/dev_chat/blob/main/docs/EVALUATION_FRAMEWORK.md"
+            href="https://github.com/lsempe77/dev_chat/blob/main/docs/EVALUATION.md"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-primary"
           >
-            EVALUATION_FRAMEWORK.md
+            EVALUATION.md
           </a>
         </AlertDescription>
       </Alert>

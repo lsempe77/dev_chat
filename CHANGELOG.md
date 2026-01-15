@@ -2,6 +2,71 @@
 
 All notable changes to DevChat v2.0 are documented in this file.
 
+## [2.0.10] - 2026-01-15
+
+### Changed
+- Complete documentation overhaul: SETUP_TRACKER.md and ROADMAP.md rewritten with clear status dashboards
+- Removed verbose aspirational code examples from ROADMAP.md (434→143 lines)
+
+---
+
+## [2.0.9] - 2026-01-14
+
+### Added
+- **Extraction Pipeline V2 SOTA** - Production table extraction using BeautifulSoup
+  - 100% match on Bossuroy Table 1 (18/18 rows)
+  - Rules-based + LLM classification for results vs descriptive tables
+  - Output: CSV + JSON to `extraction_pipeline/outputs/{study_id}/`
+
+### Changed
+- Project reorganization: renamed docs, archived old extractors (v10-v17)
+- Moved FURTHER_IMPROVEMENTS.md → docs/ROADMAP.md
+- Moved EVALUATION_FRAMEWORK.md → docs/EVALUATION.md
+
+---
+
+## [2.0.8] - 2026-01-08
+
+### Added
+- **Contextual Retrieval** - Anthropic's 49% improvement technique
+  - LLM-generated context prefixes for each chunk
+  - New Qdrant fields: `contextual_prefix`, `text_with_context`
+  - 97 PDFs reprocessed, 6,769 chunks with prefixes
+
+---
+
+## [2.0.7] - 2026-01-07
+
+### Added
+- **Modal Pipeline Refactoring** - Modular architecture
+  - Split 1700-line modal_mineru.py into 8 modules in modal_lib/
+  - Entry point now 230 lines (87% reduction)
+- **Study Design Classification** - 22 types with LLM classifier
+  - StudyDesignBadge frontend component
+  - 96 documents classified (34 RCT, 10 DiD, etc.)
+- **Parent-Child Chunking** - Small chunks for search, parent for context
+  - ParentChildChunker in src/ingestion/chunking.py
+
+### Fixed
+- Webhook timeout via `.spawn()` background processing
+- Stale job auto-cleanup (>30 min marked as failed)
+
+---
+
+## [2.0.6] - 2026-01-06
+
+### Added
+- **PDF Citation Highlighting** - PyMuPDF with inline viewer
+  - Endpoint: `/rags/{id}/documents/{doc_id}/pdf-highlighted`
+  - Toggle button to switch Evidence panel ↔ PDF viewer
+  - Evidence snippet card with copy button
+- **Prompt Customization** - Per-RAG extraction/synthesis prompts
+  - Prompt history with restore (max 10 versions)
+  - Safety: acknowledge_risk checkbox
+- **Chat History Caching** - Citations robustly cached to Supabase
+
+---
+
 ## [2.0.5] - 2026-01-03
 
 ### Added
@@ -96,6 +161,11 @@ All notable changes to DevChat v2.0 are documented in this file.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 2.0.10 | 2026-01-15 | Documentation overhaul |
+| 2.0.9 | 2026-01-14 | Extraction Pipeline V2 SOTA |
+| 2.0.8 | 2026-01-08 | Contextual Retrieval |
+| 2.0.7 | 2026-01-07 | Modal refactoring, Study Design, Parent-Child |
+| 2.0.6 | 2026-01-06 | PDF highlighting, Prompt customization |
 | 2.0.5 | 2026-01-03 | Sparse vectors, repo cleanup |
 | 2.0.4 | 2026-01-02 | Pagination, hallucination fix |
 | 2.0.3 | 2025-12-31 | Multi-tenant RAG platform |

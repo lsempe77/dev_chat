@@ -11,10 +11,10 @@ This document describes DevChat's citation quality evaluation framework, includi
 
 | Metric | Current Score | Target | Status |
 |--------|--------------|--------|--------|
-| **Faithfulness** | 0.699 | 0.70+ | ✅ At Target |
-| **Citation Recall** | 1.000 | 0.70 | ✅ Exceeds |
-| **Citation Precision** | 1.000 | 0.70 | ✅ Exceeds |
-| **Overall Score** | 0.900 | 0.80 | ✅ Exceeds |
+| **Faithfulness** | 66.47% | 70%+ | ⚠️ Needs improvement |
+| **Citation Recall** | 98.86% | 70% | ✅ Exceeds |
+| **Citation Precision** | 98.86% | 70% | ✅ Exceeds |
+| **Overall Score** | 88% | 80% | ✅ Exceeds |
 
 ---
 
