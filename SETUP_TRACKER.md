@@ -38,6 +38,8 @@
 | Chat History | ✅ Done | Persistent with response caching |
 | Zotero Integration | ✅ Done | Sync collections, import PDFs |
 | Bibliography Import | ✅ Done | RIS/BibTeX/CSV with matching |
+| Tutorial Series | ✅ Posts 1-10 | 50-part learning path in `tutorials/` |
+| | 🚧 Posts 11-50 | Document processing, RAG, synthesis, production |
 
 ### Admin Panel
 

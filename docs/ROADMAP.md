@@ -9,7 +9,7 @@
 
 ## 🎯 Upcoming Features
 
-### Immediate (This Week)Whoa. 
+### Immediate
 
 1. **Study Design Filter in Evidence Panel** - 4h
    - Add dropdown to filter evidence by study design (RCT, DiD, etc.)
@@ -20,7 +20,7 @@
    - Validate V2 SOTA pipeline against ground truth
    - Files: `extraction_pipeline/pipeline_v2_sota.py`
 
-### Short-Term (Next 2 Weeks)
+### Short-Term
 
 1. **Improve Faithfulness** - 8h
    - Current: 66.47%, Target: 70%+
@@ -42,7 +42,7 @@
    - Extend ClaimLedger to track support/contradict per citation
    - Files: `src/generation/claim_ledger.py`, frontend component
 
-### Medium-Term (Month 2)
+### Medium-Term
 
 1. **Agentic RAG** - 20h
    - Multi-step: Search → Review → Refine → Gather → Answer
@@ -56,7 +56,7 @@
    - Geography, intervention type, effect sizes extraction
    - Enables quantitative queries across studies
 
-### Long-Term (Month 3+)
+### Long-Term
 
 1. **Systematic Review Workflow** - 40h
    - Protocol → Screening → Extraction → PRISMA flow
@@ -70,17 +70,6 @@
 4. **Security Hardening** - 8h
    - Rate limiting, input validation, audit logs
 
----
-
-## 📊 Effort Summary
-
-| Phase | Hours | Features |
-| ----- | ----- | -------- |
-| Immediate | 12h | Study design filter + Metadata extraction |
-| Short-Term | 44h | Faithfulness, RCS, Smart Citations, Consensus |
-| Medium-Term | 84h | Agentic RAG, Multimodal, Enrichment |
-| Long-Term | 94h | SR Workflow, Reports, Widget, Security |
-| **Total** | **234h** | |
 
 ---
 
@@ -91,6 +80,3 @@
 - [Elicit](https://elicit.com/) - Systematic review automation
 - [Scite](https://scite.ai/) - Smart Citations
 
----
-
-Last updated: January 15, 2026

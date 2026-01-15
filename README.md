@@ -16,7 +16,8 @@
   <a href="https://dev-chat-frontend.vercel.app/">🚀 Live Demo</a> •
   <a href="#-features">Features</a> •
   <a href="#%EF%B8%8F-architecture">Architecture</a> •
-  <a href="#-quick-start">Quick Start</a>
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-learn-the-codebase">Learn the Codebase</a>
 </p>
 
 ---
@@ -52,7 +53,27 @@ DevChat is an **enterprise-grade RAG platform** designed for researchers and evi
 
 ---
 
-## 📊 Quality Metrics
+## � Learn the Codebase
+
+DevChat includes a **comprehensive 50-part tutorial series** to help you understand and extend the codebase:
+
+- **Part 1: Foundations (Posts 1-10)** ✅ Complete
+  - Project architecture, Python/FastAPI/Next.js fundamentals, database setup, authentication, testing, deployment
+- **Part 2: Document Processing (Posts 11-20)** 🚧 Coming soon
+  - PDF parsing with MinerU, chunking strategies, metadata enrichment, Modal GPU pipeline
+- **Part 3: RAG System (Posts 21-30)** 🚧 Coming soon
+  - Vector embeddings, Qdrant, hybrid search, reranking, contextual retrieval
+- **Part 4: Synthesis & Citations (Posts 31-40)** 🚧 Coming soon  
+  - LLM integration, Claim Ledger, MiniCheck verification, citation grounding
+- **Part 5: Production (Posts 41-50)** 🚧 Coming soon
+  - Multi-tenancy, admin dashboard, observability, scaling, cost optimization
+
+**📖 [Start Learning →](tutorials/README.md)**  
+**⏱️ ~42 hours total** • Real-world analogies • Hands-on exercises • DevChat code examples
+
+---
+
+## �📊 Quality Metrics
 
 Our citation quality has been rigorously evaluated:
 
