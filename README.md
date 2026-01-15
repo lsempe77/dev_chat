@@ -30,6 +30,7 @@ DevChat is an **enterprise-grade RAG platform** designed for researchers and evi
 <td width="50%">
 
 ### 🎯 For Researchers
+
 - Upload PDFs and create personal research collections
 - Ask complex questions across your documents
 - Get answers with **clickable citations** that jump to PDF pages
@@ -39,6 +40,7 @@ DevChat is an **enterprise-grade RAG platform** designed for researchers and evi
 <td width="50%">
 
 ### 🏢 For Organizations
+
 - **Multi-tenant** - Each user has isolated document collections
 - **Admin dashboard** - Monitor usage, costs, and quality
 - **Langfuse observability** - Full LLM tracing and debugging
@@ -55,12 +57,12 @@ DevChat is an **enterprise-grade RAG platform** designed for researchers and evi
 Our citation quality has been rigorously evaluated:
 
 | Metric | Score | Description |
-|:------:|:-----:|-------------|
+| :----: | :---: | ----------- |
 | 🎯 **Faithfulness** | **66.5%** | Claims grounded in retrieved documents |
 | 📚 **Citation Recall** | **98.9%** | All claims properly cited |
 | ✅ **Citation Precision** | **98.9%** | Citations point to correct sources |
 
-*Evaluated on 8 golden queries using MiniCheck NLI verification*
+Evaluated on 8 golden queries using MiniCheck NLI verification
 
 ---
 
@@ -71,6 +73,7 @@ Our citation quality has been rigorously evaluated:
 <td width="33%">
 
 ### 📄 Smart Ingestion
+
 - **MinerU GPU parsing** - Tables, figures, equations
 - **Page-aware chunking** - 256 words with page tracking
 - **Metadata enrichment** - CrossRef/OpenAlex lookup
@@ -80,6 +83,7 @@ Our citation quality has been rigorously evaluated:
 <td width="33%">
 
 ### 🔍 Hybrid Search
+
 - **Dense vectors** - Cohere embed-v4 (1536d)
 - **Sparse vectors** - BM25-style keyword matching
 - **HyDE expansion** - Hypothetical document queries
@@ -89,6 +93,7 @@ Our citation quality has been rigorously evaluated:
 <td width="33%">
 
 ### 💬 Grounded Synthesis
+
 - **Claim Ledger** - Extract claims, match to sources
 - **Inline citations** - `[Author, Year, p.X]`
 - **PDF viewer** - Click citations → jump to page
@@ -101,7 +106,7 @@ Our citation quality has been rigorously evaluated:
 ### 🎛️ Admin Panel
 
 | Tab | Capabilities |
-|-----|--------------|
+| --- | ------------ |
 | **Overview** | Usage stats, cost projections, system health |
 | **Users & RAGs** | All users, projects, document counts |
 | **Quality** | Langfuse experiments, baseline metrics |
@@ -146,6 +151,7 @@ graph LR
 ```
 
 ### Full Architecture Diagram
+
 See [`devchat_architecture_enhanced_v2.mermaid`](devchat_architecture_enhanced_v2.mermaid) for the complete system diagram.
 
 ---
@@ -257,10 +263,10 @@ devchat_v2_sota/
 ## 📚 Documentation
 
 | Document | Description |
-|----------|-------------|
-| [SETUP_TRACKER.md](SETUP_TRACKER.md) | Status dashboard and next steps |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Feature roadmap and priorities |
-| [docs/EVALUATION.md](docs/EVALUATION.md) | Citation quality evaluation approach |
+| -------- | ----------- |
+| [SETUP_TRACKER.md](SETUP_TRACKER.md) | Current implementation status |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Future features and priorities |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | Citation quality evaluation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ---
@@ -268,38 +274,40 @@ devchat_v2_sota/
 ## 🗺️ Roadmap
 
 ### ✅ Completed
+
 - [x] Multi-tenant RAG with per-user collections
 - [x] Hybrid search (dense + sparse vectors)
 - [x] Citation-grounded synthesis with Claim Ledger
 - [x] Admin panel with usage & cost tracking
 - [x] Langfuse observability integration
 - [x] Zotero bibliography sync
-- [x] Quality monitoring with baseline metrics
 - [x] Per-RAG model selection (GPT-4o / Claude / Gemini)
-- [x] Context prompts (domain-specific instructions)
-- [x] Prompt customization (extraction/synthesis prompts per project)
 - [x] PDF citation highlighting with inline viewer
 - [x] Study design classification (22 types)
-- [x] Contextual retrieval (Anthropic's 49% improvement)
+- [x] Contextual retrieval (49% fewer failures)
 - [x] Parent-child chunking
 - [x] Extraction Pipeline V2 SOTA (100% table match)
 
 ### 🔜 Coming Soon
-- [ ] **Study design filter** - Filter evidence by RCT, DiD, etc.
-- [ ] **User feedback** - 👍/👎 on responses for quality improvement
-- [ ] **Smart citations** - Support/contrast classification
-- [ ] **Consensus meter** - Visual evidence agreement
 
-### 🔮 Future Exploration
-- [ ] RAPTOR hierarchical summarization
-- [ ] GraphRAG for complex relationships
-- [ ] ColBERTv2 for better retrieval
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the full prioritized list.
+
+**Immediate:**
+
+- Study design filter in Evidence Panel
+- Auto-classify on document ingest
+
+**Short-Term:**
+
+- Improve faithfulness (66% → 70%+)
+- Smart citations (supporting/contrasting)
+- Consensus meter visualization
 
 ---
 
 ## 🙏 Acknowledgments
 
-Built with ❤️ for **[3ie](https://www.3ieimpact.org/)** (International Initiative for Impact Evaluation)
+Built with ❤️ by **[3ie](https://www.3ieimpact.org/)** (International Initiative for Impact Evaluation)
 
 <p align="center">
   <sub>Empowering evidence-informed decision making through AI</sub>
