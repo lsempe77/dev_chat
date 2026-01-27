@@ -140,6 +140,11 @@
    - Script to compare extraction vs GT
    - Metrics: precision, recall, F1 by field type
 
+5. **Check Outcomes mapping 3ie tool** - 2h
+   - Define additional fields to be extracted
+   - Metrics: precision, recall, F1 by field type
+
+
 ### Success Metrics
 - **Accuracy Target:** 90%+ on numeric fields (coefficient, SE)
 - **Recall Target:** 85%+ outcomes found per study
