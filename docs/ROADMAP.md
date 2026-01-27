@@ -7,7 +7,7 @@
 
 ---
 
-## 🎯 Upcoming Features
+## Upcoming Features
 
 ### Immediate
 
@@ -63,7 +63,7 @@
 ### Medium-Term
 
 1. **Agentic RAG** - 20h
-   - Multi-step: Search → Review → Refine → Gather → Answer
+   - Multi-step: Search -> Review -> Refine -> Gather -> Answer
    - Agent decides when to iterate on search
 
 2. **Multimodal Support** - 24h
@@ -77,7 +77,7 @@
 ### Long-Term
 
 1. **Systematic Review Workflow** - 40h
-   - Protocol → Screening → Extraction → PRISMA flow
+   - Protocol -> Screening -> Extraction -> PRISMA flow
 
 2. **Research Report Generation** - 30h
    - Auto-generate structured reports from evidence
@@ -91,15 +91,63 @@
 
 ## Issues
 
-1.  more detail on study design extraction. check better OM tool (3ie)
+1. More detail on study design extraction. Check better OM tool (3ie)
 
-2.  tables not picking notes for statistical significance (*** corresponds to p<.005)
-
-
+2. Tables not picking notes for statistical significance (*** corresponds to p<.005)
 
 ---
 
-## 🟡 RAG Pipeline Optimizations (Medium Priority)
+## Tables Extraction Ground Truth Dataset - 16h
+
+**Goal:** Create gold-standard human-annotated dataset to measure extraction accuracy, train models, and improve recall.
+
+### Current State
+- **Latest Test:** Study 121058356 "Pathways out of Extreme Poverty" (763 rows extracted)
+  - Output: `extraction_pipeline/outputs/121058356/extracted_data.csv`
+- **Legacy GT:** `8WR QEX Combined.xlsx` (443 rows, 43 studies)
+- **Test Script:** `evaluation/analyze_effect_sizes.py`
+
+### Fields Being Extracted
+| Field | Description | In Latest Test |
+|-------|-------------|----------------|
+| `coefficient` | Regression coefficient | Yes |
+| `standard_error` | SE of coefficient | Yes |
+| `significance` | Star notation (*, **, ***) | Yes |
+| `sample_size` | N for estimate | Yes |
+| `control_mean` | Control group mean | Yes |
+| `control_sd` | Control group SD | Yes |
+| `literal_cell_text` | Raw cell text (e.g., "0.15*** (0.05)") | Yes |
+| `outcome_name` | Outcome variable | Yes |
+| `outcome_definition` | Description of outcome | Yes |
+| `table_number` | Which table (Table 1, A1, etc.) | Yes |
+| `treatment_arm` | Intervention arm name | Yes |
+
+### Tasks
+1. **Create human-verified ground truth for Study 121058356** - 4h
+   - Manually verify all 763 rows against PDF
+   - Flag extraction errors, missing rows
+   - Create `ground_truth_121058356.csv`
+
+2. **Add significance star mapping** - 2h (Fixes Issue #2)
+   - Map *** to p<.001, ** to p<.01, * to p<.05
+   - Extract from table footnotes when available
+
+3. **Expand to 5-10 diverse studies** - 8h
+   - Select studies with different table formats
+   - Complex tables: multi-panel, subgroups, footnotes
+
+4. **Validation tooling** - 2h
+   - Script to compare extraction vs GT
+   - Metrics: precision, recall, F1 by field type
+
+### Success Metrics
+- **Accuracy Target:** 90%+ on numeric fields (coefficient, SE)
+- **Recall Target:** 85%+ outcomes found per study
+- **Significance Parsing:** 95%+ star notation correctly interpreted
+
+---
+
+## RAG Pipeline Optimizations (Medium Priority)
 
 > These require more effort but provide meaningful improvements.
 
@@ -110,7 +158,7 @@
 
 ---
 
-## 📚 References
+## References
 
 - [PaperQA2](https://github.com/future-house/paper-qa) - Agentic RAG benchmark
 - [Anthropic Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval) - 49% improvement technique
