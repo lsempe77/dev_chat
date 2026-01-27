@@ -5,6 +5,7 @@ Assembles retrieved results into formatted context for the LLM:
 - Parent chunk expansion
 - Study grouping
 - Citation metadata formatting
+- Lost-in-the-middle mitigation (reordering)
 """
 
 import re
@@ -15,6 +16,44 @@ from src.retrieval.hybrid_retriever import RetrievalResult
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def mitigate_lost_in_middle(items: List, key=None) -> List:
+    """
+    Reorder items to mitigate the "lost in the middle" problem.
+    
+    LLMs tend to focus on the beginning and end of context, ignoring the middle.
+    This function reorders items so that the most relevant ones are at the 
+    beginning AND end, with less relevant ones in the middle.
+    
+    Input order (by relevance):  [1, 2, 3, 4, 5, 6, 7, 8]
+    Output order:                [1, 3, 5, 7, 8, 6, 4, 2]
+    
+    Reference: "Lost in the Middle" (Liu et al., 2023) https://arxiv.org/abs/2307.03172
+    
+    Args:
+        items: List of items sorted by relevance (best first)
+        key: Optional function to extract sort key (not used for reordering, just for logging)
+        
+    Returns:
+        Reordered list with best items at start and end
+    """
+    if len(items) <= 2:
+        return items
+    
+    # Split into odd and even positions
+    # Odd positions (0, 2, 4, ...) go to start
+    # Even positions (1, 3, 5, ...) go to end in reverse
+    start_items = items[::2]   # [1, 3, 5, 7]
+    end_items = items[1::2]    # [2, 4, 6, 8]
+    
+    # Reverse end items so most relevant of them is last
+    end_items = end_items[::-1]  # [8, 6, 4, 2]
+    
+    result = start_items + end_items
+    
+    logger.debug(f"Lost-in-middle reordering: {len(items)} items reordered")
+    return result
 
 
 def is_meaningful_text(text: str, min_words: int = 10) -> bool:
@@ -153,6 +192,7 @@ class ContextBuilder:
     - Group results by study
     - Format with metadata headers
     - Generate citation list
+    - Lost-in-the-middle mitigation (reorder for better LLM attention)
     """
     
     def __init__(
@@ -160,10 +200,12 @@ class ContextBuilder:
         max_context_length: int = 16000,  # Increased from 8000 to allow more studies
         use_parent_expansion: bool = True,
         group_by_study: bool = True,
+        mitigate_lost_in_middle: bool = True,  # Reorder to put best at start/end
     ):
         self.max_context_length = max_context_length
         self.use_parent_expansion = use_parent_expansion
         self.group_by_study = group_by_study
+        self.mitigate_lost_in_middle_enabled = mitigate_lost_in_middle
     
     def build(self, results: List[RetrievalResult]) -> FormattedContext:
         """
@@ -384,6 +426,17 @@ class ContextBuilder:
                 "page_end": page_end,
                 "pages": pages,
             })
+        
+        # Apply lost-in-the-middle mitigation: reorder sections so best are at start/end
+        # This helps LLMs attend to the most relevant content
+        if self.mitigate_lost_in_middle_enabled and len(sections) > 2:
+            # Pair sections with citations to keep them aligned
+            paired = list(zip(sections, citations))
+            reordered = mitigate_lost_in_middle(paired)
+            sections, citations = zip(*reordered) if reordered else ([], [])
+            sections = list(sections)
+            citations = list(citations)
+            logger.info(f"Applied lost-in-middle reordering to {len(sections)} study sections")
         
         # Join with separators
         context_text = "\n\n---\n\n".join(sections)

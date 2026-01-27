@@ -258,11 +258,32 @@ class DevChatAgent:
             except Exception as e:
                 logger.warning(f"HyDE enhancement failed, using original query: {e}")
         
-        results = await self.retriever.retrieve(
-            query=retrieval_query,
-            top_k=retrieval_top_k,
-            filters=active_filters,
-        )
+        # Multi-Query RAG-Fusion: generate query variants for improved recall
+        if settings.multi_query_enabled:
+            try:
+                query_variants = await self.query_processor.generate_query_variants(
+                    retrieval_query,
+                    num_variants=settings.multi_query_num_variants,
+                )
+                results = await self.retriever.retrieve_multi_query(
+                    queries=query_variants,
+                    top_k=retrieval_top_k,
+                    filters=active_filters,
+                )
+                logger.info(f"RAG-Fusion: retrieved with {len(query_variants)} query variants")
+            except Exception as e:
+                logger.warning(f"Multi-query retrieval failed, falling back to single query: {e}")
+                results = await self.retriever.retrieve(
+                    query=retrieval_query,
+                    top_k=retrieval_top_k,
+                    filters=active_filters,
+                )
+        else:
+            results = await self.retriever.retrieve(
+                query=retrieval_query,
+                top_k=retrieval_top_k,
+                filters=active_filters,
+            )
         retrieval_time = (time.time() - retrieval_start) * 1000
         retrieval_count = len(results)
         
@@ -330,6 +351,34 @@ class DevChatAgent:
             latency_ms=int(rerank_time),
             metadata={"use_reranking": user_settings.use_reranking, "threshold": user_settings.relevance_threshold},
         )
+        
+        # Track retrieval quality metrics (using reranked as "relevant" ground truth)
+        # This measures how well initial retrieval captured what reranking deemed relevant
+        if settings.retrieval_metrics_enabled and results and reranked_results:
+            try:
+                from src.utils.metrics import track_retrieval_quality
+                
+                retrieved_ids = [r.node_id for r in results]
+                relevant_ids = {r.node_id for r in reranked_results}
+                
+                # Use reranker scores as relevance (normalized to 0-1)
+                relevance_scores = {}
+                if reranked_results:
+                    max_score = max(r.score for r in reranked_results)
+                    for r in reranked_results:
+                        relevance_scores[r.node_id] = r.score / max_score if max_score > 0 else 1.0
+                
+                retrieval_metrics = track_retrieval_quality(
+                    retrieved_ids=retrieved_ids,
+                    relevant_ids=relevant_ids,
+                    relevance_scores=relevance_scores,
+                    query_id=trace.span_id if trace else "",
+                    trace=trace,
+                    log_to_langfuse=True,
+                )
+                logger.debug(f"Retrieval quality: MRR={retrieval_metrics.mrr:.3f}, Recall@10={retrieval_metrics.recall_at_10:.3f}")
+            except Exception as e:
+                logger.warning(f"Failed to track retrieval metrics: {e}")
         
         # Handle case where threshold filtered everything
         if threshold_filtered_all:
@@ -598,12 +647,31 @@ class DevChatAgent:
         # Process query
         processed_query = await self.query_processor.process(query)
         
-        # Retrieve and rerank
-        results = await self.retriever.retrieve(
-            query=processed_query.primary_query,
-            top_k=settings.retrieval_top_k,
-            filters=processed_query.filters if processed_query.filters.has_filters() else None,
-        )
+        # Retrieve (with multi-query if enabled)
+        if settings.multi_query_enabled:
+            try:
+                query_variants = await self.query_processor.generate_query_variants(
+                    processed_query.primary_query,
+                    num_variants=settings.multi_query_num_variants,
+                )
+                results = await self.retriever.retrieve_multi_query(
+                    queries=query_variants,
+                    top_k=settings.retrieval_top_k,
+                    filters=processed_query.filters if processed_query.filters.has_filters() else None,
+                )
+            except Exception as e:
+                logger.warning(f"Multi-query retrieval failed in stream, falling back: {e}")
+                results = await self.retriever.retrieve(
+                    query=processed_query.primary_query,
+                    top_k=settings.retrieval_top_k,
+                    filters=processed_query.filters if processed_query.filters.has_filters() else None,
+                )
+        else:
+            results = await self.retriever.retrieve(
+                query=processed_query.primary_query,
+                top_k=settings.retrieval_top_k,
+                filters=processed_query.filters if processed_query.filters.has_filters() else None,
+            )
         
         reranked_results = await self.reranker.rerank(
             query=processed_query.original_query,

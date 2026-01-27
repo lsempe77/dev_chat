@@ -17,19 +17,22 @@ import {
   Database,
   FolderKanban,
   ExternalLink,
-  LineChart
+  LineChart,
+  Target
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
   getUsageSummary, 
   getCostProjection,
   getAdminOverview,
+  getRetrievalMetrics,
 } from "@/lib/admin-api/index";
 import type { 
   UsageSummaryResponse,
   CostProjection,
   ModelBreakdown,
   AdminOverviewStats,
+  RetrievalMetricsResponse,
 } from "@/lib/admin-api/types";
 
 // =============================================================================
@@ -217,6 +220,137 @@ function CostProjectionCard({ projection, loading }: CostProjectionCardProps) {
 }
 
 // =============================================================================
+// Retrieval Quality Metrics Card
+// =============================================================================
+
+interface RetrievalMetricsCardProps {
+  metrics: RetrievalMetricsResponse | null;
+  loading?: boolean;
+}
+
+function RetrievalMetricsCard({ metrics, loading }: RetrievalMetricsCardProps) {
+  if (loading || !metrics) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-6 w-full" />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const formatPercent = (n: number) => `${(n * 100).toFixed(1)}%`;
+  const formatScore = (n: number) => n.toFixed(3);
+  
+  // Color based on quality thresholds
+  const getColor = (value: number, good: number, ok: number) => {
+    if (value >= good) return "text-green-600";
+    if (value >= ok) return "text-yellow-600";
+    return "text-red-500";
+  };
+
+  const avg = metrics.averages;
+  const hasData = metrics.total_queries > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <Target className="h-4 w-4" />
+          Retrieval Quality Metrics
+        </CardTitle>
+        <CardDescription>
+          {hasData ? `Based on ${metrics.total_queries} queries` : "No queries yet"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!hasData ? (
+          <p className="text-sm text-muted-foreground">
+            Run some queries to see retrieval quality metrics
+          </p>
+        ) : (
+          <>
+            {/* Recall Section */}
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Recall
+              </span>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">@5</span>
+                  <span className={`font-mono font-medium ${getColor(avg.recall_at_5, 0.7, 0.5)}`}>
+                    {formatPercent(avg.recall_at_5)}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">@10</span>
+                  <span className={`font-mono font-medium ${getColor(avg.recall_at_10, 0.8, 0.6)}`}>
+                    {formatPercent(avg.recall_at_10)}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">@20</span>
+                  <span className={`font-mono font-medium ${getColor(avg.recall_at_20, 0.9, 0.7)}`}>
+                    {formatPercent(avg.recall_at_20)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Precision Section */}
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Precision
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">@5</span>
+                  <span className={`font-mono font-medium ${getColor(avg.precision_at_5, 0.6, 0.4)}`}>
+                    {formatPercent(avg.precision_at_5)}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">@10</span>
+                  <span className={`font-mono font-medium ${getColor(avg.precision_at_10, 0.5, 0.3)}`}>
+                    {formatPercent(avg.precision_at_10)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Ranking Metrics */}
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Ranking Quality
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">MRR</span>
+                  <span className={`font-mono font-medium ${getColor(avg.mrr, 0.7, 0.5)}`}>
+                    {formatScore(avg.mrr)}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">NDCG@10</span>
+                  <span className={`font-mono font-medium ${getColor(avg.ndcg_at_10, 0.7, 0.5)}`}>
+                    {formatScore(avg.ndcg_at_10)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// =============================================================================
 // Main Overview Tab
 // =============================================================================
 
@@ -224,6 +358,7 @@ export function OverviewTab() {
   const [usageData, setUsageData] = useState<UsageSummaryResponse | null>(null);
   const [costProjection, setCostProjection] = useState<CostProjection | null>(null);
   const [overview, setOverview] = useState<AdminOverviewStats | null>(null);
+  const [retrievalMetrics, setRetrievalMetrics] = useState<RetrievalMetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -234,15 +369,17 @@ export function OverviewTab() {
     setError(null);
 
     try {
-      const [usage, costs, overviewData] = await Promise.all([
+      const [usage, costs, overviewData, retrieval] = await Promise.all([
         getUsageSummary(30).catch(() => null),
         getCostProjection(30).catch(() => null),
         getAdminOverview().catch(() => null),
+        getRetrievalMetrics().catch(() => null),
       ]);
 
       setUsageData(usage);
       setCostProjection(costs);
       setOverview(overviewData);
+      setRetrievalMetrics(retrieval);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard data");
     } finally {
@@ -362,13 +499,17 @@ export function OverviewTab() {
       </div>
 
       {/* Details Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <ModelUsageCard 
           breakdown={usageData?.model_breakdown || []} 
           loading={loading}
         />
         <CostProjectionCard 
           projection={costProjection} 
+          loading={loading}
+        />
+        <RetrievalMetricsCard 
+          metrics={retrievalMetrics} 
           loading={loading}
         />
       </div>

@@ -131,6 +131,21 @@ class Settings(BaseSettings):
     embedding_dimension: int = Field(default=1536)
     embedding_input_type: str = Field(default="search_document")
     
+    # Embedding Cache (50-80% cost reduction on re-indexing)
+    embedding_cache_enabled: bool = Field(
+        default=True,
+        description="Enable embedding cache to reduce API costs"
+    )
+    embedding_cache_dir: str = Field(
+        default=".cache/embeddings",
+        description="Directory for embedding cache files"
+    )
+    embedding_cache_ttl_days: int = Field(
+        default=30,
+        ge=1,
+        description="Cache TTL in days"
+    )
+    
     # =========================================================================
     # Reranking (Cohere v3.5)
     # =========================================================================
@@ -150,6 +165,12 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=150, ge=1, description="Initial retrieval count (retrieve more, rerank down)")
     rerank_top_n: int = Field(default=20, ge=1)  # Moved here for clarity
     final_top_k: int = Field(default=20, ge=1, description="Final context chunks (Anthropic: 20 is optimal)")
+    
+    # Retrieval Quality Metrics (logged to Langfuse)
+    retrieval_metrics_enabled: bool = Field(
+        default=True,
+        description="Track Recall@K, NDCG, MRR for retrieval quality monitoring"
+    )
     
     # Contextual Retrieval (Anthropic: 67% improvement with reranking)
     contextual_retrieval_enabled: bool = Field(default=True, description="Prepend document context to chunks")
@@ -189,6 +210,20 @@ class Settings(BaseSettings):
     # =========================================================================
     query_expansion_enabled: bool = Field(default=True)
     query_classification_enabled: bool = Field(default=True)
+    
+    # Multi-Query RAG-Fusion (RAG-Fusion paper, 2024)
+    # Generates query variants → retrieves for each → RRF fusion
+    # Improves recall by 10-15% by capturing different phrasings
+    multi_query_enabled: bool = Field(
+        default=True,
+        description="Enable multi-query RAG-Fusion for improved recall"
+    )
+    multi_query_num_variants: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description="Number of query variants to generate (excluding original)"
+    )
     
     # HyDE: Hypothetical Document Embeddings (Gao et al. 2022)
     # Generates a hypothetical answer to use for retrieval instead of the raw query

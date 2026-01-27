@@ -15,6 +15,9 @@ from api.schemas import (
     CompareResponse,
     CitationResponse,
     EvidenceHealth,
+    FeatureSuggestionItem,
+    FeatureSuggestionRequest,
+    FeatureSuggestionsResponse,
     FiltersResponse,
     QueryRequest,
     QueryResponse,
@@ -618,23 +621,129 @@ async def clear_chat_history(rag_id: str, session_id: str = None):
     Clear all chat history for a RAG project (or just for a session).
     """
     from src.auth import get_supabase_client
-    
+
     try:
         supabase = get_supabase_client()
-        
+
         # Resolve slug to project ID if needed
         project_id = await _resolve_project_id(rag_id)
-        
+
         query = supabase.table("chat_history")\
             .delete()\
             .eq("rag_project_id", project_id)
-        
+
         if session_id:
             query = query.eq("session_id", session_id)
-        
+
         result = query.execute()
-        
+
         return {"cleared": True}
     except Exception as e:
         logger.error(f"Failed to clear chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Feature Suggestions Endpoint
+# =============================================================================
+
+@router.post("/feature-suggestions", response_model=FeatureSuggestionsResponse)
+async def generate_feature_suggestions(request: FeatureSuggestionRequest):
+    """
+    Generate creative and actionable feature suggestions based on project context.
+
+    This endpoint uses an LLM to analyze the RAG project's context and generate
+    10 creative feature suggestions as a JSON array.
+
+    Each suggestion includes:
+    - title: Short, catchy feature name
+    - description: One-sentence description
+    - category: Feature category (retrieval, analysis, visualization, etc.)
+    - impact: Expected user value (high/medium/low)
+    - effort: Implementation complexity (high/medium/low)
+    - rationale: Why this feature would help users
+
+    Returns:
+        FeatureSuggestionsResponse with 10 feature suggestions
+    """
+    from datetime import datetime
+    from src.generation.feature_suggestions import get_feature_suggestions_generator
+
+    try:
+        generator = get_feature_suggestions_generator()
+
+        suggestions = await generator.generate_suggestions(
+            project_name=request.project_name,
+            document_count=request.document_count,
+            query_count=request.query_count,
+            common_topics=request.common_topics,
+            user_feedback=request.user_feedback,
+        )
+
+        # Convert to response format
+        suggestion_items = [
+            FeatureSuggestionItem(
+                id=s.id,
+                title=s.title,
+                description=s.description,
+                category=s.category.value,
+                impact=s.impact,
+                effort=s.effort,
+                rationale=s.rationale,
+            )
+            for s in suggestions
+        ]
+
+        return FeatureSuggestionsResponse(
+            suggestions=suggestion_items,
+            generated_at=datetime.now().isoformat(),
+            project_context={
+                "project_name": request.project_name,
+                "document_count": request.document_count,
+                "query_count": request.query_count,
+                "common_topics": request.common_topics,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to generate feature suggestions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/feature-suggestions/default", response_model=FeatureSuggestionsResponse)
+async def get_default_feature_suggestions():
+    """
+    Get default feature suggestions without LLM generation.
+
+    This is a fast endpoint that returns pre-defined suggestions,
+    useful when LLM generation is not needed or for testing.
+    """
+    from datetime import datetime
+    from src.generation.feature_suggestions import get_feature_suggestions_generator
+
+    try:
+        generator = get_feature_suggestions_generator()
+        suggestions = generator._get_default_suggestions()
+
+        suggestion_items = [
+            FeatureSuggestionItem(
+                id=s.id,
+                title=s.title,
+                description=s.description,
+                category=s.category.value,
+                impact=s.impact,
+                effort=s.effort,
+                rationale=s.rationale,
+            )
+            for s in suggestions
+        ]
+
+        return FeatureSuggestionsResponse(
+            suggestions=suggestion_items,
+            generated_at=datetime.now().isoformat(),
+            project_context={"source": "default_suggestions"}
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get default feature suggestions: {e}")
         raise HTTPException(status_code=500, detail=str(e))

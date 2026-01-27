@@ -1,5 +1,8 @@
 # Extraction Pipeline V2 SOTA
 
+> **STATUS:** ✅ Production-Ready (Last Updated: January 15, 2026)  
+> **USE THIS:** This is the ONLY active extraction pipeline. All previous versions (v1-v17, extractor.py) are archived in `archive/extraction_pipeline_old/`
+
 Automated extraction of treatment effects from impact evaluation papers using BeautifulSoup HTML parsing and LLM classification.
 
 ## Overview
@@ -77,9 +80,17 @@ Results are saved to `outputs/{study_id}/`:
 
 ## Files
 
-- `pipeline_v2_sota.py` - Main production script
-- `outputs/` - Extracted data per study
-- Earlier versions archived in `archive/extraction_pipeline_old/`
+**Active (Current Directory):**
+- `pipeline_v2_sota.py` - **Production script** - Use this for all extraction
+- `outputs/` - Extracted data per study (CSV + JSON)
+- `README.md` - This documentation
+
+**Archived (Do Not Use):**
+- `../archive/extraction_pipeline_old/` - Contains 35+ deprecated scripts:
+  - `extractor.py`, `extractor_v10.py` through `extractor_v17d.py`
+  - `pipeline_v2.py` (superseded by pipeline_v2_sota.py)
+  - Various analysis and debug scripts from development phase
+  - All `v9-v17` experimental versions that led to this final version
 
 ## Dependencies
 

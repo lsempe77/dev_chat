@@ -97,3 +97,41 @@ export interface CompareRow {
 }
 
 export type AnswerStyle = "executive" | "research" | "policy" | "citations";
+
+// Feature Suggestions types
+export type FeatureCategory =
+  | "retrieval"
+  | "analysis"
+  | "visualization"
+  | "export"
+  | "collaboration"
+  | "automation"
+  | "quality"
+  | "integration";
+
+export type ImpactLevel = "high" | "medium" | "low";
+export type EffortLevel = "high" | "medium" | "low";
+
+export interface FeatureSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  category: FeatureCategory;
+  impact: ImpactLevel;
+  effort: EffortLevel;
+  rationale: string;
+}
+
+export interface FeatureSuggestionsResponse {
+  suggestions: FeatureSuggestion[];
+  generated_at: string;
+  project_context: Record<string, unknown>;
+}
+
+export interface FeatureSuggestionRequest {
+  project_name?: string;
+  document_count?: number;
+  query_count?: number;
+  common_topics?: string[];
+  user_feedback?: string;
+}

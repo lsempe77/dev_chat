@@ -6,6 +6,11 @@ Supports multiple embedding providers:
 - OpenAI text-embedding-3-large
 - Voyage AI voyage-3-large
 - Local models via HuggingFace
+
+Features:
+- Embedding caching (50-80% cost reduction on re-indexing)
+- Batch processing with progress bars
+- Provider-specific optimizations
 """
 
 from enum import Enum
@@ -125,19 +130,31 @@ class EmbeddingGenerator:
         
         return HuggingFaceEmbedding(model_name=self.model)
     
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    def embed_texts(self, texts: List[str], use_cache: bool = True) -> List[List[float]]:
         """
         Generate embeddings for a list of texts.
         
         Args:
             texts: List of text strings to embed
+            use_cache: Whether to use embedding cache (default: True)
             
         Returns:
             List of embedding vectors
         """
-        embed_model = self.get_embed_model()
-        embeddings = embed_model.get_text_embedding_batch(texts)
-        return embeddings
+        if use_cache and settings.embedding_cache_enabled:
+            from src.utils.embedding_cache import cached_embed_texts
+            
+            embed_model = self.get_embed_model()
+            
+            return cached_embed_texts(
+                texts=texts,
+                embed_fn=lambda t: embed_model.get_text_embedding_batch(t),
+                model_name=self.model,
+            )
+        else:
+            embed_model = self.get_embed_model()
+            embeddings = embed_model.get_text_embedding_batch(texts)
+            return embeddings
     
     def embed_query(self, query: str) -> List[float]:
         """

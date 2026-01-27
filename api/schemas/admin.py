@@ -158,16 +158,17 @@ class DocumentMetadataDetail(BaseModel):
     sectors: List[str] = []
     study_type: Optional[str] = None
     intervention_type: Optional[str] = None
+    target_population: Optional[str] = None
     sdgs: List[str] = []
     keywords: List[str] = []
-    
+
     # Processing metadata
     metadata_source: Optional[str] = "extraction"
     metadata_confidence: float = 0.0
     needs_review: bool = True
     chunk_count: int = 0
     page_count: int = 0
-    
+
     # Extra fields (JSON)
     extra: Optional[Dict[str, Any]] = None
 
@@ -238,10 +239,11 @@ class MetadataUpdateRequest(BaseModel):
     sectors: Optional[List[str]] = None
     study_type: Optional[str] = None
     intervention_type: Optional[str] = None
-    
+    target_population: Optional[str] = None
+
     # Review status
     needs_review: Optional[bool] = None
-    
+
     # Extra fields
     extra: Optional[Dict[str, Any]] = None
 
@@ -312,9 +314,10 @@ class DocumentSyncRequest(BaseModel):
     sectors: List[str] = []
     study_type: Optional[str] = None
     intervention_type: Optional[str] = None
+    target_population: Optional[str] = None
     sdgs: List[str] = []
     keywords: List[str] = []
-    
+
     # Processing metadata
     chunk_count: int = 0
     page_count: int = 0

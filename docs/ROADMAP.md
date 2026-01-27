@@ -1,6 +1,6 @@
 # DevChat v2 - Roadmap
 
-**Last Updated:** January 15, 2026
+**Last Updated:** January 27, 2026
 
 > This document tracks **future features** and priorities.  
 > For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).
@@ -19,6 +19,18 @@
    - Extract structured fields: effect sizes, sample sizes, outcomes, geography
    - Validate V2 SOTA pipeline against ground truth
    - Files: `extraction_pipeline/pipeline_v2_sota.py`
+
+3. **"I Don't Know" Explicit Refusal** - 2h
+   - When retrieval confidence is below threshold, explicitly refuse to answer
+   - Instead of generating with poor context, return: "I don't have enough information to answer that confidently. Could you rephrase or specify which document to check?"
+   - Prevents hallucination when no good sources found
+   - Files: `src/agents/devchat_agent.py`, `src/generation/claim_ledger.py`
+
+4. **Source Date Conflict Detection** - 2h
+   - Warn when retrieved chunks span multiple years (e.g., 2019 vs 2024 policies)
+   - Add warning to response: "[Note: Some sources are older. The most recent is from {year}]"
+   - Prevents mixing outdated information with current
+   - Files: `src/agents/devchat_agent.py`, response formatting
 
 ### Short-Term
 
@@ -77,12 +89,58 @@
    - Rate limiting, input validation, audit logs
 
 
+## Issues
+
+1.  more detail on study design extraction. check better OM tool (3ie)
+
+2.  tables not picking notes for statistical significance (*** corresponds to p<.005)
+
+
+
+---
+
+## 🟡 RAG Pipeline Optimizations (Medium Priority)
+
+> These require more effort but provide meaningful improvements.
+
+### 1. Semantic Cache - 8h
+- Cache responses for semantically similar queries (not just exact match)
+- Use embedding similarity threshold (>0.95) to detect similar queries
+- Files: `src/utils/cache.py`
+
+### 2. Query Decomposition - 6h
+- Break complex queries into sub-queries: "Compare X and Y across Z" → 3 queries
+- Retrieve for each, merge results
+- Files: `src/retrieval/query_processor.py`
+
+### 3. Step-Back Prompting - 4h
+- For specific questions, first ask a more general question
+- "What's the effect size in Bossuroy 2024?" → First: "What outcomes does Bossuroy 2024 measure?"
+- Files: `src/retrieval/query_processor.py`
+
+### 4. Self-Consistency - 8h
+- Generate 3 answers with temperature > 0, select most consistent
+- Improves accuracy on complex synthesis questions
+- Files: `src/generation/claim_ledger.py`
+
+### 5. Additional Payload Indexes - 2h
+- Index `year`, `sector`, `study_type` in Qdrant for faster filtering
+- Files: `infrastructure/modal_lib/embedding.py`
+
+### 6. Scalar Quantization Option - 2h
+- Add scalar quantization (int8) as alternative to binary
+- Better precision/speed tradeoff for some use cases
+- Files: `infrastructure/modal_lib/embedding.py`
+
 ---
 
 ## 📚 References
 
 - [PaperQA2](https://github.com/future-house/paper-qa) - Agentic RAG benchmark
 - [Anthropic Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval) - 49% improvement technique
+- [RAG-Fusion](https://arxiv.org/abs/2402.03367) - Multi-query retrieval
+- [Lost in the Middle](https://arxiv.org/abs/2307.03172) - LLM context position bias
+- [Binary Quantization](https://qdrant.tech/documentation/guides/quantization/) - Qdrant guide
 - [Elicit](https://elicit.com/) - Systematic review automation
 - [Scite](https://scite.ai/) - Smart Citations
 

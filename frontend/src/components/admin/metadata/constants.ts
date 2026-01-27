@@ -68,6 +68,31 @@ export const SECTORS = [
   "other",
 ] as const;
 
+// Common target populations in development research
+export const TARGET_POPULATIONS = [
+  "women",
+  "men",
+  "youth",
+  "children",
+  "adolescents",
+  "elderly",
+  "households",
+  "farmers",
+  "smallholder farmers",
+  "students",
+  "teachers",
+  "health workers",
+  "pregnant women",
+  "mothers",
+  "refugees",
+  "migrants",
+  "urban poor",
+  "rural communities",
+  "micro-entrepreneurs",
+  "informal workers",
+  "other",
+] as const;
+
 /**
  * Defines which bibliographic fields to show for each item type.
  * Follows Zotero's field structure.

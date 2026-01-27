@@ -1,6 +1,6 @@
 # DevChat v2.0 - Setup & Status Tracker
 
-**Last Updated:** January 15, 2026
+**Last Updated:** January 27, 2025
 
 > This document tracks **current implementation status** and configurations.  
 > For future features, see [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -16,7 +16,7 @@
 | Frontend (Vercel) | ✅ Live | <https://dev-chat-frontend.vercel.app/> |
 | Backend (Railway) | ✅ Live | <https://3iechat.up.railway.app> |
 | PDF Processing (Modal) | ✅ Working | MineRU + modal_lib + Contextual Retrieval |
-| Vector DB (Qdrant) | ✅ Connected | chunks, hybrid search |
+| Vector DB (Qdrant) | ✅ Connected | chunks, hybrid search, binary quantization |
 | Auth (Supabase) | ✅ Working | JWT auth, RLS policies |
 | Storage (R2) | ✅ Working | Cloudflare R2 for PDFs |
 | Observability (Langfuse) | ✅ Working | Full tracing |
@@ -28,6 +28,13 @@
 | Multi-tenant RAG | ✅ Done | Users create/manage own projects |
 | Document Upload | ✅ Done | Drag-drop, batch, deduplication |
 | Hybrid Search | ✅ Done | Cohere embed-v4 + BM25 sparse |
+| **Binary Quantization** | ✅ Done | Qdrant native BinaryQuantization, ~32x faster search |
+| **HNSW Tuning** | ✅ Done | m=16, ef_construct=200 for better recall |
+| **MMR Diversity** | ✅ Done | Maximal Marginal Relevance, lambda=0.7 |
+| **Lost-in-Middle** | ✅ Done | Reorder chunks [1,3,5,7,8,6,4,2] pattern |
+| **Multi-Query RAG-Fusion** | ✅ Done | 3 query variants + RRF fusion, +10-15% recall |
+| **Embedding Cache** | ✅ Done | MD5 hash cache, 50-80% cost reduction |
+| **Retrieval Metrics** | ✅ Done | Recall@K, NDCG, MRR logged to Langfuse |
 | Reranking | ✅ Done | Cohere rerank-v3.5 |
 | Claim Ledger Synthesis | ✅ Done | Two-pass extraction with citations |
 | MiniCheck Verification | ✅ Done | Post-hoc NLI grounding |
@@ -63,10 +70,16 @@
 
 ### Extraction Pipeline
 
-| Pipeline | Status | Performance |
-| -------- | ------ | ----------- |
-| V2 SOTA (single paper) | ✅ Done | 100% Table 1 match (Bossuroy) |
-| V11 (bulk extraction) | ✅ Done | 71.3% recall, 43 studies |
+> **Active:** `extraction_pipeline/pipeline_v2_sota.py` ONLY  
+> **Archived:** All v1-v17 and extractor.py variants in `archive/extraction_pipeline_old/`
+
+| Pipeline | Status | Performance | Notes |
+| -------- | ------ | ----------- | ----- |
+| **V2 SOTA** (production) | ✅ Active | 100% accuracy on Bossuroy Table 1 (18/18 rows) | BeautifulSoup HTML parsing, 4-stage process |
+| V11 (bulk, archived) | ⚠️ Deprecated | 71.3% recall, 43 studies | Superseded by V2 SOTA |
+
+
+
 
 ### Quality Metrics (Baseline)
 
@@ -95,13 +108,14 @@ devchat_v2_sota/
 ├── infrastructure/         
 │   ├── modal_mineru.py     # Entry point (~230 lines)
 │   └── modal_lib/          # 8 modules (chunking, embedding, etc.)
-├── extraction_pipeline/    # Treatment effect extraction
-│   ├── pipeline_v2_sota.py # Production script
+├── extraction_pipeline/    # ✅ ACTIVE: Treatment effect extraction
+│   ├── pipeline_v2_sota.py # Production script (ONLY version to use)
 │   └── outputs/            # Extracted data per study
 ├── evaluation/             # RAGAS, MiniCheck, test cases
 ├── scripts/                # Utility scripts
 ├── docs/                   # ROADMAP.md, EVALUATION.md
-└── archive/                # Old scripts, historical docs
+└── archive/                # ⚠️ Deprecated code (DO NOT USE)
+    └── extraction_pipeline_old/  # 35+ old extraction scripts (v1-v17)
 ```
 
 ---

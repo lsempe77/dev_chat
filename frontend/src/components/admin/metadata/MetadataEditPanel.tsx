@@ -22,6 +22,7 @@ import {
   REPORT_TYPES,
   STUDY_TYPES,
   SECTORS,
+  TARGET_POPULATIONS,
   FIELDS_BY_ITEM_TYPE,
 } from "./constants";
 
@@ -490,6 +491,23 @@ export function MetadataEditPanel({
                 onChange={(e) => setEditForm({ ...editForm, intervention_type: e.target.value })}
                 placeholder="e.g., cash transfer, training program"
               />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Target Population</Label>
+              <Select
+                value={editForm.target_population || ""}
+                onValueChange={(value) => setEditForm({ ...editForm, target_population: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select target population" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TARGET_POPULATIONS.map((pop) => (
+                    <SelectItem key={pop} value={pop}>{pop}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

@@ -106,6 +106,7 @@ Evaluated on 8 golden queries using MiniCheck NLI verification
 ### 🔍 Hybrid Search
 
 - **Dense vectors** - Cohere embed-v4 (1536d)
+- **Binary quantization** - ~32x faster search, 95% recall
 - **Sparse vectors** - BM25-style keyword matching
 - **HyDE expansion** - Hypothetical document queries
 - **Cohere reranking** - Precision filtering

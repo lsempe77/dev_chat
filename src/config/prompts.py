@@ -39,6 +39,28 @@ these are specific studies - not comprehensive evidence. Always cite your source
 # QUERY PROCESSING PROMPTS
 # =============================================================================
 
+QUERY_VARIANTS_PROMPT = """You are a search query generator for academic research retrieval. \
+Given a user's question, generate {num_variants} alternative phrasings to improve retrieval.
+
+Each variant should:
+1. Preserve the core intent of the original query
+2. Use different vocabulary/synonyms
+3. Rephrase from a different angle (e.g., cause→effect, specific→general)
+4. Include relevant academic terminology
+
+IMPORTANT:
+- Return ONLY a JSON array of strings
+- Each variant should be a standalone search query
+- Keep variants concise (similar length to original)
+- Don't add unrelated concepts
+
+Original Query: {query}
+
+Example output format:
+["variant 1", "variant 2", "variant 3"]
+
+Generate {num_variants} variants:"""
+
 QUERY_CLASSIFICATION_PROMPT = """Classify the following user query into one of these categories:
 
 1. **simple**: Direct factual question about a specific study or concept
@@ -88,12 +110,15 @@ IMPORTANT: Only extract a filter if the user EXPLICITLY mentions it as a constra
 - "studies in Kenya" → YES, country filter: Kenya
 - "RCTs on education" → YES, study_type filter: RCT; but NO sector filter for education (it's the topic)
 - "recent studies on health" → YES, year filter (recent = last 3-5 years); but NO sector filter
+- "studies targeting women" → YES, target_populations: ["women"]
+- "evaluations for smallholder farmers" → YES, target_populations: ["smallholder farmers"]
 
 Filter types:
 - **year**: ONLY if user says "recent", "after 2020", "2015-2020", "last 5 years", etc.
 - **sector**: ONLY if user says "in the health sector", "education sector studies", etc.
 - **country**: ONLY if user explicitly names a country/region as a constraint
 - **study_type**: ONLY if user says "RCTs", "systematic reviews", "quasi-experimental", etc.
+- **target_populations**: ONLY if user explicitly mentions a target group (e.g., "targeting women", "for farmers", "among students", "youth", "households", "children")
 - **confidence**: ONLY if user says "high quality", "rigorous", "high confidence"
 
 User Query: {query}
@@ -105,6 +130,7 @@ Respond in JSON format:
     "sectors": [],
     "countries": [],
     "study_types": [],
+    "target_populations": [],
     "confidence_level": null
 }}
 

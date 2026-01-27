@@ -103,6 +103,27 @@ async def get_metrics(
     )
 
 
+@router.get("/metrics/retrieval")
+async def get_retrieval_metrics(
+    last_n: Optional[int] = Query(default=None, description="Only last N queries"),
+):
+    """
+    Get retrieval quality metrics summary.
+    
+    Returns:
+        - Recall@K (5, 10, 20)
+        - Precision@K (5, 10)
+        - MRR (Mean Reciprocal Rank)
+        - NDCG@10 (Normalized Discounted Cumulative Gain)
+    """
+    from src.utils.metrics import get_retrieval_metrics_tracker
+    
+    tracker = get_retrieval_metrics_tracker()
+    summary = tracker.get_summary(last_n)
+    
+    return summary
+
+
 # =============================================================================
 # Admin Status
 # =============================================================================

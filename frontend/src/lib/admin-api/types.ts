@@ -229,9 +229,10 @@ export interface DocumentMetadataDetail {
   sectors: string[];
   study_type?: string;
   intervention_type?: string;
+  target_population?: string;
   sdgs: string[];
   keywords: string[];
-  
+
   // Processing metadata
   metadata_source: string;
   metadata_confidence: number;
@@ -308,10 +309,11 @@ export interface MetadataUpdateRequest {
   sectors?: string[];
   study_type?: string;
   intervention_type?: string;
-  
+  target_population?: string;
+
   // Review status
   needs_review?: boolean;
-  
+
   // Extra fields
   extra?: Record<string, unknown>;
 }
@@ -429,4 +431,24 @@ export interface ModelPricing {
 
 export interface PricingResponse {
   [model: string]: ModelPricing;
+}
+
+// =============================================================================
+// Retrieval Quality Metrics Types
+// =============================================================================
+
+export interface RetrievalMetricsAverage {
+  recall_at_5: number;
+  recall_at_10: number;
+  recall_at_20: number;
+  precision_at_5: number;
+  precision_at_10: number;
+  mrr: number;
+  ndcg_at_10: number;
+}
+
+export interface RetrievalMetricsResponse {
+  total_queries: number;
+  averages: RetrievalMetricsAverage;
+  message?: string;
 }

@@ -653,6 +653,7 @@ import type {
   CostProjection,
   PricingResponse,
   AdminOverviewStats,
+  RetrievalMetricsResponse,
 } from "./types";
 
 /**
@@ -735,6 +736,26 @@ export async function getAdminOverview(): Promise<AdminOverviewStats> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: "Failed to fetch overview" }));
     throw new Error(error.detail || "Failed to fetch admin overview");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get retrieval quality metrics (Recall@K, Precision@K, MRR, NDCG)
+ */
+export async function getRetrievalMetrics(
+  lastN?: number
+): Promise<RetrievalMetricsResponse> {
+  const url = lastN 
+    ? `${API_BASE_URL}/admin/metrics/retrieval?last_n=${lastN}`
+    : `${API_BASE_URL}/admin/metrics/retrieval`;
+    
+  const response = await adminFetch(url);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to fetch retrieval metrics" }));
+    throw new Error(error.detail || "Failed to fetch retrieval metrics");
   }
 
   return response.json();

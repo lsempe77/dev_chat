@@ -122,6 +122,40 @@ class FiltersResponse(BaseModel):
 
 
 # =============================================================================
+# Feature Suggestions Models
+# =============================================================================
+
+class FeatureSuggestionRequest(BaseModel):
+    """Request for feature suggestions generation."""
+    project_name: str = Field(default="DevChat RAG Project", description="Name of the RAG project")
+    document_count: int = Field(default=0, ge=0, description="Number of documents in the project")
+    query_count: int = Field(default=0, ge=0, description="Total queries made")
+    common_topics: Optional[List[str]] = Field(None, description="List of common topics/sectors")
+    user_feedback: Optional[str] = Field(None, description="User feedback or pain points")
+
+
+class FeatureSuggestionItem(BaseModel):
+    """A single feature suggestion."""
+    id: str = Field(..., description="Unique identifier for the suggestion")
+    title: str = Field(..., description="Short, catchy feature name")
+    description: str = Field(..., description="One-sentence description of the feature")
+    category: Literal[
+        "retrieval", "analysis", "visualization", "export",
+        "collaboration", "automation", "quality", "integration"
+    ] = Field(..., description="Feature category")
+    impact: Literal["high", "medium", "low"] = Field(..., description="Expected user value")
+    effort: Literal["high", "medium", "low"] = Field(..., description="Implementation complexity")
+    rationale: str = Field(..., description="Why this feature would help users")
+
+
+class FeatureSuggestionsResponse(BaseModel):
+    """Response containing feature suggestions."""
+    suggestions: List[FeatureSuggestionItem] = Field(..., description="List of 10 feature suggestions")
+    generated_at: str = Field(..., description="Timestamp of generation")
+    project_context: Dict[str, Any] = Field(default_factory=dict, description="Context used for generation")
+
+
+# =============================================================================
 # Legacy Chat Models
 # =============================================================================
 

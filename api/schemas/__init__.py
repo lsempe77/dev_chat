@@ -34,6 +34,10 @@ from .chat import (
     StudyResponse,
     SuggestRequest,
     SuggestResponse,
+    # Feature Suggestions
+    FeatureSuggestionItem,
+    FeatureSuggestionRequest,
+    FeatureSuggestionsResponse,
     # Legacy
     ChatRequest,
     ChatResponse,
@@ -82,6 +86,10 @@ __all__ = [
     "StudyResponse",
     "SuggestRequest",
     "SuggestResponse",
+    # Feature Suggestions
+    "FeatureSuggestionItem",
+    "FeatureSuggestionRequest",
+    "FeatureSuggestionsResponse",
     # Chat/Query - Legacy
     "ChatRequest",
     "ChatResponse",

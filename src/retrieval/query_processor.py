@@ -16,6 +16,7 @@ from src.config.prompts import (
     METADATA_EXTRACTION_PROMPT,
     QUERY_CLASSIFICATION_PROMPT,
     QUERY_EXPANSION_PROMPT,
+    QUERY_VARIANTS_PROMPT,
 )
 from src.config.settings import settings
 from src.utils.logging import get_logger
@@ -40,8 +41,9 @@ class ExtractedFilters:
     sectors: List[str] = field(default_factory=list)
     countries: List[str] = field(default_factory=list)
     study_types: List[str] = field(default_factory=list)
+    target_populations: List[str] = field(default_factory=list)
     confidence_level: Optional[str] = None
-    
+
     def has_filters(self) -> bool:
         """Check if any filters are set."""
         return any([
@@ -50,6 +52,7 @@ class ExtractedFilters:
             self.sectors,
             self.countries,
             self.study_types,
+            self.target_populations,
             self.confidence_level,
         ])
     
@@ -79,6 +82,13 @@ class ExtractedFilters:
                 match=MatchAny(any=self.sectors),
             ))
         
+        # Target population filter
+        if self.target_populations:
+            conditions.append(FieldCondition(
+                key="target_population",
+                match=MatchAny(any=self.target_populations),
+            ))
+
         # Enable these when the corpus is fully populated with consistent metadata
         # if self.countries:
         #     conditions.append(FieldCondition(
@@ -267,12 +277,83 @@ class QueryProcessor:
                 sectors=data.get("sectors", []),
                 countries=data.get("countries", []),
                 study_types=data.get("study_types", []),
+                target_populations=data.get("target_populations", []),
                 confidence_level=data.get("confidence_level"),
             )
             
         except Exception as e:
             logger.warning(f"Filter extraction failed: {e}")
             return ExtractedFilters()
+
+    async def generate_query_variants(
+        self, 
+        query: str, 
+        num_variants: int = 3,
+    ) -> List[str]:
+        """
+        Generate alternative phrasings of a query for RAG-Fusion.
+        
+        Multi-Query RAG-Fusion improves recall by retrieving with multiple
+        query variants and fusing results with Reciprocal Rank Fusion (RRF).
+        
+        Args:
+            query: Original user query
+            num_variants: Number of variants to generate (default: 3)
+            
+        Returns:
+            List of query variants (always includes original query first)
+            
+        Reference: RAG-Fusion paper (https://arxiv.org/abs/2402.03367)
+        """
+        # Always include original query
+        variants = [query]
+        
+        if not settings.multi_query_enabled:
+            return variants
+        
+        try:
+            llm = self._get_llm()
+            prompt = QUERY_VARIANTS_PROMPT.format(
+                query=query,
+                num_variants=num_variants,
+            )
+            
+            response = await llm.acomplete(prompt)
+            
+            # Parse JSON array response
+            try:
+                generated = json.loads(response.text.strip())
+                if isinstance(generated, list):
+                    # Filter out empty strings and duplicates
+                    for v in generated:
+                        if v and isinstance(v, str) and v.strip() != query.strip():
+                            variants.append(v.strip())
+            except json.JSONDecodeError:
+                # Try to extract JSON array from response
+                import re
+                json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+                if json_match:
+                    generated = json.loads(json_match.group())
+                    for v in generated:
+                        if v and isinstance(v, str) and v.strip() != query.strip():
+                            variants.append(v.strip())
+            
+            # Limit to requested number + original
+            variants = variants[:num_variants + 1]
+            
+            logger.info(f"Generated {len(variants)} query variants for RAG-Fusion")
+            logger.debug(f"Query variants: {variants}")
+            
+            return variants
+            
+        except Exception as e:
+            logger.warning(f"Query variant generation failed: {e}, using original query only")
+            return [query]
+
+    def generate_query_variants_sync(self, query: str, num_variants: int = 3) -> List[str]:
+        """Synchronous version of generate_query_variants."""
+        import asyncio
+        return asyncio.run(self.generate_query_variants(query, num_variants))
 
 
 # Domain-specific query expansion rules (fallback if LLM fails)

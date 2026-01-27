@@ -73,13 +73,14 @@ export interface MetadataDetail {
   sectors: string[];
   study_type: string | null;
   intervention_type: string | null;
-  
+  target_population: string | null;
+
   // Processing metadata
   metadata_source: string;
   metadata_confidence: number;
   needs_review: boolean;
   chunk_count: number;
-  
+
   // Flags for issues
   needs_reprocessing: boolean;  // True if chunk_count=0 but status=completed
 }
@@ -133,6 +134,7 @@ export interface MetadataUpdateRequest {
   sectors?: string[];
   study_type?: string;
   intervention_type?: string;
+  target_population?: string;
   needs_review?: boolean;
 }
 

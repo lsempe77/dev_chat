@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  FileText, 
+import {
+  FileText,
   Search,
   Edit2,
   Check,
@@ -24,6 +24,7 @@ import {
   X,
   Sparkles,
   Trash2,
+  Users,
 } from "lucide-react";
 import { 
   getRagMetadata, 
@@ -173,6 +174,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
     sectors: doc.sectors,
     study_type: doc.study_type ?? undefined,
     intervention_type: doc.intervention_type ?? undefined,
+    target_population: doc.target_population ?? undefined,
     metadata_source: doc.metadata_source,
     metadata_confidence: doc.metadata_confidence,
     needs_review: doc.needs_review,
@@ -221,6 +223,7 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
       sectors: doc.sectors,
       study_type: doc.study_type ?? undefined,
       intervention_type: doc.intervention_type ?? undefined,
+      target_population: doc.target_population ?? undefined,
     });
   };
 
@@ -540,6 +543,12 @@ export function RagMetadataTab({ ragId }: RagMetadataTabProps) {
                                 <Badge variant="secondary" className="gap-1">
                                   <Beaker className="h-3 w-3" />
                                   {doc.study_type}
+                                </Badge>
+                              )}
+                              {doc.target_population && (
+                                <Badge variant="secondary" className="gap-1">
+                                  <Users className="h-3 w-3" />
+                                  {doc.target_population}
                                 </Badge>
                               )}
                               {doc.item_type && (
