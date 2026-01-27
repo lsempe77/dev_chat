@@ -93,6 +93,27 @@
 | **V2 SOTA** (production) | ✅ Active | 100% accuracy on Bossuroy Table 1 (18/18 rows) | BeautifulSoup HTML parsing, 4-stage process |
 | V11 (bulk, archived) | ⚠️ Deprecated | 71.3% recall, 43 studies | Superseded by V2 SOTA |
 
+### Extraction Schema
+
+> **New:** Topic-agnostic Pydantic schemas in `src/extraction/schemas.py`
+
+| Component | Description | Fields |
+| --------- | ----------- | ------ |
+| `CoreNumericFields` | Effect size, SE, CI, p-value, N | 22 fields |
+| `StudyMetadata` | Authors, year, country, design | 11 fields |
+| `OutcomeMetadata` | Outcome name, domain, type, unit | 7 fields |
+| `InterventionMetadata` | Name, type, control, duration | 8 fields |
+| `SourceLocation` | Page, table, row, column | 8 fields |
+| `StandardizedEffectSize` | Cohen's d, Hedges' g (calculated) | 9 fields |
+| `DomainSpecificFields` | Custom fields per topic | Flexible |
+
+**Domain Configs Available:** graduation, education, health, agriculture, aquaculture, WASH, nutrition, social_protection, generic
+
+**Extraction Modes:**
+- `RAG` - 11 key fields for chat synthesis
+- `SCREENING` - 7 fields for title/abstract
+- `FULL` - All fields for systematic review
+
 
 
 
@@ -104,6 +125,39 @@
 | Citation Recall | 98.86% | 70%+ ✅ |
 | Citation Precision | 98.86% | 70%+ ✅ |
 | Avg Latency | 12,193ms | - |
+
+---
+
+## Sphinx Documentation - PENDING
+
+Sphinx autodoc setup is complete in `docs/sphinx/`. 
+
+### To Enable GitHub Pages (requires GitHub Pro for private repos):
+
+1. **Upgrade to GitHub Pro** (private repo requirement)
+   - Go to: https://github.com/settings/billing/plans
+
+2. **Enable GitHub Pages**
+   - Go to: Settings → Pages
+   - Source: Select "GitHub Actions"
+   - The workflow `.github/workflows/docs.yml` will auto-deploy on push
+
+3. **Access docs at:** `https://lsempe77.github.io/dev_chat/`
+
+### Build Locally:
+```bash
+cd docs/sphinx
+sphinx-build -b html source build/html
+# Open build/html/index.html
+```
+
+### What's Documented:
+- `src/` - Core library (agents, generation, retrieval, ingestion)
+- `api/` - FastAPI routes and schemas
+- `extraction_pipeline/` - Table extraction
+- `infrastructure/` - Modal deployment
+- `evaluation/` - Test and validation scripts
+- `scripts/` - Utility scripts
 
 ---
 

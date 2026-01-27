@@ -7,51 +7,57 @@
 
 ---
 
-## Sphinx Documentation - PENDING
-
-Sphinx autodoc setup is complete in `docs/sphinx/`. 
-
-### To Enable GitHub Pages (requires GitHub Pro for private repos):
-
-1. **Upgrade to GitHub Pro** (private repo requirement)
-   - Go to: https://github.com/settings/billing/plans
-
-2. **Enable GitHub Pages**
-   - Go to: Settings → Pages
-   - Source: Select "GitHub Actions"
-   - The workflow `.github/workflows/docs.yml` will auto-deploy on push
-
-3. **Access docs at:** `https://lsempe77.github.io/dev_chat/`
-
-### Build Locally:
-```bash
-cd docs/sphinx
-sphinx-build -b html source build/html
-# Open build/html/index.html
-```
-
-### What's Documented:
-- `src/` - Core library (agents, generation, retrieval, ingestion)
-- `api/` - FastAPI routes and schemas
-- `extraction_pipeline/` - Table extraction
-- `infrastructure/` - Modal deployment
-- `evaluation/` - Test and validation scripts
-- `scripts/` - Utility scripts
-
----
 
 ## Upcoming Features
 
+check if something is useful: https://www.oreilly.com/radar/mcps-for-developers-who-think-they-dont-need-mcps/
+
+
 ### Immediate
 
-1. **Study Design Filter in Evidence Panel** - 4h
+1. **Metadata & Quantitative Field Extraction** - 8h
+   - ✅ Analyzed ground truth: `8WR QEX Combined.xlsx` (125 columns), `8 week SR OM Combined.xlsx` (22 columns)
+   - ✅ Created topic-agnostic extraction schema: `src/extraction/schemas.py`
+   - 🚧 Implement extractors for universal fields
+   - 🚧 Validate pipeline against ground truth
+   - Files: `extraction_pipeline/pipeline.py`, `src/extraction/schemas.py`
+
+   **Schema Design (Topic-Agnostic):**
+   - Universal: `CoreNumericFields`, `StudyMetadata`, `OutcomeMetadata`, `InterventionMetadata`, `SourceLocation`
+   - Calculated: `StandardizedEffectSize` (Cohen's d, Hedges' g)
+   - Domain-Specific: `DomainSpecificFields` with configs for graduation, education, health, agriculture, aquaculture, WASH, nutrition, social protection
+   - Modes: RAG (11 fields), SCREENING (7 fields), FULL (all fields)
+
+a. ✅ **Check Outcomes mapping 3ie tool** - 2h
+   - Analyzed all 125 QEX columns + 22 OM columns
+   - Categorized: 30 extractable, 16 coded, 15 derived, 55 RVE selection flags
+
+b. **Create human-verified ground truth for Study 121058356** - 4h
+   - Manually verify all 763 rows against PDF
+   - Flag extraction errors, missing rows
+   - Create `ground_truth_121058356.csv`
+
+c. **Add significance star mapping** - 2h (Fixes Issue #2)
+   - Map *** to p<.001, ** to p<.01, * to p<.05
+   - Extract from table footnotes when available
+
+d. **Expand to 5-10 diverse studies** - 8h
+   - Select studies with different table formats
+   - Complex tables: multi-panel, subgroups, footnotes
+
+e.  **Validation tooling** - 2h
+   - Script to compare extraction vs GT
+   - Metrics: precision, recall, F1 by field type
+
+~~Success Metrics
+- **Accuracy Target:** 90%+ on numeric fields (coefficient, SE)
+- **Recall Target:** 85%+ outcomes found per study
+- **Significance Parsing:** 95%+ star notation correctly interpreted
+
+
+2. **Study Design Filter in Evidence Panel** - 4h
    - Add dropdown to filter evidence by study design (RCT, DiD, etc.)
    - Files: `frontend/src/components/EvidencePanel.tsx`
-
-2. **Metadata & Quantitative Field Extraction** - 8h
-   - Extract structured fields: effect sizes, sample sizes, outcomes, geography
-   - Validate V2 SOTA pipeline against ground truth
-   - Files: `extraction_pipeline/pipeline.py`
 
 3. **"I Don't Know" Explicit Refusal** - 2h
    - When retrieval confidence is below threshold, explicitly refuse to answer
@@ -157,35 +163,7 @@ sphinx-build -b html source build/html
 | `table_number` | Which table (Table 1, A1, etc.) | Yes |
 | `treatment_arm` | Intervention arm name | Yes |
 
-### Tasks
-1. **Create human-verified ground truth for Study 121058356** - 4h
-   - Manually verify all 763 rows against PDF
-   - Flag extraction errors, missing rows
-   - Create `ground_truth_121058356.csv`
 
-2. **Add significance star mapping** - 2h (Fixes Issue #2)
-   - Map *** to p<.001, ** to p<.01, * to p<.05
-   - Extract from table footnotes when available
-
-3. **Expand to 5-10 diverse studies** - 8h
-   - Select studies with different table formats
-   - Complex tables: multi-panel, subgroups, footnotes
-
-4. **Validation tooling** - 2h
-   - Script to compare extraction vs GT
-   - Metrics: precision, recall, F1 by field type
-
-5. **Check Outcomes mapping 3ie tool** - 2h
-   - Define additional fields to be extracted
-   - Metrics: precision, recall, F1 by field type
-
-
-### Success Metrics
-- **Accuracy Target:** 90%+ on numeric fields (coefficient, SE)
-- **Recall Target:** 85%+ outcomes found per study
-- **Significance Parsing:** 95%+ star notation correctly interpreted
-
----
 
 ## RAG Pipeline Optimizations (Medium Priority)
 

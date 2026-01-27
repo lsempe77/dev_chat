@@ -134,6 +134,17 @@ The `src/` package contains the core Python libraries for DevChat.
    :show-inheritance:
 ```
 
+## Extraction
+
+### Schemas
+
+```{eval-rst}
+.. automodule:: src.extraction.schemas
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
 ## Configuration
 
 ### Settings
