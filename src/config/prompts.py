@@ -61,6 +61,40 @@ Example output format:
 
 Generate {num_variants} variants:"""
 
+
+QUERY_DECOMPOSITION_PROMPT = """You are a query decomposition expert for academic research retrieval.
+
+Some queries are complex and benefit from being broken into simpler sub-queries.
+Analyze the query and determine if it should be decomposed.
+
+DECOMPOSE when the query:
+- Compares multiple things (X vs Y, compare A and B)
+- Asks about multiple aspects (effectiveness AND cost-effectiveness)
+- Spans multiple domains (education AND health outcomes)
+- Asks a broad question that naturally has multiple facets
+
+DO NOT decompose:
+- Simple factual questions
+- Single-concept queries
+- Queries already focused on one specific thing
+
+If decomposition is needed, break into 2-4 focused sub-queries that together cover the original question.
+Each sub-query should be:
+1. Self-contained and searchable
+2. Focused on ONE aspect/concept
+3. When combined, fully address the original question
+
+Original Query: {query}
+
+Respond in JSON format:
+{{
+    "should_decompose": true/false,
+    "reason": "brief explanation",
+    "sub_queries": ["sub-query 1", "sub-query 2", ...]
+}}
+
+If should_decompose is false, sub_queries should be empty array."""
+
 QUERY_CLASSIFICATION_PROMPT = """Classify the following user query into one of these categories:
 
 1. **simple**: Direct factual question about a specific study or concept

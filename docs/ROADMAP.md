@@ -103,31 +103,21 @@
 
 > These require more effort but provide meaningful improvements.
 
-### 1. Semantic Cache - 8h
-- Cache responses for semantically similar queries (not just exact match)
-- Use embedding similarity threshold (>0.95) to detect similar queries
-- Files: `src/utils/cache.py`
-
-### 2. Query Decomposition - 6h
-- Break complex queries into sub-queries: "Compare X and Y across Z" → 3 queries
-- Retrieve for each, merge results
-- Files: `src/retrieval/query_processor.py`
-
-### 3. Step-Back Prompting - 4h
+### 1. Step-Back Prompting - 4h
 - For specific questions, first ask a more general question
 - "What's the effect size in Bossuroy 2024?" → First: "What outcomes does Bossuroy 2024 measure?"
 - Files: `src/retrieval/query_processor.py`
 
-### 4. Self-Consistency - 8h
+### 2. Self-Consistency - 8h
 - Generate 3 answers with temperature > 0, select most consistent
 - Improves accuracy on complex synthesis questions
 - Files: `src/generation/claim_ledger.py`
 
-### 5. Additional Payload Indexes - 2h
+### 3. Additional Payload Indexes - 2h
 - Index `year`, `sector`, `study_type` in Qdrant for faster filtering
 - Files: `infrastructure/modal_lib/embedding.py`
 
-### 6. Scalar Quantization Option - 2h
+### 4. Scalar Quantization Option - 2h
 - Add scalar quantization (int8) as alternative to binary
 - Better precision/speed tradeoff for some use cases
 - Files: `infrastructure/modal_lib/embedding.py`

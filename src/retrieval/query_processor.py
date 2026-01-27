@@ -17,6 +17,7 @@ from src.config.prompts import (
     QUERY_CLASSIFICATION_PROMPT,
     QUERY_EXPANSION_PROMPT,
     QUERY_VARIANTS_PROMPT,
+    QUERY_DECOMPOSITION_PROMPT,
 )
 from src.config.settings import settings
 from src.utils.logging import get_logger
@@ -121,11 +122,17 @@ class QueryClassification:
     query_type: QueryType
     filters: ExtractedFilters
     search_queries: List[str] = field(default_factory=list)
+    sub_queries: List[str] = field(default_factory=list)  # For query decomposition
     
     @property
     def primary_query(self) -> str:
         """Get the primary query for retrieval."""
         return self.expanded_query or self.original_query
+    
+    @property
+    def is_decomposed(self) -> bool:
+        """Check if query was decomposed into sub-queries."""
+        return len(self.sub_queries) > 0
 
 
 class QueryProcessor:
@@ -284,6 +291,62 @@ class QueryProcessor:
         except Exception as e:
             logger.warning(f"Filter extraction failed: {e}")
             return ExtractedFilters()
+
+    async def decompose_query(self, query: str) -> List[str]:
+        """
+        Decompose a complex query into simpler sub-queries.
+        
+        Query Decomposition improves retrieval for complex queries by:
+        1. Breaking comparisons into individual queries
+        2. Separating multi-aspect questions
+        3. Allowing more focused retrieval for each aspect
+        
+        Args:
+            query: Original user query
+            
+        Returns:
+            List of sub-queries (empty if no decomposition needed)
+        """
+        if not getattr(settings, 'query_decomposition_enabled', True):
+            return []
+        
+        try:
+            llm = self._get_llm()
+            prompt = QUERY_DECOMPOSITION_PROMPT.format(query=query)
+            
+            response = await llm.acomplete(prompt)
+            
+            # Parse JSON response
+            try:
+                data = json.loads(response.text.strip())
+            except json.JSONDecodeError:
+                # Try to extract JSON from response
+                import re
+                json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group())
+                else:
+                    return []
+            
+            should_decompose = data.get("should_decompose", False)
+            sub_queries = data.get("sub_queries", [])
+            reason = data.get("reason", "")
+            
+            if should_decompose and sub_queries:
+                logger.info(f"Query decomposed into {len(sub_queries)} sub-queries: {reason}")
+                logger.debug(f"Sub-queries: {sub_queries}")
+                return sub_queries
+            
+            return []
+            
+        except Exception as e:
+            logger.warning(f"Query decomposition failed: {e}")
+            return []
+    
+    def decompose_query_sync(self, query: str) -> List[str]:
+        """Synchronous version of decompose_query."""
+        import asyncio
+        return asyncio.run(self.decompose_query(query))
 
     async def generate_query_variants(
         self, 

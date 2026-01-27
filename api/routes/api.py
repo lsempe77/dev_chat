@@ -163,10 +163,23 @@ async def query_evidence(request: QueryRequest):
         cache_key_settings = request.settings.model_dump() if request.settings else None
         cache_key_filters = [f.model_dump() for f in request.filters] if request.filters else None
         
+        # Generate query embedding for semantic cache (if enabled)
+        query_embedding = None
+        if cache.semantic_enabled:
+            try:
+                from src.ingestion.embeddings import EmbeddingGenerator
+                import numpy as np
+                embedding_gen = EmbeddingGenerator()
+                query_embedding = np.array(embedding_gen.embed_query(request.query))
+                logger.debug(f"Generated query embedding for semantic cache (dim={len(query_embedding)})")
+            except Exception as e:
+                logger.warning(f"Failed to generate query embedding for cache: {e}")
+        
         cached_response = await cache.get(
             query=request.query,
             filters=cache_key_filters,
             settings_dict=cache_key_settings,
+            query_embedding=query_embedding,
         )
         if cached_response:
             logger.info(f"Cache hit for query: {request.query[:50]}...")
@@ -395,12 +408,13 @@ async def query_evidence(request: QueryRequest):
                     evidenceHealth=evidence_health,
                 )
                 
-                # Store in cache for future requests
+                # Store in cache for future requests (with embedding for semantic matching)
                 await cache.set(
                     query=request.query,
                     response=query_response,
                     filters=cache_key_filters,
                     settings_dict=cache_key_settings,
+                    query_embedding=query_embedding,
                 )
                 
                 return query_response

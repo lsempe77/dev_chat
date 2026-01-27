@@ -35,6 +35,8 @@
 | **Multi-Query RAG-Fusion** | ✅ Done | 3 query variants + RRF fusion, +10-15% recall |
 | **Embedding Cache** | ✅ Done | MD5 hash cache, 50-80% cost reduction |
 | **Retrieval Metrics** | ✅ Done | Recall@K, NDCG, MRR logged to Langfuse |
+| **Semantic Cache** | ✅ Done | Similar query matching (>0.95 cosine), reduces LLM calls |
+| **Query Decomposition** | ✅ Done | Complex queries split into sub-queries, merged via RRF |
 | Reranking | ✅ Done | Cohere rerank-v3.5 |
 | Claim Ledger Synthesis | ✅ Done | Two-pass extraction with citations |
 | MiniCheck Verification | ✅ Done | Post-hoc NLI grounding |

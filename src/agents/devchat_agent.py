@@ -258,19 +258,41 @@ class DevChatAgent:
             except Exception as e:
                 logger.warning(f"HyDE enhancement failed, using original query: {e}")
         
+        # Query Decomposition: break complex queries into sub-queries
+        sub_queries = []
+        if getattr(settings, 'query_decomposition_enabled', True):
+            try:
+                sub_queries = await self.query_processor.decompose_query(query)
+                if sub_queries:
+                    logger.info(f"Query decomposed into {len(sub_queries)} sub-queries")
+            except Exception as e:
+                logger.warning(f"Query decomposition failed: {e}")
+        
         # Multi-Query RAG-Fusion: generate query variants for improved recall
         if settings.multi_query_enabled:
             try:
-                query_variants = await self.query_processor.generate_query_variants(
-                    retrieval_query,
-                    num_variants=settings.multi_query_num_variants,
-                )
-                results = await self.retriever.retrieve_multi_query(
-                    queries=query_variants,
-                    top_k=retrieval_top_k,
-                    filters=active_filters,
-                )
-                logger.info(f"RAG-Fusion: retrieved with {len(query_variants)} query variants")
+                # If decomposed, use sub-queries; otherwise generate variants
+                if sub_queries:
+                    # Retrieve using decomposed sub-queries + original
+                    results = await self.retriever.retrieve_with_decomposition(
+                        query=retrieval_query,
+                        sub_queries=sub_queries,
+                        top_k=retrieval_top_k,
+                        filters=active_filters,
+                    )
+                    logger.info(f"Retrieved with query decomposition ({len(sub_queries)} sub-queries)")
+                else:
+                    # Standard RAG-Fusion with query variants
+                    query_variants = await self.query_processor.generate_query_variants(
+                        retrieval_query,
+                        num_variants=settings.multi_query_num_variants,
+                    )
+                    results = await self.retriever.retrieve_multi_query(
+                        queries=query_variants,
+                        top_k=retrieval_top_k,
+                        filters=active_filters,
+                    )
+                    logger.info(f"RAG-Fusion: retrieved with {len(query_variants)} query variants")
             except Exception as e:
                 logger.warning(f"Multi-query retrieval failed, falling back to single query: {e}")
                 results = await self.retriever.retrieve(
@@ -647,18 +669,34 @@ class DevChatAgent:
         # Process query
         processed_query = await self.query_processor.process(query)
         
-        # Retrieve (with multi-query if enabled)
+        # Query decomposition for complex queries
+        sub_queries = []
+        if getattr(settings, 'query_decomposition_enabled', True):
+            try:
+                sub_queries = await self.query_processor.decompose_query(query)
+            except Exception as e:
+                logger.warning(f"Query decomposition failed in stream: {e}")
+        
+        # Retrieve (with decomposition or multi-query if enabled)
         if settings.multi_query_enabled:
             try:
-                query_variants = await self.query_processor.generate_query_variants(
-                    processed_query.primary_query,
-                    num_variants=settings.multi_query_num_variants,
-                )
-                results = await self.retriever.retrieve_multi_query(
-                    queries=query_variants,
-                    top_k=settings.retrieval_top_k,
-                    filters=processed_query.filters if processed_query.filters.has_filters() else None,
-                )
+                if sub_queries:
+                    results = await self.retriever.retrieve_with_decomposition(
+                        query=processed_query.primary_query,
+                        sub_queries=sub_queries,
+                        top_k=settings.retrieval_top_k,
+                        filters=processed_query.filters if processed_query.filters.has_filters() else None,
+                    )
+                else:
+                    query_variants = await self.query_processor.generate_query_variants(
+                        processed_query.primary_query,
+                        num_variants=settings.multi_query_num_variants,
+                    )
+                    results = await self.retriever.retrieve_multi_query(
+                        queries=query_variants,
+                        top_k=settings.retrieval_top_k,
+                        filters=processed_query.filters if processed_query.filters.has_filters() else None,
+                    )
             except Exception as e:
                 logger.warning(f"Multi-query retrieval failed in stream, falling back: {e}")
                 results = await self.retriever.retrieve(

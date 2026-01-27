@@ -355,6 +355,47 @@ class HybridRetriever:
         
         return fused_results
 
+    async def retrieve_with_decomposition(
+        self,
+        query: str,
+        sub_queries: List[str],
+        top_k: int = settings.retrieval_top_k,
+        filters: Optional[ExtractedFilters] = None,
+        alpha: float = settings.hybrid_alpha,
+    ) -> List[RetrievalResult]:
+        """
+        Retrieve using query decomposition.
+        
+        For complex queries that have been decomposed, retrieves for each
+        sub-query and merges results using RRF. This improves recall for
+        comparisons and multi-aspect questions.
+        
+        Args:
+            query: Original query (for fallback/context)
+            sub_queries: Decomposed sub-queries
+            top_k: Number of final results
+            filters: Metadata filters
+            alpha: Dense/sparse weight
+            
+        Returns:
+            Merged results from all sub-queries
+        """
+        if not sub_queries:
+            # No decomposition - use standard retrieval
+            return await self.retrieve(query, top_k, filters, alpha)
+        
+        logger.info(f"Query decomposition retrieval with {len(sub_queries)} sub-queries")
+        
+        # Retrieve for each sub-query
+        all_queries = sub_queries + [query]  # Include original as fallback
+        
+        return await self.retrieve_multi_query(
+            queries=all_queries,
+            top_k=top_k,
+            filters=filters,
+            alpha=alpha,
+        )
+
     def _reciprocal_rank_fusion(
         self,
         result_lists: List[List[RetrievalResult]],

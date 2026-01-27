@@ -290,6 +290,24 @@ class Settings(BaseSettings):
         description="Time-to-live for cached responses in seconds"
     )
     
+    # Semantic cache settings
+    semantic_cache_enabled: bool = Field(
+        default=True,
+        description="Enable semantic similarity matching for cache (matches similar queries)"
+    )
+    semantic_cache_threshold: float = Field(
+        default=0.95,
+        ge=0.8,
+        le=1.0,
+        description="Minimum cosine similarity threshold for semantic cache match (0.8-1.0)"
+    )
+    
+    # Query decomposition settings
+    query_decomposition_enabled: bool = Field(
+        default=True,
+        description="Enable query decomposition for complex queries (comparisons, multi-aspect)"
+    )
+    
     # =========================================================================
     # Validators
     # =========================================================================
