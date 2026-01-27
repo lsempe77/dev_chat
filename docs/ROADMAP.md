@@ -7,6 +7,39 @@
 
 ---
 
+## Sphinx Documentation - PENDING
+
+Sphinx autodoc setup is complete in `docs/sphinx/`. 
+
+### To Enable GitHub Pages (requires GitHub Pro for private repos):
+
+1. **Upgrade to GitHub Pro** (private repo requirement)
+   - Go to: https://github.com/settings/billing/plans
+
+2. **Enable GitHub Pages**
+   - Go to: Settings → Pages
+   - Source: Select "GitHub Actions"
+   - The workflow `.github/workflows/docs.yml` will auto-deploy on push
+
+3. **Access docs at:** `https://lsempe77.github.io/dev_chat/`
+
+### Build Locally:
+```bash
+cd docs/sphinx
+sphinx-build -b html source build/html
+# Open build/html/index.html
+```
+
+### What's Documented:
+- `src/` - Core library (agents, generation, retrieval, ingestion)
+- `api/` - FastAPI routes and schemas
+- `extraction_pipeline/` - Table extraction
+- `infrastructure/` - Modal deployment
+- `evaluation/` - Test and validation scripts
+- `scripts/` - Utility scripts
+
+---
+
 ## Upcoming Features
 
 ### Immediate
