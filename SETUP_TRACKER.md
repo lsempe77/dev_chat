@@ -85,7 +85,7 @@
 
 ### Extraction Pipeline
 
-> **Active:** `extraction_pipeline/pipeline_v2_sota.py` ONLY  
+> **Active:** `extraction_pipeline/pipeline.py` ONLY  
 > **Archived:** All v1-v17 and extractor.py variants in `archive/extraction_pipeline_old/`
 
 | Pipeline | Status | Performance | Notes |

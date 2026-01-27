@@ -18,7 +18,7 @@
 2. **Metadata & Quantitative Field Extraction** - 8h
    - Extract structured fields: effect sizes, sample sizes, outcomes, geography
    - Validate V2 SOTA pipeline against ground truth
-   - Files: `extraction_pipeline/pipeline_v2_sota.py`
+   - Files: `extraction_pipeline/pipeline.py`
 
 3. **"I Don't Know" Explicit Refusal** - 2h
    - When retrieval confidence is below threshold, explicitly refuse to answer
@@ -105,7 +105,7 @@
 - **Latest Test:** Study 121058356 "Pathways out of Extreme Poverty" (763 rows extracted)
   - Output: `extraction_pipeline/outputs/121058356/extracted_data.csv`
 - **Legacy GT:** `8WR QEX Combined.xlsx` (443 rows, 43 studies)
-- **Test Script:** `evaluation/analyze_effect_sizes.py`
+- **Test Script:** `evaluation/validate_extraction.py`
 
 ### Fields Being Extracted
 | Field | Description | In Latest Test |
