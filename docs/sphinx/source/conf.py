@@ -118,7 +118,36 @@ autodoc_mock_imports = [
     'pymupdf',
     'fitz',
     'modal_lib',
+    # Added to fix Sphinx build errors
+    'nltk',
+    'scipy',
+    'sklearn',
+    'haystack',
+    'sqlalchemy',
 ]
 
 # Suppress specific warnings
-suppress_warnings = ['autodoc.import_failure']
+suppress_warnings = [
+    'autodoc.import_failure',
+    'ref.ref',  # Suppress undefined label warnings from SQLAlchemy docstrings
+]
+
+# Add custom roles for SQLAlchemy docstrings (paramref, etc.)
+def setup(app):
+    """Add custom roles to handle SQLAlchemy docstrings."""
+    from docutils.parsers.rst import roles
+    from docutils import nodes
+    
+    def paramref_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
+        """Handle :paramref: role from SQLAlchemy docstrings."""
+        node = nodes.literal(rawtext, text)
+        return [node], []
+    
+    def legacy_directive(name, arguments, options, content, lineno,
+                        content_offset, block_text, state, state_machine):
+        """Handle legacy directive from SQLAlchemy."""
+        return []
+    
+    roles.register_local_role('paramref', paramref_role)
+    
+    return {'version': '1.0', 'parallel_read_safe': True}
