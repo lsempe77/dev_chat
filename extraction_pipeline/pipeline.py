@@ -8,9 +8,9 @@ Features:
 - Stage 4: Context enrichment (LLM for outcome definitions)
 
 Usage:
-    python pipeline_v2_sota.py                    # Extract study 121058356
-    python pipeline_v2_sota.py --study_id 12345   # Extract specific study
-    python pipeline_v2_sota.py --all              # Extract all studies
+    python pipeline.py                    # Extract study 121058356
+    python pipeline.py --study_id 12345   # Extract specific study
+    python pipeline.py --all              # Extract all studies
 """
 
 import json

@@ -24,13 +24,13 @@ But the LLM was extracting only 3 rows (one per outcome). BeautifulSoup parses t
 
 ```bash
 # Extract specific study
-python pipeline_v2_sota.py --study_id 121058356
+python pipeline.py --study_id 121058356
 
 # Disable LLM classification (rules-only)
-python pipeline_v2_sota.py --no-llm
+python pipeline.py --no-llm
 
 # Disable LLM enrichment
-python pipeline_v2_sota.py --no-enrich
+python pipeline.py --no-enrich
 ```
 
 ## Output
@@ -81,14 +81,14 @@ Results are saved to `outputs/{study_id}/`:
 ## Files
 
 **Active (Current Directory):**
-- `pipeline_v2_sota.py` - **Production script** - Use this for all extraction
+- `pipeline.py` - **Production script** - Use this for all extraction
 - `outputs/` - Extracted data per study (CSV + JSON)
 - `README.md` - This documentation
 
 **Archived (Do Not Use):**
 - `../archive/extraction_pipeline_old/` - Contains 35+ deprecated scripts:
   - `extractor.py`, `extractor_v10.py` through `extractor_v17d.py`
-  - `pipeline_v2.py` (superseded by pipeline_v2_sota.py)
+  - `pipeline_v2.py` (superseded by pipeline.py)
   - Various analysis and debug scripts from development phase
   - All `v9-v17` experimental versions that led to this final version
 

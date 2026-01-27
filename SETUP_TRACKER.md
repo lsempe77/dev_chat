@@ -124,7 +124,7 @@ devchat_v2_sota/
 │   ├── modal_mineru.py     # Entry point (~230 lines)
 │   └── modal_lib/          # 8 modules (chunking, embedding, etc.)
 ├── extraction_pipeline/    # ✅ ACTIVE: Treatment effect extraction
-│   ├── pipeline_v2_sota.py # Production script (ONLY version to use)
+│   ├── pipeline.py         # Production script (ONLY version to use)
 │   └── outputs/            # Extracted data per study
 ├── evaluation/             # RAGAS, MiniCheck, test cases
 ├── scripts/                # Utility scripts
