@@ -38,6 +38,7 @@
 | **Semantic Cache** | ✅ Done | Similar query matching (>0.95 cosine), reduces LLM calls |
 | **Query Decomposition** | ✅ Done | Complex queries split into sub-queries, merged via RRF |
 | **Step-Back Prompting** | ✅ Done | Specific questions get broader context query first |
+| **Scalar Quantization** | ✅ Done | Configurable: binary (32x), scalar/int8 (4x), or none |
 | Reranking | ✅ Done | Cohere rerank-v3.5 |
 | Claim Ledger Synthesis | ✅ Done | Two-pass extraction with citations |
 | MiniCheck Verification | ✅ Done | Post-hoc NLI grounding |

@@ -343,6 +343,7 @@ def embed_and_index(
     collection_name: Optional[str] = None,
     enable_contextual: bool = True,
     enable_parent_child: bool = True,
+    quantization_type: str = "binary",
 ) -> int:
     """
     Chunk content, generate embeddings, and upsert to Qdrant.
@@ -360,6 +361,9 @@ def embed_and_index(
     - Child chunks (~200 words) are embedded for precise search
     - Parent chunks (~1000 words) provide context for synthesis
     - When a child matches, the full parent is returned to the LLM
+    
+    Args:
+        quantization_type: 'binary' (32x compression), 'scalar' (int8, 4x), or 'none'
     
     Returns:
         Number of chunks indexed
@@ -380,8 +384,8 @@ def embed_and_index(
         collection_name = QDRANT_COLLECTION_NAME
     vector_name = "dense"
     
-    # Ensure collection exists
-    _ensure_collection(qdrant, collection_name, vector_name)
+    # Ensure collection exists with specified quantization
+    _ensure_collection(qdrant, collection_name, vector_name, quantization_type)
     
     # Ensure payload indexes
     _ensure_payload_indexes(qdrant, collection_name)
@@ -552,14 +556,26 @@ def embed_and_index(
     return len(points)
 
 
-def _ensure_collection(qdrant, collection_name: str, vector_name: str):
-    """Ensure Qdrant collection exists with correct config including binary quantization and HNSW tuning."""
+def _ensure_collection(qdrant, collection_name: str, vector_name: str, quantization_type: str = "binary"):
+    """
+    Ensure Qdrant collection exists with correct config including quantization and HNSW tuning.
+    
+    Args:
+        qdrant: QdrantClient instance
+        collection_name: Name of the collection
+        vector_name: Name of the dense vector field (e.g., 'dense')
+        quantization_type: Quantization strategy - 'binary' (32x compression), 
+                          'scalar' (4x compression, int8), or 'none'
+    """
     from qdrant_client.models import (
         VectorParams, 
         Distance, 
         SparseVectorParams, 
         BinaryQuantization, 
         BinaryQuantizationConfig,
+        ScalarQuantization,
+        ScalarQuantizationConfig,
+        ScalarType,
         HnswConfigDiff,
     )
     
@@ -577,11 +593,11 @@ def _ensure_collection(qdrant, collection_name: str, vector_name: str):
                 needs_recreate = True
                 print(f"  Collection missing vector '{vector_name}'")
             
-            # Check if binary quantization is enabled
+            # Check if quantization is enabled (any type)
             quant_config = collection_info.config.quantization_config
-            if quant_config is None:
+            if quant_config is None and quantization_type != "none":
                 needs_recreate = True
-                print(f"  Collection missing binary quantization config")
+                print(f"  Collection missing quantization config (expected: {quantization_type})")
         else:
             needs_recreate = True
             print("  Collection has unnamed vectors, need named 'dense'")
@@ -596,7 +612,31 @@ def _ensure_collection(qdrant, collection_name: str, vector_name: str):
             raise Exception("Recreate collection")
             
     except Exception as e:
-        print(f"  Creating collection with Cohere 1536-dim dense + sparse + binary quantization + HNSW tuning...")
+        # Build quantization config based on type
+        quant_config = None
+        quant_name = "no quantization"
+        
+        if quantization_type == "binary":
+            # Binary: ~32x compression, fastest, best for Cohere embed-v4
+            quant_config = BinaryQuantization(
+                binary=BinaryQuantizationConfig(
+                    always_ram=True,  # Keep quantized vectors in RAM for speed
+                )
+            )
+            quant_name = "binary quantization (32x compression)"
+        elif quantization_type == "scalar":
+            # Scalar: ~4x compression, int8 quantization, better precision than binary
+            quant_config = ScalarQuantization(
+                scalar=ScalarQuantizationConfig(
+                    type=ScalarType.INT8,
+                    quantile=0.99,  # Calibration quantile for better precision
+                    always_ram=True,
+                )
+            )
+            quant_name = "scalar quantization (int8, 4x compression)"
+        # else: None = no quantization
+        
+        print(f"  Creating collection with Cohere 1536-dim dense + sparse + {quant_name} + HNSW tuning...")
         qdrant.create_collection(
             collection_name=collection_name,
             vectors_config={
@@ -615,16 +655,9 @@ def _ensure_collection(qdrant, collection_name: str, vector_name: str):
             sparse_vectors_config={
                 "sparse": SparseVectorParams()
             },
-            # Binary quantization: ~32x compression, ~40x speedup for Cohere embed-v4
-            # Qdrant auto-quantizes stored vectors and uses them for fast candidate retrieval
-            # with automatic rescoring using original vectors for final ranking
-            quantization_config=BinaryQuantization(
-                binary=BinaryQuantizationConfig(
-                    always_ram=True,  # Keep quantized vectors in RAM for speed
-                )
-            ),
+            quantization_config=quant_config,
         )
-        print(f"  Created collection '{collection_name}' with dense + sparse + binary quantization + HNSW(m=16, ef_construct=200)")
+        print(f"  Created collection '{collection_name}' with dense + sparse + {quant_name} + HNSW(m=16, ef_construct=200)")
 
 
 def _ensure_payload_indexes(qdrant, collection_name: str):

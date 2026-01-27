@@ -108,15 +108,6 @@
 - Improves accuracy on complex synthesis questions
 - Files: `src/generation/claim_ledger.py`
 
-### 2. Additional Payload Indexes - 2h
-- Index `year`, `sector`, `study_type` in Qdrant for faster filtering
-- Files: `infrastructure/modal_lib/embedding.py`
-
-### 3. Scalar Quantization Option - 2h
-- Add scalar quantization (int8) as alternative to binary
-- Better precision/speed tradeoff for some use cases
-- Files: `infrastructure/modal_lib/embedding.py`
-
 ---
 
 ## 📚 References

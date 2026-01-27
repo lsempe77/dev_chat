@@ -79,6 +79,15 @@ class Settings(BaseSettings):
     qdrant_api_key: Optional[str] = Field(default=None, description="Qdrant API key (for cloud)")
     qdrant_collection_name: str = Field(default="devchat_v2_contextual", description="SOTA collection: Hybrid BM25+Dense, Contextual Prefixes")
     
+    # Quantization type for Qdrant collections
+    # - 'binary': ~32x compression, fastest, slight precision loss (default, best for Cohere embed-v4)
+    # - 'scalar': ~4x compression, int8 quantization, better precision than binary
+    # - 'none': No quantization, full precision, highest memory usage
+    qdrant_quantization_type: str = Field(
+        default="binary",
+        description="Quantization type for Qdrant: 'binary' (fastest), 'scalar' (int8, balanced), or 'none'"
+    )
+    
     # =========================================================================
     # Observability
     # =========================================================================
