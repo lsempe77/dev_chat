@@ -103,21 +103,16 @@
 
 > These require more effort but provide meaningful improvements.
 
-### 1. Step-Back Prompting - 4h
-- For specific questions, first ask a more general question
-- "What's the effect size in Bossuroy 2024?" → First: "What outcomes does Bossuroy 2024 measure?"
-- Files: `src/retrieval/query_processor.py`
-
-### 2. Self-Consistency - 8h
+### 1. Self-Consistency - 8h
 - Generate 3 answers with temperature > 0, select most consistent
 - Improves accuracy on complex synthesis questions
 - Files: `src/generation/claim_ledger.py`
 
-### 3. Additional Payload Indexes - 2h
+### 2. Additional Payload Indexes - 2h
 - Index `year`, `sector`, `study_type` in Qdrant for faster filtering
 - Files: `infrastructure/modal_lib/embedding.py`
 
-### 4. Scalar Quantization Option - 2h
+### 3. Scalar Quantization Option - 2h
 - Add scalar quantization (int8) as alternative to binary
 - Better precision/speed tradeoff for some use cases
 - Files: `infrastructure/modal_lib/embedding.py`

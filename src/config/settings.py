@@ -308,6 +308,12 @@ class Settings(BaseSettings):
         description="Enable query decomposition for complex queries (comparisons, multi-aspect)"
     )
     
+    # Step-back prompting settings
+    step_back_prompting_enabled: bool = Field(
+        default=True,
+        description="Enable step-back prompting for specific questions (ask general question first)"
+    )
+    
     # =========================================================================
     # Validators
     # =========================================================================

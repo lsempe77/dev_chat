@@ -171,6 +171,34 @@ Respond in JSON format:
 When in doubt, use null/empty. Better to return no filters than incorrect ones."""
 
 
+STEP_BACK_PROMPT = """You are a research query analyst. Given a specific user question, \
+determine if it would benefit from a "step-back" - asking a more general question first.
+
+STEP-BACK STRATEGY:
+- For narrow questions about specific studies/programs, step back to the broader topic
+- For questions about specific findings, step back to what outcomes the study measures
+- For questions about one intervention, step back to the intervention category
+
+WHEN TO STEP BACK:
+- "What's the effect size in Bossuroy 2024?" → "What outcomes does Bossuroy 2024 measure?"
+- "Did the TUP program reduce poverty?" → "What is the TUP (Targeting the Ultra Poor) program and what does it aim to achieve?"
+- "How much did school meals improve test scores?" → "What are the effects of school feeding programs on educational outcomes?"
+
+WHEN NOT TO STEP BACK:
+- Already general questions ("What works in education?")
+- Simple factual lookups ("Who authored this study?")
+- Comparison questions (these use decomposition instead)
+
+User Query: {query}
+
+Respond in JSON format:
+{{
+    "should_step_back": true/false,
+    "reason": "brief explanation",
+    "step_back_query": "the more general question" or null
+}}"""
+
+
 # =============================================================================
 # SYNTHESIS PROMPTS
 # =============================================================================

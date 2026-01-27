@@ -18,6 +18,7 @@ from src.config.prompts import (
     QUERY_EXPANSION_PROMPT,
     QUERY_VARIANTS_PROMPT,
     QUERY_DECOMPOSITION_PROMPT,
+    STEP_BACK_PROMPT,
 )
 from src.config.settings import settings
 from src.utils.logging import get_logger
@@ -347,6 +348,65 @@ class QueryProcessor:
         """Synchronous version of decompose_query."""
         import asyncio
         return asyncio.run(self.decompose_query(query))
+
+    async def generate_step_back_query(self, query: str) -> Optional[str]:
+        """
+        Generate a step-back query for specific questions.
+        
+        Step-Back Prompting asks a more general question first to provide
+        broader context before retrieving for the specific question.
+        
+        Example:
+            "What's the effect size in Bossuroy 2024?" 
+            → Step-back: "What outcomes does Bossuroy 2024 measure?"
+        
+        Args:
+            query: Original user query
+            
+        Returns:
+            Step-back query string, or None if not needed
+            
+        Reference: Step-Back Prompting (https://arxiv.org/abs/2310.06117)
+        """
+        if not getattr(settings, 'step_back_prompting_enabled', True):
+            return None
+        
+        try:
+            llm = self._get_llm()
+            prompt = STEP_BACK_PROMPT.format(query=query)
+            
+            response = await llm.acomplete(prompt)
+            
+            # Parse JSON response
+            try:
+                data = json.loads(response.text.strip())
+            except json.JSONDecodeError:
+                import re
+                json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group())
+                else:
+                    return None
+            
+            should_step_back = data.get("should_step_back", False)
+            step_back_query = data.get("step_back_query")
+            reason = data.get("reason", "")
+            
+            if should_step_back and step_back_query:
+                logger.info(f"Step-back query generated: {reason}")
+                logger.debug(f"Step-back: '{step_back_query}'")
+                return step_back_query
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Step-back prompting failed: {e}")
+            return None
+    
+    def generate_step_back_query_sync(self, query: str) -> Optional[str]:
+        """Synchronous version of generate_step_back_query."""
+        import asyncio
+        return asyncio.run(self.generate_step_back_query(query))
 
     async def generate_query_variants(
         self, 

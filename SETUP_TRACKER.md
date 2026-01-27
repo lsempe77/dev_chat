@@ -37,6 +37,7 @@
 | **Retrieval Metrics** | ✅ Done | Recall@K, NDCG, MRR logged to Langfuse |
 | **Semantic Cache** | ✅ Done | Similar query matching (>0.95 cosine), reduces LLM calls |
 | **Query Decomposition** | ✅ Done | Complex queries split into sub-queries, merged via RRF |
+| **Step-Back Prompting** | ✅ Done | Specific questions get broader context query first |
 | Reranking | ✅ Done | Cohere rerank-v3.5 |
 | Claim Ledger Synthesis | ✅ Done | Two-pass extraction with citations |
 | MiniCheck Verification | ✅ Done | Post-hoc NLI grounding |

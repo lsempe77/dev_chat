@@ -260,6 +260,7 @@ class DevChatAgent:
         
         # Query Decomposition: break complex queries into sub-queries
         sub_queries = []
+        step_back_query = None
         if getattr(settings, 'query_decomposition_enabled', True):
             try:
                 sub_queries = await self.query_processor.decompose_query(query)
@@ -267,6 +268,15 @@ class DevChatAgent:
                     logger.info(f"Query decomposed into {len(sub_queries)} sub-queries")
             except Exception as e:
                 logger.warning(f"Query decomposition failed: {e}")
+        
+        # Step-Back Prompting: for specific questions, ask a general question first
+        if not sub_queries and getattr(settings, 'step_back_prompting_enabled', True):
+            try:
+                step_back_query = await self.query_processor.generate_step_back_query(query)
+                if step_back_query:
+                    logger.info(f"Step-back query generated")
+            except Exception as e:
+                logger.warning(f"Step-back prompting failed: {e}")
         
         # Multi-Query RAG-Fusion: generate query variants for improved recall
         if settings.multi_query_enabled:
@@ -281,6 +291,15 @@ class DevChatAgent:
                         filters=active_filters,
                     )
                     logger.info(f"Retrieved with query decomposition ({len(sub_queries)} sub-queries)")
+                elif step_back_query:
+                    # Retrieve using step-back prompting
+                    results = await self.retriever.retrieve_with_step_back(
+                        query=retrieval_query,
+                        step_back_query=step_back_query,
+                        top_k=retrieval_top_k,
+                        filters=active_filters,
+                    )
+                    logger.info(f"Retrieved with step-back prompting")
                 else:
                     # Standard RAG-Fusion with query variants
                     query_variants = await self.query_processor.generate_query_variants(
@@ -671,19 +690,34 @@ class DevChatAgent:
         
         # Query decomposition for complex queries
         sub_queries = []
+        step_back_query = None
         if getattr(settings, 'query_decomposition_enabled', True):
             try:
                 sub_queries = await self.query_processor.decompose_query(query)
             except Exception as e:
                 logger.warning(f"Query decomposition failed in stream: {e}")
         
-        # Retrieve (with decomposition or multi-query if enabled)
+        # Step-back for specific questions
+        if not sub_queries and getattr(settings, 'step_back_prompting_enabled', True):
+            try:
+                step_back_query = await self.query_processor.generate_step_back_query(query)
+            except Exception as e:
+                logger.warning(f"Step-back prompting failed in stream: {e}")
+        
+        # Retrieve (with decomposition, step-back, or multi-query if enabled)
         if settings.multi_query_enabled:
             try:
                 if sub_queries:
                     results = await self.retriever.retrieve_with_decomposition(
                         query=processed_query.primary_query,
                         sub_queries=sub_queries,
+                        top_k=settings.retrieval_top_k,
+                        filters=processed_query.filters if processed_query.filters.has_filters() else None,
+                    )
+                elif step_back_query:
+                    results = await self.retriever.retrieve_with_step_back(
+                        query=processed_query.primary_query,
+                        step_back_query=step_back_query,
                         top_k=settings.retrieval_top_k,
                         filters=processed_query.filters if processed_query.filters.has_filters() else None,
                     )

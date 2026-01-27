@@ -396,6 +396,42 @@ class HybridRetriever:
             alpha=alpha,
         )
 
+    async def retrieve_with_step_back(
+        self,
+        query: str,
+        step_back_query: str,
+        top_k: int = settings.retrieval_top_k,
+        filters: Optional[ExtractedFilters] = None,
+        alpha: float = settings.hybrid_alpha,
+    ) -> List[RetrievalResult]:
+        """
+        Retrieve using step-back prompting strategy.
+        
+        First retrieves for the broader step-back query to get context,
+        then retrieves for the specific query. Results are merged with RRF,
+        giving the specific query higher weight.
+        
+        Args:
+            query: Original specific query
+            step_back_query: Broader context query
+            top_k: Number of final results
+            filters: Metadata filters
+            alpha: Dense/sparse weight
+            
+        Returns:
+            Merged results prioritizing specific query matches
+        """
+        logger.info(f"Step-back retrieval: general='{step_back_query[:50]}...'")
+        
+        # Retrieve for both queries
+        # Give specific query more weight by putting it first (RRF favors earlier results)
+        return await self.retrieve_multi_query(
+            queries=[query, step_back_query],
+            top_k=top_k,
+            filters=filters,
+            alpha=alpha,
+        )
+
     def _reciprocal_rank_fusion(
         self,
         result_lists: List[List[RetrievalResult]],
