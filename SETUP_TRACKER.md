@@ -39,6 +39,17 @@
 | **Query Decomposition** | ✅ Done | Complex queries split into sub-queries, merged via RRF |
 | **Step-Back Prompting** | ✅ Done | Specific questions get broader context query first |
 | **Scalar Quantization** | ✅ Done | Configurable: binary (32x), scalar/int8 (4x), or none |
+
+#### Quantization Options Reference
+
+| Setting | Compression | Precision | Speed | When to Use |
+|---------|-------------|-----------|-------|-------------|
+| `binary` | ~32x | Good | Fastest | **Default** - Cohere embed-v4 is optimized for this |
+| `scalar` | ~4x | Better | Fast | When precision is critical (medical/legal data) |
+| `none` | 1x | Full | Slower | Small collections, maximum accuracy needed |
+
+**To change:** Set `QDRANT_QUANTIZATION_TYPE=scalar` in `.env`, then delete collection and re-index.
+
 | Reranking | ✅ Done | Cohere rerank-v3.5 |
 | Claim Ledger Synthesis | ✅ Done | Two-pass extraction with citations |
 | MiniCheck Verification | ✅ Done | Post-hoc NLI grounding |

@@ -80,9 +80,19 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = Field(default="devchat_v2_contextual", description="SOTA collection: Hybrid BM25+Dense, Contextual Prefixes")
     
     # Quantization type for Qdrant collections
-    # - 'binary': ~32x compression, fastest, slight precision loss (default, best for Cohere embed-v4)
-    # - 'scalar': ~4x compression, int8 quantization, better precision than binary
-    # - 'none': No quantization, full precision, highest memory usage
+    # =========================================================================
+    # QUANTIZATION OPTIONS (infrastructure-level, not user-facing):
+    # 
+    # | Type     | Compression | Precision | Speed   | Use Case                       |
+    # |----------|-------------|-----------|---------|--------------------------------|
+    # | 'binary' | ~32x        | Lower     | Fastest | Default, Cohere embed-v4       |
+    # | 'scalar' | ~4x         | Better    | Fast    | When precision is critical     |
+    # | 'none'   | 1x          | Full      | Slower  | Small collections, max accuracy|
+    # 
+    # NOTE: Changing this requires DELETING the collection and RE-INDEXING all documents.
+    # Binary is optimal for Cohere embed-v4 (trained for binary quantization).
+    # Only change if you have specific precision requirements (e.g., medical/legal).
+    # =========================================================================
     qdrant_quantization_type: str = Field(
         default="binary",
         description="Quantization type for Qdrant: 'binary' (fastest), 'scalar' (int8, balanced), or 'none'"
