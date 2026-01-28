@@ -1,8 +1,11 @@
 # DevChat v2.0 - Railway Production Dockerfile
 # Slim image for API-only deployment (no PDF processing)
-# Build: 2026-01-02 - force cache invalidation
+# Build: 2026-01-28 - force cache invalidation
 
 FROM python:3.12-slim
+
+# Build arg to force cache bust if needed
+ARG CACHE_BUST=1
 
 WORKDIR /app
 
