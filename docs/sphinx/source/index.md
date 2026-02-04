@@ -47,6 +47,8 @@ changelog
 - PDF citation highlighting
 - Zotero integration
 - Study design classification (22 types)
+- **Quantitative Evidence API** - Full treatment effect data (coefficients, SEs, sample sizes)
+- **Chatbot Integration** - Inject quantitative context into RAG synthesis
 
 ## Indices and tables
 

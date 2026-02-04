@@ -91,3 +91,37 @@ Two-pass extraction: first identifies claims with citations, second verifies eac
 
 ### Multi-tenant Architecture
 Each RAG project has its own Qdrant collection. Supabase RLS ensures users only see their own data.
+
+### Quantitative Evidence Integration
+
+The extraction pipeline stores **full treatment effect data** in Supabase:
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                      Extraction Pipeline                              │
+│  ┌───────────────┐    ┌────────────────┐    ┌──────────────────────┐ │
+│  │ PDF Tables    │ →  │ Value Extraction│ →  │ extracted_estimates  │ │
+│  │ (from R2)     │    │ (LLM + Rules)   │    │ (Supabase Table)     │ │
+│  └───────────────┘    └────────────────┘    └──────────┬───────────┘ │
+└────────────────────────────────────────────────────────┼─────────────┘
+                                                         │
+                                                         ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                        /extraction/* API                              │
+│  ┌───────────────┐    ┌────────────────┐    ┌──────────────────────┐ │
+│  │ Study Effects │    │ Outcome Summary │    │ Chatbot Context      │ │
+│  │ (full quant)  │    │ (meta-analysis) │    │ (prompt injection)   │ │
+│  └───────────────┘    └────────────────┘    └──────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Stored Data (28 columns):**
+- Treatment effect data: `treatment_arm`, `outcome_name`, `outcome_category`
+- Quantitative results: `coefficient`, `standard_error`, `p_value`, `ci_lower`, `ci_upper`
+- Sample sizes: `sample_size`, `n_treatment`, `n_control`
+- Control statistics: `control_mean`, `control_sd`
+- Effect sizes: `cohens_d`, `hedges_g`, `effect_size_assumption`
+- Study metadata: `authors`, `year`, `country`, `study_design`
+
+**Chatbot Integration:**
+The `ChatbotEffectContext` model provides pre-formatted quantitative summaries for injection into RAG synthesis prompts, enabling evidence-based claims with specific statistics.

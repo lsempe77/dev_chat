@@ -47,6 +47,31 @@ The `api/` package contains the FastAPI backend.
    :show-inheritance:
 ```
 
+## Extraction Routes
+
+Serves quantitative evidence (coefficients, SEs, sample sizes, effect sizes) for chatbot integration.
+
+```{eval-rst}
+.. automodule:: api.routes.extraction
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+### Key Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/extraction/studies/{id}/effects` | GET | All estimates for a study |
+| `/extraction/effects` | GET | Query with filters |
+| `/extraction/outcomes/summary` | GET | Cross-study meta-analysis |
+| `/extraction/evidence-panel` | GET | Full Evidence Panel data |
+| `/extraction/chatbot-context` | GET | Compact context for prompts |
+| `/extraction/chatbot-context/for-query` | POST | Query-relevant effects |
+| `/extraction/stats` | GET | Overall statistics |
+
+See {doc}`extraction` for complete documentation.
+
 ## Admin Routes
 
 ### Documents
@@ -109,6 +134,17 @@ The `api/` package contains the FastAPI backend.
 
 ```{eval-rst}
 .. automodule:: api.schemas.admin
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
+
+### Extraction Schemas
+
+Full quantitative data models for treatment effects:
+
+```{eval-rst}
+.. automodule:: api.schemas.extraction
    :members:
    :undoc-members:
    :show-inheritance:
