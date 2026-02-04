@@ -75,15 +75,24 @@ DevChat includes a **comprehensive 50-part tutorial series** to help you underst
 
 ## �📊 Quality Metrics
 
-Our citation quality has been rigorously evaluated:
+Our systems have been rigorously evaluated:
 
+### Citation Quality (RAG)
 | Metric | Score | Description |
 | :----: | :---: | ----------- |
 | 🎯 **Faithfulness** | **66.5%** | Claims grounded in retrieved documents |
 | 📚 **Citation Recall** | **98.9%** | All claims properly cited |
 | ✅ **Citation Precision** | **98.9%** | Citations point to correct sources |
 
-Evaluated on 8 golden queries using MiniCheck NLI verification
+### Extraction Pipeline V3
+| Metric | Value | Description |
+| :----: | :---: | ----------- |
+| 📋 **Table Classification** | **88%+** | Accuracy on ground truth annotations |
+| 📊 **RESULTS Tables** | **1,115** | From 86 studies in corpus |
+| 🔢 **Values Extracted** | **11,765** | Coefficients, SEs, p-values |
+| 📈 **Coefficient Coverage** | **100%** | All rows have coefficient value |
+| 📉 **SE Coverage** | **57.7%** | Standard errors found |
+| 📌 **P-value Coverage** | **30.2%** | P-values extracted |
 
 ---
 
@@ -96,9 +105,10 @@ Evaluated on 8 golden queries using MiniCheck NLI verification
 ### 📄 Smart Ingestion
 
 - **MinerU GPU parsing** - Tables, figures, equations
+- **8-step post-processing** - Artifact removal, header grafting
+- **List of Tables repair** - Fix corrupted captions from TOC
 - **Page-aware chunking** - 256 words with page tracking
 - **Metadata enrichment** - CrossRef/OpenAlex lookup
-- **Zotero sync** - Import entire collections
 
 </td>
 <td width="33%">
@@ -124,6 +134,25 @@ Evaluated on 8 golden queries using MiniCheck NLI verification
 </td>
 </tr>
 </table>
+
+### 📊 Extraction Pipeline V3
+
+Automatically extract effect sizes from academic papers:
+
+```bash
+# Classify all tables in corpus
+python -m extraction_pipeline.batch_classify_v3
+
+# Extract values from RESULTS tables
+python -m extraction_pipeline.batch_extract_values
+```
+
+| Stage | Tool | Output |
+| ----- | ---- | ------ |
+| **1. Post-process** | `mineru_postprocessor.py` | Remove artifacts (52→45 tables) |
+| **2. Caption repair** | `list_of_tables_parser.py` | Fix 9 corrupted captions |
+| **3. Classify** | `table_classifier_v3.py` | RESULTS / DESCRIPTIVE / SKIP |
+| **4. Extract** | `batch_extract_values.py` | Coefficients, SEs, p-values |
 
 ### 🎛️ Admin Panel
 
@@ -257,7 +286,7 @@ devchat_v2_sota/
 │   ├── routes/               # API endpoints
 │   │   ├── admin/           # Admin panel APIs
 │   │   ├── chat.py          # Chat/query endpoint
-│   │   └── api.py           # RAG management
+│   │   └── rags.py          # RAG management
 │   └── schemas/              # Pydantic models
 │
 ├── 📂 src/                    # Core Python libraries
@@ -266,6 +295,16 @@ devchat_v2_sota/
 │   ├── generation/           # ClaimLedger synthesis
 │   ├── ingestion/            # Embeddings, parsers
 │   └── utils/                # Langfuse, caching
+│
+├── 📂 extraction_pipeline/    # Table extraction & classification
+│   ├── core/                 # Config, errors, LLM client
+│   ├── adapters/             # Schema conversion
+│   ├── postprocessing/       # Effect sizes, outcome classification
+│   ├── table_classifier_v3.py  # LLM-based classification
+│   ├── batch_classify_v3.py    # Batch classification
+│   ├── batch_extract_values.py # Extract coefficients/SEs
+│   ├── mineru_postprocessor.py # 8-step artifact removal
+│   └── list_of_tables_parser.py # Caption repair
 │
 ├── 📂 frontend/               # Next.js 15 app
 │   └── src/
@@ -276,6 +315,7 @@ devchat_v2_sota/
 ├── 📂 infrastructure/         # Modal configs
 ├── 📂 evaluation/             # Quality metrics
 ├── 📂 scripts/                # Utilities
+├── 📂 tutorials/              # 50-part learning series
 ├── 📂 docs/                   # Documentation
 └── 📂 archive/                # Historical files
 ```
@@ -308,7 +348,10 @@ devchat_v2_sota/
 - [x] Study design classification (22 types)
 - [x] Contextual retrieval (49% fewer failures)
 - [x] Parent-child chunking
-- [x] Extraction Pipeline V2 SOTA (100% table match)
+- [x] **Extraction Pipeline V3** - LLM table classification with 88%+ accuracy
+- [x] **MinerU Post-Processing** - 8-step artifact removal (52→45 tables)
+- [x] **List of Tables Cross-Reference** - Caption repair from TOC
+- [x] **Batch Value Extraction** - 11,765 effect sizes from 1,115 RESULTS tables
 
 ### 🔜 Coming Soon
 
