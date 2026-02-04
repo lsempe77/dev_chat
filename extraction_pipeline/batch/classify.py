@@ -12,9 +12,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Add parent directory for imports
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from table_classifier_v3 import TableClassifierV3
+from extraction_pipeline.classification.classifier_v3 import TableClassifierV3
 
 load_dotenv()
 

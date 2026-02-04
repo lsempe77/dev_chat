@@ -53,7 +53,7 @@ DevChat is an **enterprise-grade RAG platform** designed for researchers and evi
 
 ---
 
-## � Learn the Codebase
+## 📚 Learn the Codebase
 
 DevChat includes a **comprehensive 50-part tutorial series** to help you understand and extend the codebase:
 
@@ -141,10 +141,13 @@ Automatically extract effect sizes from academic papers:
 
 ```bash
 # Classify all tables in corpus
-python -m extraction_pipeline.batch_classify_v3
+python -m extraction_pipeline.batch.classify
 
 # Extract values from RESULTS tables
-python -m extraction_pipeline.batch_extract_values
+python -m extraction_pipeline.batch.extract
+
+# Full pipeline for single study
+python -m extraction_pipeline.pipeline --study_id 121058356
 ```
 
 | Stage | Tool | Output |
@@ -181,10 +184,16 @@ graph LR
         E[MinerU] --> F[Modal GPU]
     end
     
+    subgraph Extraction
+        Q[extraction_pipeline] --> R[Table Classification]
+        R --> S[Value Extraction]
+        S --> T[Effect Sizes CSV]
+    end
+    
     subgraph Storage
         G[(Qdrant)] --> H[Vectors]
         I[(Supabase)] --> J[PostgreSQL]
-        K[(R2)] --> L[PDFs]
+        K[(R2)] --> L[PDFs + JSON]
     end
     
     subgraph LLM
@@ -199,11 +208,9 @@ graph LR
     C --> E
     E --> G
     E --> K
+    K --> Q
+    Q --> M
 ```
-
-### Full Architecture Diagram
-
-See [`devchat_architecture_enhanced_v2.mermaid`](devchat_architecture_enhanced_v2.mermaid) for the complete system diagram.
 
 ---
 

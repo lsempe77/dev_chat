@@ -1,5 +1,8 @@
 """
 Pipeline V2 SOTA: Production-Ready Extraction for Impact Evaluation Papers
+==========================================================================
+
+This is a slim orchestration file - all functionality lives in modular components.
 
 Features:
 - Stage 1: Metadata extraction (direct from MineRU JSON)
@@ -11,29 +14,73 @@ Usage:
     python pipeline.py                    # Extract study 121058356
     python pipeline.py --study_id 12345   # Extract specific study
     python pipeline.py --all              # Extract all studies
+
+Module Structure:
+    core/           - LLM client, R2 storage, config, errors
+    parsing/        - OCR fixing, cell parsing
+    classification/ - Table classification (rules + LLM)
+    extraction/     - Table extractors, metadata, prose, sample sizes
+    enrichment/     - Outcome classification, analysis types, context
+    postprocessing/ - Effect sizes, MinerU cleanup
+    batch/          - Batch processing commands
+    adapters/       - Schema conversion utilities
 """
 
 import json
 import re
 import os
-import sys
 import argparse
-from typing import Optional, List, Dict, Any
-from bs4 import BeautifulSoup
+from typing import Optional, List
+
 import pandas as pd
-import boto3
-from dotenv import load_dotenv
-from openai import OpenAI
+from bs4 import BeautifulSoup
 
-# Load environment variables
-load_dotenv()
+# ============================================================================
+# IMPORTS FROM MODULAR COMPONENTS
+# ============================================================================
 
-# Add src to path for settings
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from src.config.settings import Settings
+# Core utilities
+from extraction_pipeline.core.storage import get_r2_client, load_mineru_json
 
-# Initialize settings
-settings = Settings()
+# Parsing
+from extraction_pipeline.parsing.ocr import fix_ocr_spacing
+
+# Classification
+from extraction_pipeline.classification import (
+    classify_table_rules,
+    classify_table_llm,
+    classify_table,
+    classify_all_tables_llm,
+)
+
+# Extraction
+from extraction_pipeline.extraction import (
+    detect_table_orientation,
+    extract_treatments_in_cols_table,
+    extract_outcomes_in_rows_se_split,
+    extract_comparison_format_table,
+    extract_transposed_table,
+    extract_results_table,
+    extract_metadata,
+    extract_metadata_llm,
+    extract_sample_sizes_from_prose,
+    extract_effects_from_prose,
+    extract_effects_from_figures,
+)
+
+# Enrichment
+from extraction_pipeline.enrichment import (
+    calculate_effect_sizes,
+    classify_outcomes,
+    classify_analysis_type,
+    enrich_with_context,
+)
+
+# Adapters (for schema conversion)
+from extraction_pipeline.adapters import (
+    row_to_extracted_estimate,
+    convert_dataframe_to_schema,
+)
 
 # ============================================================================
 # CONFIGURATION
@@ -42,430 +89,176 @@ settings = Settings()
 DEFAULT_STUDY_ID = "121058356"
 OUTPUT_DIR = "extraction_pipeline/outputs"
 
-# LLM Configuration (via OpenRouter)
-LLM_MODEL = "anthropic/claude-3.5-haiku"  # Cost-effective, fast model
 
 # ============================================================================
-# LLM CLIENT (via OpenRouter)
-# ============================================================================
-
-def get_openrouter_client():
-    """Get OpenRouter client (uses OpenAI-compatible API)."""
-    api_key = os.environ.get('OPENROUTER_API_KEY', settings.openrouter_api_key)
-    return OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key
-    )
-
-
-def call_llm(prompt: str, max_tokens: int = 100) -> str:
-    """Call LLM via OpenRouter."""
-    try:
-        client = get_openrouter_client()
-        response = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=max_tokens
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"    [LLM ERROR] {e}")
-        return ""
-
-# ============================================================================
-# R2 STORAGE
-# ============================================================================
-
-def get_r2_client():
-    """Get R2 storage client."""
-    return boto3.client(
-        's3',
-        endpoint_url=f"https://{os.environ['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com",
-        aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
-        aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY']
-    )
-
-
-def load_mineru_json(study_id: str) -> Optional[dict]:
-    """Load MineRU JSON from R2 storage."""
-    try:
-        client = get_r2_client()
-        key = f"rags/0816e8d3-ab23-417c-bf3f-e45531411c73/outputs/json/8d23199222c8_PDFs_of_included_programs_{study_id}.json"
-        response = client.get_object(Bucket='devchat-pdfs', Key=key)
-        return json.loads(response['Body'].read().decode('utf-8'))
-    except Exception as e:
-        print(f"  [ERROR] Failed to load study {study_id}: {e}")
-        return None
-
-# ============================================================================
-# STAGE 1: METADATA EXTRACTION
-# ============================================================================
-
-def extract_metadata(doc: dict, study_id: str) -> dict:
-    """Extract paper metadata directly from MineRU JSON."""
-    return {
-        'study_id': study_id,
-        'title': doc.get('title', ''),
-        'authors': doc.get('authors', []),
-        'year': doc.get('year', ''),
-        'abstract': doc.get('abstract', ''),
-        'page_count': doc.get('page_count', 0),
-        'source_key': doc.get('source_key', '')
-    }
-
-# ============================================================================
-# STAGE 2: TABLE CLASSIFICATION
-# ============================================================================
-
-def classify_table_rules(caption: str) -> str:
-    """
-    Rules-based table classification.
-    Returns: 'results', 'descriptive', 'figure', or 'unknown'
-    """
-    # Normalize: remove extra spaces (handles OCR like "Ta b l e 5")
-    caption_normalized = re.sub(r'\s+', '', caption.lower())
-    caption_lower = caption.lower().strip()
-    
-    # Rule 1: Figure
-    if re.search(r'figure\s*\d', caption_lower) or caption_normalized.startswith('figure'):
-        return 'figure'
-    
-    # Rule 2: Empty caption
-    if not caption_lower.strip():
-        return 'unknown'
-    
-    # Rule 3: Descriptive/definition tables
-    descriptive_keywords = ['balance', 'baseline', 'attrition', 'compliance', 
-                           'definition', 'construction', 'variable', 'hypothesis',
-                           'summary statistics', 'sample characteristics']
-    if any(kw in caption_normalized for kw in descriptive_keywords):
-        return 'descriptive'
-    
-    # Rule 4: Has "table" in caption → likely results
-    if 'table' in caption_normalized:
-        return 'results'
-    
-    return 'unknown'
-
-
-def classify_table_llm(caption: str, html_preview: str) -> str:
-    """
-    LLM-based table classification for ambiguous cases.
-    """
-    prompt = f"""You are classifying tables from an academic impact evaluation paper.
-
-TASK: Does this table contain TREATMENT EFFECTS (regression coefficients with standard errors)?
-
-Classification:
-- "results": Contains regression coefficients, treatment effects, impact estimates with standard errors in parentheses like "0.15*** (0.05)"
-- "descriptive": Contains summary statistics, means, balance tests, variable definitions, sample characteristics
-
-Caption: {caption if caption else "[No caption]"}
-
-Table HTML preview:
-{html_preview[:800]}
-
-Reply with ONLY one word: results or descriptive"""
-
-    result = call_llm(prompt, max_tokens=10)
-    if result.lower() in ['results', 'descriptive']:
-        return result.lower()
-    return 'results'  # Default to extracting
-
-
-def classify_table(caption: str, html: str, use_llm: bool = True) -> str:
-    """
-    Classify table using rules first, then LLM for ambiguous cases.
-    """
-    # First try rules-based
-    rules_result = classify_table_rules(caption)
-    
-    if rules_result in ['figure', 'descriptive', 'results']:
-        return rules_result
-    
-    # For 'unknown', use LLM if enabled
-    if use_llm and rules_result == 'unknown':
-        return classify_table_llm(caption, html)
-    
-    return 'results'  # Default to extracting
-
-# ============================================================================
-# STAGE 3: TABLE PARSING (BeautifulSoup)
-# ============================================================================
-
-def parse_coefficient_se(cell_text: str) -> tuple:
-    """
-    Parse coefficient and SE from cell text.
-    Handles: "0.15*** (0.05)", "(0.04) 0.18***", "0.12***"
-    Returns: (coefficient, standard_error, significance)
-    """
-    if not cell_text or cell_text.strip() == "":
-        return None, None, None
-    
-    text = cell_text.strip()
-    
-    # Extract significance stars
-    stars = ""
-    if "***" in text:
-        stars = "***"
-    elif "**" in text and "***" not in text:
-        stars = "**"
-    elif "*" in text and "**" not in text:
-        stars = "*"
-    
-    # Find coefficient and SE
-    paren_match = re.search(r'\(([^)]+)\)', text)
-    if paren_match:
-        paren_content = paren_match.group(1)
-        paren_nums = re.findall(r'-?\d+\.?\d*', paren_content)
-        if paren_nums:
-            se = float(paren_nums[0])
-            # Find coefficient (number not in parentheses)
-            non_paren_text = re.sub(r'\([^)]+\)', '', text)
-            non_paren_nums = re.findall(r'-?\d+\.?\d*', non_paren_text)
-            if non_paren_nums:
-                coef = float(non_paren_nums[0])
-                return coef, se, stars
-    
-    # Fallback: just find numbers
-    numbers = re.findall(r'-?\d+\.?\d*', text)
-    if len(numbers) >= 1:
-        return float(numbers[0]), None, stars
-    
-    return None, None, None
-
-
-def extract_results_table(table: dict, study_id: str) -> List[Dict[str, Any]]:
-    """
-    Extract all data cells from a results table.
-    Returns list of dicts, one per extracted value.
-    """
-    caption = ' '.join(table.get('table_caption', []))
-    html = table.get('table_body', '')
-    page_idx = table.get('page_idx', 0)
-    
-    # Parse table number from caption
-    caption_normalized = re.sub(r'\s+', '', caption)
-    table_num_match = re.search(r'[Tt]able\s*[A.]?(\d+)', caption_normalized)
-    table_number = table_num_match.group(0) if table_num_match else None
-    
-    soup = BeautifulSoup(html, 'html.parser')
-    rows = soup.find_all('tr')
-    
-    if not rows:
-        return []
-    
-    # Parse header to get outcome names
-    header_row = rows[0]
-    header_cells = header_row.find_all('td')
-    outcome_names = []
-    for cell in header_cells[1:]:  # Skip first (empty or row label header)
-        text = cell.get_text(strip=True)
-        if text:
-            # Clean column numbers like "(1) Gross consumption" -> "Gross consumption"
-            match = re.match(r'\(?\d+\)?\s*(.+)', text)
-            if match:
-                outcome_names.append(match.group(1).strip())
-            else:
-                outcome_names.append(text)
-    
-    if not outcome_names:
-        return []
-    
-    results = []
-    current_section = None
-    
-    # First pass: collect metadata by section
-    observations_by_section = {}
-    control_means_by_section = {}
-    control_sds_by_section = {}
-    current_section_pass1 = None
-    
-    for row in rows[1:]:
-        cells = row.find_all('td')
-        if not cells:
-            continue
-        first_cell = cells[0].get_text(strip=True)
-        first_cell_lower = first_cell.lower()
-        
-        # Track section
-        if 'followup' in first_cell_lower or 'follow-up' in first_cell_lower:
-            current_section_pass1 = first_cell
-            if current_section_pass1 not in observations_by_section:
-                observations_by_section[current_section_pass1] = {}
-                control_means_by_section[current_section_pass1] = {}
-                control_sds_by_section[current_section_pass1] = {}
-        
-        if 'observation' in first_cell_lower:
-            for i, cell in enumerate(cells[1:]):
-                if i < len(outcome_names):
-                    nums = re.findall(r'\d+', cell.get_text(strip=True))
-                    if nums and current_section_pass1:
-                        observations_by_section[current_section_pass1][outcome_names[i]] = int(nums[0])
-        
-        elif 'control mean' in first_cell_lower:
-            for i, cell in enumerate(cells[1:]):
-                if i < len(outcome_names):
-                    nums = re.findall(r'-?\d+\.?\d*', cell.get_text(strip=True))
-                    if nums and current_section_pass1:
-                        control_means_by_section[current_section_pass1][outcome_names[i]] = float(nums[0])
-        
-        elif 'control sd' in first_cell_lower:
-            for i, cell in enumerate(cells[1:]):
-                if i < len(outcome_names):
-                    nums = re.findall(r'-?\d+\.?\d*', cell.get_text(strip=True))
-                    if nums and current_section_pass1:
-                        control_sds_by_section[current_section_pass1][outcome_names[i]] = float(nums[0])
-    
-    # Second pass: extract treatment effects
-    treatment_arms = ['Capital', 'Psychosocial', 'Full', 'Treatment', 'Treated', 'Program']
-    
-    for row_idx, row in enumerate(rows[1:], start=1):
-        cells = row.find_all('td')
-        if not cells:
-            continue
-        
-        first_cell_text = cells[0].get_text(strip=True)
-        first_cell_lower = first_cell_text.lower()
-        
-        # Check for section header (followup period)
-        if 'followup' in first_cell_lower or 'follow-up' in first_cell_lower:
-            current_section = first_cell_text
-            continue
-        
-        # Check for treatment arm row
-        if first_cell_text in treatment_arms:
-            treatment_arm = first_cell_text
-            
-            # Look ahead for SE values in next row (handles split format)
-            next_row = rows[row_idx + 1] if row_idx + 1 < len(rows) else None
-            se_from_next = {}
-            if next_row:
-                next_cells = next_row.find_all('td')
-                for ni, nc in enumerate(next_cells[1:]):
-                    if ni >= len(outcome_names):
-                        break
-                    nc_text = nc.get_text(strip=True)
-                    lead_paren = re.match(r'^\(([\d.]+)\)', nc_text)
-                    if lead_paren:
-                        se_from_next[ni] = float(lead_paren.group(1))
-            
-            # Extract values for each outcome
-            for i, cell in enumerate(cells[1:]):
-                if i >= len(outcome_names):
-                    break
-                
-                cell_text = cell.get_text(strip=True)
-                coef, se, stars = parse_coefficient_se(cell_text)
-                
-                # Use SE from next row if needed
-                if se is None and i in se_from_next:
-                    se = se_from_next[i]
-                
-                # Get section-specific metadata
-                obs = observations_by_section.get(current_section, {}).get(outcome_names[i])
-                ctrl_mean = control_means_by_section.get(current_section, {}).get(outcome_names[i])
-                ctrl_sd = control_sds_by_section.get(current_section, {}).get(outcome_names[i])
-                
-                if coef is not None:
-                    results.append({
-                        'study_id': study_id,
-                        'table_number': table_number,
-                        'table_caption': caption,
-                        'page_number': page_idx + 1,
-                        'section': current_section,
-                        'treatment_arm': treatment_arm,
-                        'outcome_name': outcome_names[i],
-                        'coefficient': coef,
-                        'standard_error': se,
-                        'significance': stars,
-                        'sample_size': obs,
-                        'control_mean': ctrl_mean,
-                        'control_sd': ctrl_sd,
-                        'literal_cell_text': cell_text
-                    })
-    
-    return results
-
-# ============================================================================
-# STAGE 4: CONTEXT ENRICHMENT (LLM)
-# ============================================================================
-
-def enrich_with_context(df: pd.DataFrame, doc: dict) -> pd.DataFrame:
-    """Use LLM to enrich extracted data with outcome definitions."""
-    if df.empty:
-        return df
-    
-    # Get unique outcomes
-    outcomes = df['outcome_name'].unique().tolist()[:15]  # Limit to 15
-    prose = doc.get('content', '')[:20000]  # First 20k chars
-    
-    prompt = f"""Given this paper excerpt and list of outcome variables, provide brief definitions.
-
-OUTCOME VARIABLES:
-{chr(10).join(f'- {o}' for o in outcomes)}
-
-PAPER TEXT:
-{prose[:15000]}
-
-For each outcome, provide a one-sentence definition based on the paper.
-Format each line as: outcome_name|definition
-
-Only include outcomes you can find definitions for in the text."""
-
-    result = call_llm(prompt, max_tokens=1000)
-    
-    definitions = {}
-    for line in result.split('\n'):
-        if '|' in line:
-            parts = line.split('|', 1)
-            if len(parts) == 2:
-                definitions[parts[0].strip()] = parts[1].strip()
-    
-    # Add definitions to dataframe
-    df['outcome_definition'] = df['outcome_name'].map(
-        lambda x: next((v for k, v in definitions.items() if k.lower() in x.lower()), None)
-    )
-    
-    print(f"    Added definitions for {len(definitions)} outcomes")
-    
-    return df
-
-# ============================================================================
-# MAIN PIPELINE
+# MAIN EXTRACTION ORCHESTRATION
 # ============================================================================
 
 def extract_all_tables(doc: dict, study_id: str, use_llm: bool = True) -> pd.DataFrame:
-    """Extract data from all results tables in the document."""
+    """
+    Extract data from all results tables in the document.
+    
+    Uses two-pass classification when LLM is enabled:
+    1. First pass: Build inventory of all tables with captions
+    2. Second pass: LLM classifies ALL tables at once (context-aware)
+    3. Third pass: Extract only from tables classified as "results"
+    """
     tables = doc.get('tables', [])
     all_results = []
     
     print(f"\n  Found {len(tables)} tables in document")
     
-    tables_extracted = 0
-    tables_skipped = 0
+    if not tables:
+        return pd.DataFrame()
     
+    # ========== PASS 1: Build table inventory ==========
+    table_inventory = []
     for i, table in enumerate(tables):
-        caption = ' '.join(table.get('table_caption', []))
+        caption_raw = ' '.join(table.get('table_caption', []))
+        caption = fix_ocr_spacing(caption_raw)
         html = table.get('table_body', '')
         
-        # Classify table
-        table_type = classify_table(caption, html, use_llm=use_llm)
+        # Get a preview of table content (first 200 chars, cleaned)
+        soup = BeautifulSoup(html, 'html.parser')
+        preview = soup.get_text(separator=' ', strip=True)[:200]
+        
+        table_id = f"Table{i+1}"
+        table_inventory.append({
+            'table_id': table_id,
+            'index': i,
+            'caption': caption,
+            'preview': preview,
+            'html': html
+        })
+    
+    # ========== PASS 2: Classify all tables at once ==========
+    if use_llm and len(table_inventory) > 0:
+        print(f"\n  [SMART CLASSIFICATION] Analyzing {len(table_inventory)} tables...")
+        table_classifications = classify_all_tables_llm(table_inventory)
+        
+        # Show classification summary
+        results_tables = [t for t, c in table_classifications.items() if c == 'results']
+        descriptive_tables = [t for t, c in table_classifications.items() if c == 'descriptive']
+        print(f"    → Results tables: {len(results_tables)} ({', '.join(results_tables[:5])}{'...' if len(results_tables) > 5 else ''})")
+        print(f"    → Descriptive tables: {len(descriptive_tables)} (skipped)")
+    else:
+        # Fallback: use rules-based classification
+        table_classifications = {}
+        for inv in table_inventory:
+            table_classifications[inv['table_id']] = classify_table(inv['caption'], inv['html'], use_llm=False)
+    
+    # ========== PASS 3: Extract from results tables ==========
+    tables_extracted = 0
+    tables_skipped = 0
+    tables_transposed = 0
+    
+    for inv in table_inventory:
+        i = inv['index']
+        table = tables[i]
+        caption = inv['caption']
+        html = inv['html']
+        table_id = inv['table_id']
+        
+        # Use pre-computed classification
+        table_type = table_classifications.get(table_id, 'results')
         
         if table_type == 'results':
-            results = extract_results_table(table, study_id)
+            # Detect table orientation
+            soup = BeautifulSoup(html, 'html.parser')
+            rows = soup.find_all('tr')
+            orientation = detect_table_orientation(rows)
+            
+            # Route to appropriate extractor based on orientation
+            results = _extract_by_orientation(orientation, table, study_id)
+            
             if results:
                 all_results.extend(results)
-                print(f"    Table {i}: {caption[:50]}... → {len(results)} rows")
+                orientation_label = f" ({orientation})" if orientation != 'columns' else ""
+                print(f"    Table {i}: {caption[:50]}... → {len(results)} rows{orientation_label}")
                 tables_extracted += 1
+                if orientation != 'columns':
+                    tables_transposed += 1
         else:
             tables_skipped += 1
     
-    print(f"\n  Tables: {tables_extracted} extracted, {tables_skipped} skipped")
+    transposed_note = f", {tables_transposed} transposed" if tables_transposed else ""
+    print(f"\n  Tables: {tables_extracted} extracted{transposed_note}, {tables_skipped} skipped")
     
-    return pd.DataFrame(all_results)
+    df = pd.DataFrame(all_results)
+    
+    # P1: Filter suspicious treatment arms and outcome names
+    if not df.empty:
+        df = _filter_suspicious_rows(df)
+    
+    return df
 
+
+def _extract_by_orientation(orientation: str, table: dict, study_id: str) -> Optional[List[dict]]:
+    """Route extraction to appropriate function based on table orientation."""
+    extractors = {
+        'rows': extract_transposed_table,
+        'treatments_in_cols': extract_treatments_in_cols_table,
+        'outcomes_in_rows_se_split': extract_outcomes_in_rows_se_split,
+        'comparison_format': extract_comparison_format_table,
+        'columns': extract_results_table,
+    }
+    
+    extractor = extractors.get(orientation, extract_results_table)
+    results = extractor(table, study_id)
+    
+    # Fall back to standard parser if specialized parser fails
+    if not results and orientation != 'columns':
+        results = extract_results_table(table, study_id)
+    
+    return results
+
+
+def _filter_suspicious_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Filter rows that look like metadata, not treatment effects."""
+    suspicious_patterns = [
+        r'^test\s*:',           # "Test: T1 = T2"
+        r'^mean\s+of',          # "Mean of dependent variable"  
+        r'^\d+$',               # Pure numbers like "200"
+        r'^n\s*=',              # "N = 1234"
+        r'^r[\s-]*squared',     # "R-squared"
+        r'^observation',        # "Observations"
+        r'^control\s+(mean|sd|n)', # Control statistics
+        r'^p[\s-]*value',       # "P-value"
+        r'^standard\s+error',   # Standard error row
+        r'^\*+$',               # Just stars
+        r'^note',               # Notes
+        r'^source',             # Source
+    ]
+    
+    def is_suspicious(row):
+        arm = str(row.get('treatment_arm', '')).lower().strip()
+        outcome = str(row.get('outcome_name', '')).lower().strip()
+        
+        for pattern in suspicious_patterns:
+            if re.search(pattern, arm, re.IGNORECASE):
+                return True
+            if re.search(pattern, outcome, re.IGNORECASE):
+                return True
+        
+        if len(outcome) < 3 or outcome.replace('.', '').isdigit():
+            return True
+            
+        return False
+    
+    initial_count = len(df)
+    df['_suspicious'] = df.apply(is_suspicious, axis=1)
+    filtered_count = df['_suspicious'].sum()
+    df = df[~df['_suspicious']].drop(columns=['_suspicious'])
+    
+    if filtered_count > 0:
+        print(f"  Filtered {filtered_count} suspicious rows (P1 validation)")
+    
+    return df
+
+
+# ============================================================================
+# PIPELINE RUNNER
+# ============================================================================
 
 def run_pipeline(study_id: str, use_llm: bool = True, enrich: bool = True) -> tuple:
     """Run the full extraction pipeline for a single study."""
@@ -485,30 +278,33 @@ def run_pipeline(study_id: str, use_llm: bool = True, enrich: bool = True) -> tu
         return None, pd.DataFrame()
     print(f"  ✓ Loaded: {len(doc.get('tables', []))} tables, {len(doc.get('content', ''))} chars")
     
-    # Stage 1: Metadata
+    # Stage 1: Metadata extraction
     print("\n[STAGE 1] Extracting metadata...")
-    metadata = extract_metadata(doc, study_id)
-    print(f"  ✓ Title: {metadata['title'][:60]}...")
-    print(f"  ✓ Year: {metadata['year']}")
+    metadata = _extract_metadata_stage(doc, study_id, use_llm)
     
     with open(f"{study_output_dir}/metadata.json", 'w') as f:
         json.dump(metadata, f, indent=2)
     
-    # Stage 2 & 3: Table extraction with classification
+    # Stage 2: Table extraction
     print("\n[STAGE 2] Extracting tables (BeautifulSoup + LLM classification)...")
     df = extract_all_tables(doc, study_id, use_llm=use_llm)
     
-    if not df.empty:
-        print(f"\n  ✓ Total rows: {len(df)}")
-        print(f"  ✓ Unique outcomes: {df['outcome_name'].nunique()}")
-        print(f"  ✓ Tables with data: {df['table_number'].nunique()}")
-        print(f"  ✓ Coefficient coverage: {100*df['coefficient'].notna().mean():.1f}%")
-        print(f"  ✓ SE coverage: {100*df['standard_error'].notna().mean():.1f}%")
+    # Stage 2b/2c: Fallback extraction from prose/figures
+    if df.empty and use_llm:
+        df = _fallback_extraction(doc, study_id)
     
-    # Stage 4: Context enrichment (optional)
+    # Add metadata to rows and extract supplementary info
+    if not df.empty:
+        df = _enrich_with_metadata(df, metadata)
+        _print_extraction_stats(df)
+        
+        # Extract sample sizes from prose if missing
+        if use_llm and 'n_treatment' in df.columns and df['n_treatment'].isna().all():
+            df = _extract_prose_sample_sizes(df, doc)
+    
+    # Stage 4-7: Enrichment stages
     if enrich and not df.empty:
-        print("\n[STAGE 4] Enriching with LLM context...")
-        df = enrich_with_context(df, doc)
+        df = _run_enrichment_stages(df, doc)
     
     # Save results
     if not df.empty:
@@ -516,13 +312,159 @@ def run_pipeline(study_id: str, use_llm: bool = True, enrich: bool = True) -> tu
         df.to_json(f"{study_output_dir}/extracted_data.json", orient='records', indent=2)
         print(f"\n  ✓ Saved to {study_output_dir}/")
     
-    # Summary
+    # Print summary
+    _print_final_summary(df)
+    
+    return metadata, df
+
+
+def _extract_metadata_stage(doc: dict, study_id: str, use_llm: bool) -> dict:
+    """Stage 1: Extract metadata."""
+    if use_llm:
+        metadata = extract_metadata_llm(doc, study_id)
+        print(f"  ✓ Title: {metadata['title'][:60]}...")
+        print(f"  ✓ Authors: {str(metadata.get('authors', 'N/A'))[:50]}...")
+        print(f"  ✓ Year: {metadata['year']}")
+        print(f"  ✓ Country: {metadata.get('country', 'N/A')}")
+        print(f"  ✓ Study Design: {metadata.get('study_design', 'N/A')}")
+        print(f"  ✓ Follow-up: {metadata.get('follow_up_months', 'N/A')} months")
+    else:
+        metadata = extract_metadata(doc, study_id)
+        print(f"  ✓ Title: {metadata['title'][:60]}...")
+        print(f"  ✓ Year: {metadata['year']}")
+    return metadata
+
+
+def _fallback_extraction(doc: dict, study_id: str) -> pd.DataFrame:
+    """Stages 2b/2c: Fallback to prose and figure extraction."""
+    print("\n[STAGE 2b] No table data - attempting prose extraction...")
+    prose_effects = extract_effects_from_prose(doc, study_id)
+    if prose_effects:
+        print(f"  ✓ Extracted {len(prose_effects)} effects from prose text")
+        return pd.DataFrame(prose_effects)
+    
+    print("  ✗ No effects found in prose either")
+    print("\n[STAGE 2c] Attempting figure caption extraction...")
+    figure_effects = extract_effects_from_figures(doc, study_id)
+    if figure_effects:
+        print(f"  ✓ Extracted {len(figure_effects)} effects from figure captions")
+        return pd.DataFrame(figure_effects)
+    
+    print("  ✗ No effects found in figures either")
+    return pd.DataFrame()
+
+
+def _enrich_with_metadata(df: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    """Add study-level metadata to each row."""
+    df['authors'] = metadata.get('authors', '')
+    df['year'] = metadata.get('year')
+    df['country'] = metadata.get('country')
+    df['study_design'] = metadata.get('study_design')
+    df['is_experimental'] = metadata.get('is_experimental')
+    df['follow_up_months'] = metadata.get('follow_up_months')
+    df['intervention_name'] = metadata.get('intervention_name')
+    return df
+
+
+def _print_extraction_stats(df: pd.DataFrame):
+    """Print extraction statistics."""
+    print(f"\n  ✓ Total rows: {len(df)}")
+    print(f"  ✓ Unique outcomes: {df['outcome_name'].nunique()}")
+    print(f"  ✓ Tables with data: {df['table_number'].nunique()}")
+    print(f"  ✓ Coefficient coverage: {100*df['coefficient'].notna().mean():.1f}%")
+    print(f"  ✓ SE coverage: {100*df['standard_error'].notna().mean():.1f}%")
+    if 'ci_lower' in df.columns:
+        print(f"  ✓ CI coverage: {100*df['ci_lower'].notna().mean():.1f}%")
+
+
+def _extract_prose_sample_sizes(df: pd.DataFrame, doc: dict) -> pd.DataFrame:
+    """Extract sample sizes from prose if missing from tables."""
+    print("\n[STAGE 3b] Extracting sample sizes from prose...")
+    prose_samples = extract_sample_sizes_from_prose(doc)
+    if prose_samples.get('n_treatment'):
+        df['n_treatment'] = df['n_treatment'].fillna(prose_samples['n_treatment'])
+        print(f"  ✓ N treatment from prose: {prose_samples['n_treatment']}")
+    if prose_samples.get('n_control'):
+        df['n_control'] = df['n_control'].fillna(prose_samples['n_control'])
+        print(f"  ✓ N control from prose: {prose_samples['n_control']}")
+    if prose_samples.get('n_clusters'):
+        df['n_clusters'] = df['n_clusters'].fillna(prose_samples['n_clusters'])
+        print(f"  ✓ N clusters from prose: {prose_samples['n_clusters']}")
+    return df
+
+
+def _run_enrichment_stages(df: pd.DataFrame, doc: dict) -> pd.DataFrame:
+    """Stages 4-7: Run all enrichment stages."""
+    # Stage 4: Context enrichment
+    print("\n[STAGE 4] Enriching with LLM context...")
+    df = enrich_with_context(df, doc)
+    
+    # Stage 5: Classify outcomes
+    print("\n[STAGE 5] Classifying outcomes...")
+    df = classify_outcomes(df, domain='graduation')
+    cat_coverage = df['outcome_category'].notna().mean() * 100
+    print(f"  ✓ Outcome category coverage: {cat_coverage:.1f}%")
+    
+    # Stage 6: Calculate effect sizes
+    print("\n[STAGE 6] Calculating effect sizes...")
+    df = calculate_effect_sizes(df)
+    d_coverage = df['cohens_d'].notna().mean() * 100
+    g_coverage = df['hedges_g'].notna().mean() * 100
+    print(f"  ✓ Cohen's d coverage: {d_coverage:.1f}%")
+    print(f"  ✓ Hedges' g coverage: {g_coverage:.1f}%")
+    
+    # Stage 7: Classify analysis types
+    print("\n[STAGE 7] Classifying analysis types (reasoning LLM)...")
+    df = classify_analysis_type(df)
+    main_pct = df['is_main_effect'].sum() / len(df) * 100
+    subgroup_pct = df['is_subgroup'].sum() / len(df) * 100
+    spillover_pct = df['is_spillover'].sum() / len(df) * 100
+    print(f"  ✓ Main effects: {main_pct:.1f}% of rows")
+    print(f"  ✓ Subgroup analyses: {subgroup_pct:.1f}% of rows")
+    if subgroup_pct > 0:
+        subgroups = df[df['is_subgroup']]['subgroup_variable'].dropna().unique()
+        print(f"    Subgroup variables: {', '.join(str(s) for s in subgroups[:5])}")
+    print(f"  ✓ Spillover effects: {spillover_pct:.1f}% of rows")
+    if spillover_pct > 0:
+        spill_types = df[df['is_spillover']]['spillover_type'].dropna().unique()
+        print(f"    Spillover types: {', '.join(str(s) for s in spill_types)}")
+    
+    return df
+
+
+def _print_final_summary(df: pd.DataFrame):
+    """Print final extraction summary."""
     print("\n" + "=" * 70)
     print("EXTRACTION COMPLETE")
     print("=" * 70)
     
-    return metadata, df
+    if df.empty:
+        return
+    
+    print("\nFIELD COVERAGE:")
+    key_fields = ['coefficient', 'standard_error', 'p_value', 'ci_lower', 'ci_upper',
+                  'sample_size', 'n_treatment', 'n_control', 'n_clusters',
+                  'control_mean', 'control_sd', 't_statistic',
+                  'cohens_d', 'hedges_g', 'effect_variance', 'effect_se',
+                  'outcome_category', 'authors', 'year', 'country', 'study_design',
+                  'follow_up_months', 'is_experimental']
+    for field in key_fields:
+        if field in df.columns:
+            cov = df[field].notna().mean() * 100
+            print(f"  {field:20}: {cov:5.1f}%")
+    
+    if 'is_main_effect' in df.columns:
+        print("\nANALYSIS TYPE CLASSIFICATION:")
+        print(f"  Main effects:      {df['is_main_effect'].sum():4} rows ({100*df['is_main_effect'].mean():.1f}%)")
+        print(f"  Subgroup analyses: {df['is_subgroup'].sum():4} rows ({100*df['is_subgroup'].mean():.1f}%)")
+        print(f"  Spillover effects: {df['is_spillover'].sum():4} rows ({100*df['is_spillover'].mean():.1f}%)")
+        print(f"  Cost outcomes:     {df['is_cost_outcome'].sum():4} rows ({100*df['is_cost_outcome'].mean():.1f}%)")
+        print(f"  Mechanism/mediator:{df['is_mechanism'].sum():4} rows ({100*df['is_mechanism'].mean():.1f}%)")
 
+
+# ============================================================================
+# CLI ENTRY POINT
+# ============================================================================
 
 def main():
     parser = argparse.ArgumentParser(description='Extract impact evaluation data from papers')

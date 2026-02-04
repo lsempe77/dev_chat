@@ -1,82 +1,58 @@
 # DevChat v2 - Roadmap
 
-**Last Updated:** January 27, 2026
+**Last Updated:** January 31, 2026
 
 > This document tracks **future features** and priorities.  
-> For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).
+> For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).  
+> For extraction pipeline details, see [extraction_pipeline/README.md](../extraction_pipeline/README.md).
 
 ---
 
-
 ## Upcoming Features
 
-check if something is useful: https://www.oreilly.com/radar/mcps-for-developers-who-think-they-dont-need-mcps/
+### Immediate (Next Sprint)
 
+1. **Full Extraction Dataset + Human Validation** - 6h (reduced from 8h)
+   - ✅ **V3 COMPLETE:** Pilot on 54 studies → 48 (89%) extract data, 3,351 rows
+   - ✅ **V4 COMPLETE:** SE-split parser, European format, treatments-in-cols → 51 (94%), 10,698 rows
+   - ✅ **V5 COMPLETE:** Multi-language (ES/FR/PT) → 52 (96%), 10,551 rows
+   - ✅ **V6 COMPLETE:** Figure caption extraction → 54 (100%), ~10,563 rows
+   - ✅ **P1 COMPLETE:** Suspicious row filter removes metadata/noise
+   - ✅ **P2 COMPLETE:** Transposed table detection (outcomes-in-rows)
+   - ✅ **P3 COMPLETE:** 4 table orientations: columns, rows, treatments_in_cols, outcomes_in_rows_se_split
+   - ✅ **P4 COMPLETE:** Prose + figure extraction fallbacks
+   - ✅ **Step 1 COMPLETE:** Full corpus extraction → 92 studies (86 with data, 6 empty), 12,366 rows
+   - **Step 2:** Human review of extracted data (spot-check ~10% of rows) ⬅️ **IN PROGRESS**
+   - **Step 3:** Document FP/FN, calculate precision/recall![alt text](image.png)
+   - **Output:** `extraction_pipeline/outputs/full_corpus_for_validation.csv` (current: 12,366 rows)
+   - Files: `extraction_pipeline/cli_v2.py`, `extraction_pipeline/combine_outputs.py`
 
-### Immediate
+2. **Ground Truth Validation** - 4h ⬅️ **NEXT PRIORITY**
+   - Compare extracted values to master_UPG.csv ground truth
+   - Calculate: outcome match rate, coefficient accuracy, SE accuracy
+   - Identify systematic extraction errors for targeted fixes
+   - Files: `validation_app/app_v2.py`, `data/master_UPG.csv`
 
-1. **Metadata & Quantitative Field Extraction** - 8h
-   - ✅ Analyzed ground truth: `8WR QEX Combined.xlsx` (125 columns), `8 week SR OM Combined.xlsx` (22 columns)
-   - ✅ Created topic-agnostic extraction schema: `src/extraction/schemas.py`
-   - 🚧 Implement extractors for universal fields
-   - 🚧 Validate pipeline against ground truth
+3. **Domain-Specific Intervention Components** - 6h
+   - Build LLM-based component extractor per `DOMAIN_CONFIGS` in `schemas.py`
+   - Add CLI arg `--domain graduation|education|health`
+   - Test on 3 domains
    - Files: `extraction_pipeline/pipeline.py`, `src/extraction/schemas.py`
 
-   **Schema Design (Topic-Agnostic):**
-   - Universal: `CoreNumericFields`, `StudyMetadata`, `OutcomeMetadata`, `InterventionMetadata`, `SourceLocation`
-   - Calculated: `StandardizedEffectSize` (Cohen's d, Hedges' g)
-   - Domain-Specific: `DomainSpecificFields` with configs for graduation, education, health, agriculture, aquaculture, WASH, nutrition, social protection
-   - Modes: RAG (11 fields), SCREENING (7 fields), FULL (all fields)
-
-a. ✅ **Check Outcomes mapping 3ie tool** - 2h
-   - Analyzed all 125 QEX columns + 22 OM columns
-   - Categorized: 30 extractable, 16 coded, 15 derived, 55 RVE selection flags
-
-b. **Create human-verified ground truth for Study 121058356** - 4h
-   - Manually verify all 763 rows against PDF
-   - Flag extraction errors, missing rows
-   - Create `ground_truth_121058356.csv`
-
-c. **Add significance star mapping** - 2h (Fixes Issue #2)
-   - Map *** to p<.001, ** to p<.01, * to p<.05
-   - Extract from table footnotes when available
-
-d. **Expand to 5-10 diverse studies** - 8h
-   - Select studies with different table formats
-   - Complex tables: multi-panel, subgroups, footnotes
-
-e.  **Validation tooling** - 2h
-   - Script to compare extraction vs GT
-   - Metrics: precision, recall, F1 by field type
-
-~~Success Metrics
-- **Accuracy Target:** 90%+ on numeric fields (coefficient, SE)
-- **Recall Target:** 85%+ outcomes found per study
-- **Significance Parsing:** 95%+ star notation correctly interpreted
-
-
-2. **Study Design Filter in Evidence Panel** - 4h
+4. **Study Design Filter in Evidence Panel** - 4h
    - Add dropdown to filter evidence by study design (RCT, DiD, etc.)
    - Files: `frontend/src/components/EvidencePanel.tsx`
 
-3. **"I Don't Know" Explicit Refusal** - 2h
+5. **"I Don't Know" Explicit Refusal** - 2h
    - When retrieval confidence is below threshold, explicitly refuse to answer
-   - Instead of generating with poor context, return: "I don't have enough information to answer that confidently. Could you rephrase or specify which document to check?"
    - Prevents hallucination when no good sources found
    - Files: `src/agents/devchat_agent.py`, `src/generation/claim_ledger.py`
-
-4. **Source Date Conflict Detection** - 2h
-   - Warn when retrieved chunks span multiple years (e.g., 2019 vs 2024 policies)
-   - Add warning to response: "[Note: Some sources are older. The most recent is from {year}]"
-   - Prevents mixing outdated information with current
-   - Files: `src/agents/devchat_agent.py`, response formatting
 
 ### Short-Term
 
 1. **Embedding Model Comparison: Cohere vs Voyage 4** - 6h
    - Benchmark Voyage AI 4 (launched Jan 15, 2026) against current Cohere embed-v4
    - Metrics: retrieval accuracy, speed, cost per 1M tokens
-   - Test on DevChat's academic literature domain
    - Files: `evaluation/benchmark_embeddings.py`
 
 2. **Improve Faithfulness** - 8h
@@ -99,10 +75,15 @@ e.  **Validation tooling** - 2h
    - Extend ClaimLedger to track support/contradict per citation
    - Files: `src/generation/claim_ledger.py`, frontend component
 
+6. **Self-Consistency** - 8h
+   - Generate 3 answers with temperature > 0, select most consistent
+   - Improves accuracy on complex synthesis questions
+   - Files: `src/generation/claim_ledger.py`
+
 ### Medium-Term
 
 1. **Agentic RAG** - 20h
-   - Multi-step: Search -> Review -> Refine -> Gather -> Answer
+   - Multi-step: Search → Review → Refine → Gather → Answer
    - Agent decides when to iterate on search
 
 2. **Multimodal Support** - 24h
@@ -116,7 +97,7 @@ e.  **Validation tooling** - 2h
 ### Long-Term
 
 1. **Systematic Review Workflow** - 40h
-   - Protocol -> Screening -> Extraction -> PRISMA flow
+   - Protocol → Screening → Extraction → PRISMA flow
 
 2. **Research Report Generation** - 30h
    - Auto-generate structured reports from evidence
@@ -127,52 +108,58 @@ e.  **Validation tooling** - 2h
 4. **Security Hardening** - 8h
    - Rate limiting, input validation, audit logs
 
-5. https://www.trulens.org/?
+5. **TruLens Evaluation** - 4h
+   - Alternative RAG evaluation framework
+   - Reference: https://www.trulens.org/
 
+6. **Slack/Teams MCP Integration** - 20h
+   - Let researchers query DevChat from Slack without switching apps
+   - Example: `@devchat What effect sizes for cash transfers?`
+   - Reference: [MCPs for Developers](https://www.oreilly.com/radar/mcps-for-developers-who-think-they-dont-need-mcps/)
 
-## Issues
-
-1. More detail on study design extraction. Check better OM tool (3ie)
-
-2. Tables not picking notes for statistical significance (*** corresponds to p<.005)
+7. **Context7-style Live Docs MCP** - 12h
+   - Pull up-to-date methodology docs into agent context
+   - Sources: 3ie methods guidance, PRISMA guidelines, Cochrane handbook
+   - Reference: [Context7 MCP](https://block.github.io/goose/docs/mcp/context7-mcp)
 
 ---
 
-## Tables Extraction Ground Truth Dataset - 16h
+## Success Metrics (Targets)
 
-**Goal:** Create gold-standard human-annotated dataset to measure extraction accuracy, train models, and improve recall.
+| Metric | Current | Target |
+|--------|---------|--------|
+| **Extraction: Study coverage** | 54/54 (100%) | 95%+ ✅ |
+| **Extraction: Rows extracted** | 10,551 | - |
+| **Extraction: Table orientations** | 4 types | - |
+| **Extraction: Languages** | EN, ES, FR, PT | - |
+| **Extraction: Fallbacks** | Prose + Figures | - |
+| **RAG: Faithfulness** | 66.47% | 70%+ |
+| **RAG: Citation Recall** | 98.86% | 70%+ ✅ |
 
-### Current State
-- **Latest Test:** Study 121058356 "Pathways out of Extreme Poverty" (763 rows extracted)
-  - Output: `extraction_pipeline/outputs/121058356/extracted_data.csv`
-- **Legacy GT:** `8WR QEX Combined.xlsx` (443 rows, 43 studies)
-- **Test Script:** `evaluation/validate_extraction.py`
+---
 
-### Fields Being Extracted
-| Field | Description | In Latest Test |
-|-------|-------------|----------------|
-| `coefficient` | Regression coefficient | Yes |
-| `standard_error` | SE of coefficient | Yes |
-| `significance` | Star notation (*, **, ***) | Yes |
-| `sample_size` | N for estimate | Yes |
-| `control_mean` | Control group mean | Yes |
-| `control_sd` | Control group SD | Yes |
-| `literal_cell_text` | Raw cell text (e.g., "0.15*** (0.05)") | Yes |
-| `outcome_name` | Outcome variable | Yes |
-| `outcome_definition` | Description of outcome | Yes |
-| `table_number` | Which table (Table 1, A1, etc.) | Yes |
-| `treatment_arm` | Intervention arm name | Yes |
+## Completed This Session (Jan 31, 2026)
 
+| Feature | Description |
+|---------|-------------|
+| **Modular Refactor** | Split pipeline.py into `core/`, `adapters/`, `postprocessing/` modules |
+| **Error Handling** | `ErrorAccumulator` with stage context, `LLMFailureType` enum |
+| **LLM Client** | Centralized `LLMClient` with caching, `sanitize_llm_response()` |
+| **Schema Adapter** | `ColumnNames` constants, `normalize_authors()`, consistent field mapping |
+| **Effect Size Assumptions** | Explicit `effect_size_assumption` column tracks calculation assumptions |
+| **CLI v2** | New `cli_v2.py` with `--fast`, `--minimal`, `--no-prose`, `--no-figures` flags |
 
+## Completed (Jan 29, 2026)
 
-## RAG Pipeline Optimizations (Medium Priority)
-
-> These require more effort but provide meaningful improvements.
-
-### 1. Self-Consistency - 8h
-- Generate 3 answers with temperature > 0, select most consistent
-- Improves accuracy on complex synthesis questions
-- Files: `src/generation/claim_ledger.py`
+| Feature | Description |
+|---------|-------------|
+| **V4: SE-split parser** | Handles tables where SE is in separate rows below coefficients |
+| **V4: European format** | Converts comma decimals (0,15) to dots (0.15) |
+| **V4: Treatments-in-cols** | Extracts tables with treatment groups as column headers |
+| **V5: Multi-language** | Spanish, French, Portuguese keywords for treatment detection |
+| **V6: Figure extraction** | LLM extracts effects from figure captions when tables unavailable |
+| **V6: Prose extraction** | LLM extracts effects from narrative text as fallback |
+| **Regression check** | Verified V4 changes don't break previously working papers |
 
 ---
 
@@ -185,4 +172,6 @@ e.  **Validation tooling** - 2h
 - [Binary Quantization](https://qdrant.tech/documentation/guides/quantization/) - Qdrant guide
 - [Elicit](https://elicit.com/) - Systematic review automation
 - [Scite](https://scite.ai/) - Smart Citations
+- [TruLens](https://www.trulens.org/) - RAG evaluation framework
+
 

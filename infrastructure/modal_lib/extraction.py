@@ -2,27 +2,134 @@
 PDF Extraction Module
 
 Contains MinerU extraction logic and text extraction helpers.
+
+MinerU Configuration Notes (as of 2.7.x):
+- MINERU_TABLE_MERGE_ENABLE: Enables table merging for split tables (default: true)
+- MINERU_TABLE_ENABLE: Enables table parsing (default: true)
+- Backend options: pipeline (faster), hybrid-* (more accurate), vlm-* (VLM-based)
+- Category IDs in model.json: 3=Figure, 5=Table, 6=Table caption
 """
 
+import copy
+import json
 import os
 import re
 import shutil
 import tempfile
 import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
+
+# Ensure table merge is enabled (MinerU's built-in split table handling)
+os.environ.setdefault("MINERU_TABLE_MERGE_ENABLE", "true")
+os.environ.setdefault("MINERU_TABLE_ENABLE", "true")
+
+
+# ============================================================================
+# Table Filtering Helpers (Level 1 - During Extraction)
+# ============================================================================
+
+# Pattern to detect figures mislabeled as tables
+FIGURE_CAPTION_PATTERN = re.compile(r'\b(figure|fig\.?)\s*\d', re.IGNORECASE)
+
+# Minimum rows for a valid table (single-row often = diagram/legend)
+MIN_TABLE_ROWS = 2
+
+
+def _get_table_caption(item: dict) -> str:
+    """Extract caption text from table item."""
+    caption_list = item.get("table_caption", [])
+    if caption_list and isinstance(caption_list, list):
+        return caption_list[0] if caption_list else ""
+    return str(caption_list) if caption_list else ""
+
+
+def _is_likely_figure(item: dict) -> bool:
+    """Check if a 'table' is actually a figure based on caption."""
+    caption = _get_table_caption(item)
+    return bool(FIGURE_CAPTION_PATTERN.search(caption))
+
+
+def _count_table_rows(body: str) -> int:
+    """Count rows in table HTML."""
+    if not body:
+        return 0
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(body, 'html.parser')
+        return len(soup.find_all('tr'))
+    except Exception:
+        # Fallback: count <tr> tags manually
+        return body.lower().count('<tr')
+
+
+def _is_empty_table(item: dict) -> bool:
+    """Check if table has empty or trivial body."""
+    body = item.get("table_body", "")
+    if not body or not body.strip():
+        return True
+    # Check for empty table HTML
+    if body.strip() in ["<table></table>", "<html><body><table></table></body></html>"]:
+        return True
+    return False
+
+
+def _get_extraction_metadata(item: dict) -> dict:
+    """Generate metadata about the extracted table for debugging/post-processing."""
+    body = item.get("table_body", "")
+    caption = _get_table_caption(item)
+    
+    row_count = _count_table_rows(body)
+    
+    # Try to get column count
+    col_count = 0
+    text_length = 0
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(body, 'html.parser')
+        rows = soup.find_all('tr')
+        if rows:
+            col_count = max(len(row.find_all(['td', 'th'])) for row in rows)
+        text_length = len(soup.get_text(strip=True))
+    except Exception:
+        col_count = body.count('</td>') + body.count('</th>')
+        text_length = len(re.sub(r'<[^>]+>', '', body))
+    
+    return {
+        "row_count": row_count,
+        "col_count": col_count,
+        "text_length": text_length,
+        "caption_length": len(caption),
+        "is_figure_caption": _is_likely_figure(item),
+        "extraction_timestamp": datetime.now().isoformat(),
+    }
 
 
 # ============================================================================
 # MinerU Extraction
 # ============================================================================
 
-def run_mineru(pdf_path: Path) -> dict:
-    """Run MinerU extraction on a PDF file using MinerU 2.6.x API."""
+def run_mineru(pdf_path: Path, save_debug_output: bool = False) -> dict:
+    """
+    Run MinerU extraction on a PDF file using MinerU 2.6.x+ API.
+    
+    Args:
+        pdf_path: Path to PDF file
+        save_debug_output: If True, save model.json for debugging layout detection
+    
+    Returns:
+        dict with extraction results including:
+        - tables: List of valid tables (filtered for empty/figures)
+        - figures_detected: Tables that were actually figures
+        - artifacts_filtered: Tables filtered as artifacts
+        - model_output: Raw model.json if save_debug_output=True
+    """
     print(f"  Running MinerU on {pdf_path.name}...")
+    print(f"    MINERU_TABLE_MERGE_ENABLE={os.environ.get('MINERU_TABLE_MERGE_ENABLE', 'not set')}")
     
     try:
-        # MinerU 2.6.x imports
+        # MinerU 2.6.x+ imports
         from mineru.cli.common import prepare_env, read_fn
         from mineru.data.data_reader_writer import FileBasedDataWriter
         from mineru.backend.pipeline.pipeline_analyze import doc_analyze as pipeline_doc_analyze
@@ -37,11 +144,13 @@ def run_mineru(pdf_path: Path) -> dict:
         # Create output directory
         output_dir = tempfile.mkdtemp(prefix="mineru_")
         
-        # Run pipeline analysis
+        # Run pipeline analysis with table and formula extraction
+        # NOTE: For higher accuracy, consider using hybrid-auto-engine backend
+        # which uses VLM but requires more GPU resources
         infer_results, all_image_lists, all_pdf_docs, lang_list, ocr_enabled_list = pipeline_doc_analyze(
             [pdf_bytes],
-            ["en"],  # Language
-            parse_method="auto",
+            ["en"],  # Language - improves OCR accuracy
+            parse_method="auto",  # auto, txt, or ocr
             formula_enable=True,
             table_enable=True,
         )
@@ -55,6 +164,12 @@ def run_mineru(pdf_path: Path) -> dict:
         pdf_doc = all_pdf_docs[0]
         _lang = lang_list[0]
         _ocr_enable = ocr_enabled_list[0]
+        
+        # Save raw model output for debugging if requested
+        # model.json contains category_id: 3=Figure, 5=Table, 6=Table caption
+        model_output = None
+        if save_debug_output:
+            model_output = copy.deepcopy(model_list)
         
         # Prepare output directories
         local_image_dir, local_md_dir = prepare_env(output_dir, pdf_file_name, "auto")
@@ -77,12 +192,57 @@ def run_mineru(pdf_path: Path) -> dict:
         # Generate content list for structured extraction
         content_list = pipeline_union_make(pdf_info, MakeMode.CONTENT_LIST, image_dir)
         
-        # Extract tables from content list
+        # ================================================================
+        # LEVEL 1 TABLE FILTERING (During Extraction)
+        # Filter out artifacts before storing to save processing time
+        # ================================================================
         tables = []
+        figures_detected = []  # Track figures mislabeled as tables
+        artifacts_filtered = []  # Track filtered artifacts for debugging
+        
         if isinstance(content_list, list):
             for item in content_list:
-                if isinstance(item, dict) and item.get("type") == "table":
-                    tables.append(item)
+                if not isinstance(item, dict) or item.get("type") != "table":
+                    continue
+                
+                caption = _get_table_caption(item)
+                page_idx = item.get("page_idx", "?")
+                
+                # Check 1: Skip empty tables
+                if _is_empty_table(item):
+                    print(f"    [L1 Filter] Empty table on page {page_idx}")
+                    artifacts_filtered.append({
+                        "reason": "empty_body",
+                        "page_idx": page_idx,
+                        "caption": caption[:50] if caption else None,
+                    })
+                    continue
+                
+                # Check 2: Detect figures mislabeled as tables
+                if _is_likely_figure(item):
+                    print(f"    [L1 Filter] Figure detected: '{caption[:50]}...'")
+                    figures_detected.append(item)
+                    continue
+                
+                # Check 3: Skip single-row artifacts (unless caption says "Table N")
+                row_count = _count_table_rows(item.get("table_body", ""))
+                has_table_caption = bool(re.match(r'Table\s*\d', caption, re.IGNORECASE))
+                
+                if row_count < MIN_TABLE_ROWS and not has_table_caption:
+                    print(f"    [L1 Filter] Single-row artifact on page {page_idx}: {row_count} rows")
+                    artifacts_filtered.append({
+                        "reason": "single_row",
+                        "page_idx": page_idx,
+                        "row_count": row_count,
+                        "caption": caption[:50] if caption else None,
+                    })
+                    continue
+                
+                # Add extraction metadata for post-processing
+                item["_extraction_meta"] = _get_extraction_metadata(item)
+                tables.append(item)
+        
+        print(f"    Tables extracted: {len(tables)} valid, {len(figures_detected)} figures, {len(artifacts_filtered)} artifacts filtered")
         
         # Extract formulas from content list
         formulas = []
@@ -92,20 +252,27 @@ def run_mineru(pdf_path: Path) -> dict:
                     formulas.append(item)
         
         # Clean up temp directory
-        import shutil
         shutil.rmtree(output_dir, ignore_errors=True)
         
         return {
             "success": True,
             "content": md_content if isinstance(md_content, str) else str(md_content),
-            "content_list": content_list,  # Structured content with page info
-            "tables": tables,
+            "content_list": content_list,  # Full structured content with page info
+            "tables": tables,  # Filtered valid tables
+            "figures_detected": figures_detected,  # Tables that were actually figures
+            "artifacts_filtered": artifacts_filtered,  # Metadata about filtered items
             "formulas": formulas,
             "page_count": page_count,
             "title": extract_title(md_content if isinstance(md_content, str) else ""),
             "authors": extract_authors_from_text(md_content if isinstance(md_content, str) else ""),
             "year": extract_year_from_text(md_content if isinstance(md_content, str) else ""),
             "abstract": extract_abstract(md_content if isinstance(md_content, str) else ""),
+            "model_output": model_output,  # Raw model.json if debug enabled
+            "extraction_config": {
+                "table_merge_enabled": os.environ.get("MINERU_TABLE_MERGE_ENABLE", "true"),
+                "min_table_rows": MIN_TABLE_ROWS,
+                "backend": "pipeline",  # Document which backend was used
+            },
         }
         
     except Exception as e:

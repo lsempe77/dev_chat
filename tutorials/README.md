@@ -30,11 +30,11 @@ Learn the basics of Python, web development, and project setup.
 | 03 | [FastAPI Backend Basics](01-foundations/03-fastapi-basics.md) | Routes, schemas, validation | 60min |
 | 04 | [Next.js Frontend Basics](01-foundations/04-nextjs-basics.md) | App router, components, hooks | 60min |
 | 05 | [Database Setup with Supabase](01-foundations/05-database-setup.md) | PostgreSQL, RLS, migrations | 45min |
-| 06 | [Environment Configuration](01-foundations/06-environment-config.md) | .env files, secrets management | 30min |
-| 07 | [Project Structure Explained](01-foundations/07-project-structure.md) | Folders, imports, organization | 45min |
-| 08 | [Git Workflow & Version Control](01-foundations/08-git-workflow.md) | Branches, commits, PRs | 30min |
-| 09 | [Testing Setup](01-foundations/09-testing-setup.md) | pytest, test structure | 45min |
-| 10 | [Logging & Debugging](01-foundations/10-logging-debugging.md) | loguru, error handling | 30min |
+| 06 | [Authentication & Authorization](01-foundations/06-authentication.md) | Supabase Auth, JWT, RBAC | 45min |
+| 07 | [Environment Setup & Configuration](01-foundations/07-environment-setup.md) | .env files, secrets management | 30min |
+| 08 | [Error Handling & Logging](01-foundations/08-error-handling.md) | loguru, structured logging | 45min |
+| 09 | [Testing Basics](01-foundations/09-testing-basics.md) | pytest, mocking, API tests | 45min |
+| 10 | [Deployment Pipeline](01-foundations/10-deployment-pipeline.md) | CI/CD, Railway, Vercel | 45min |
 
 ### Part 2: Document Processing (Posts 11-20)
 Learn how to process PDFs and extract structured data.

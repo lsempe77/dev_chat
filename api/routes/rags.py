@@ -22,6 +22,15 @@ from src.ingestion.indexer import QdrantIndexer
 from src.config.settings import settings
 from .dependencies import get_r2_client
 
+# Document Registry for cross-project deduplication
+try:
+    from extraction_pipeline.document_registry import register_upload, check_duplicate
+    REGISTRY_AVAILABLE = True
+except ImportError:
+    REGISTRY_AVAILABLE = False
+    register_upload = None
+    check_duplicate = None
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/rags", tags=["RAG Projects"])
@@ -1288,7 +1297,7 @@ async def upload_document(
         r2_client = get_r2_client()
         bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
         
-        # Check for existing document with same content
+        # Check for existing document with same content (within project)
         if not force_upload:
             existing = find_existing_document_for_project(r2_client, bucket_name, project_id, content_hash, base_name)
             if existing:
@@ -1303,6 +1312,16 @@ async def upload_document(
                     message=f"Document already exists as {existing['doc_id']}. No duplicate created.",
                     is_duplicate=True,
                 )
+            
+            # Also check global registry for cross-project duplicates (informational)
+            if REGISTRY_AVAILABLE and check_duplicate:
+                try:
+                    global_dup = check_duplicate(content_hash)
+                    if global_dup:
+                        logger.info(f"Cross-project duplicate found: {file.filename} matches {global_dup['doc_id']} (study: {global_dup['study_id']})")
+                        # Note: We still allow upload to this project, just log it
+                except Exception as reg_err:
+                    logger.debug(f"Registry check failed (non-fatal): {reg_err}")
         
         # Generate doc_id using content hash
         doc_id = f"{content_hash}_{base_name}"
@@ -1325,9 +1344,35 @@ async def upload_document(
         
         logger.info(f"Uploaded {file.filename} to R2 as {r2_key} (doc_id={doc_id}, project={project_id}, {size_bytes} bytes)")
         
+        # Register in global document registry for cross-project tracking
+        registry_info = None
+        if REGISTRY_AVAILABLE and register_upload:
+            try:
+                registry_info = register_upload(
+                    original_filename=file.filename,
+                    r2_key=r2_key,
+                    content_hash=content_hash,
+                    size_bytes=size_bytes,
+                    project_id=project_id,
+                    save=True,
+                )
+                logger.info(f"Registered in document registry: study_id={registry_info.get('study_id')}, doc_type={registry_info.get('doc_type')}")
+            except Exception as reg_error:
+                # Non-fatal: don't fail upload if registry fails
+                logger.warning(f"Failed to register in document registry (non-fatal): {reg_error}")
+        
         # Create document record in database (atomic with R2 - rollback on failure)
         try:
             client = get_supabase_client()
+            doc_metadata = {"content_hash": content_hash}
+            # Include registry info in metadata if available
+            if registry_info:
+                doc_metadata.update({
+                    "study_id": registry_info.get('study_id'),
+                    "doc_type": registry_info.get('doc_type'),
+                    "language": registry_info.get('language'),
+                })
+            
             client.table("documents").upsert({
                 "rag_project_id": project_id,
                 "filename": doc_id,
@@ -1336,7 +1381,7 @@ async def upload_document(
                 "mime_type": file.content_type or "application/pdf",
                 "status": "pending",
                 "r2_input_key": r2_key,
-                "metadata": {"content_hash": content_hash},
+                "metadata": doc_metadata,
             }, on_conflict="filename,rag_project_id").execute()
         except Exception as db_error:
             # Rollback: delete from R2 if Supabase insert fails

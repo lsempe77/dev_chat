@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from extraction_pipeline.pipeline import extract_results_table, detect_table_orientation
 from extraction_pipeline.pipeline import extract_transposed_table, extract_treatments_in_cols_table
-from extraction_pipeline.pipeline import extract_outcomes_in_rows_se_split
+from extraction_pipeline.pipeline import extract_outcomes_in_rows_se_split, extract_comparison_format_table
 
 
 def get_r2_client():
