@@ -174,20 +174,23 @@ python -m extraction_pipeline.pipeline --study_id 121058356
 graph LR
     subgraph Frontend
         A[Next.js 15] --> B[Vercel]
+        U[Chat Interface]
+        V[Evidence Panel]
     end
     
     subgraph Backend
         C[FastAPI] --> D[Railway]
+        X[/extraction API]
     end
     
     subgraph Processing
         E[MinerU] --> F[Modal GPU]
     end
     
-    subgraph Extraction
+    subgraph Extraction["Extraction Pipeline"]
         Q[extraction_pipeline] --> R[Table Classification]
         R --> S[Value Extraction]
-        S --> T[Effect Sizes CSV]
+        S --> T[Effect Sizes]
     end
     
     subgraph Storage
@@ -210,7 +213,13 @@ graph LR
     E --> K
     K --> Q
     Q --> M
+    T --> I
+    X --> I
+    C --> X
+    V --> X
 ```
+
+> **Integration Complete:** The extraction pipeline stores effect sizes in Supabase and serves them via `/extraction/*` API endpoints for the Evidence Panel and chatbot synthesis.
 
 ---
 

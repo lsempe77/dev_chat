@@ -50,7 +50,15 @@
 
 ### Short-Term
 
-1. **Embedding Model Comparison: Cohere vs Voyage 4** - 6h
+1. **~~Extraction Pipeline → Production Integration~~** - 12h ✅ **COMPLETE**
+   - ✅ Supabase `extracted_estimates` table with 28 columns
+   - ✅ API endpoints: `/extraction/studies/{id}/effects`, `/extraction/chatbot-context`, etc.
+   - ✅ Supabase loader: `python -m extraction_pipeline.adapters.supabase_loader --all`
+   - ✅ Chatbot integration models: `QuantitativeContext`, `ChatbotEffectContext`
+   - Files: `api/routes/extraction.py`, `extraction_pipeline/adapters/supabase_loader.py`
+   - **Next:** Run migration, upload data, build Evidence Panel component
+
+2. **Embedding Model Comparison: Cohere vs Voyage 4** - 6h
    - Benchmark Voyage AI 4 (launched Jan 15, 2026) against current Cohere embed-v4
    - Metrics: retrieval accuracy, speed, cost per 1M tokens
    - Files: `evaluation/benchmark_embeddings.py`

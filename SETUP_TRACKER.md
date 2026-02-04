@@ -1,6 +1,6 @@
 # DevChat v2.0 - Setup & Status Tracker
 
-**Last Updated:** February 2, 2026
+**Last Updated:** February 4, 2026
 
 > This document tracks **current implementation status** and configurations.  
 > For future features, see [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -102,16 +102,53 @@
 
 ### Extraction Pipeline
 
-> **Active:** `extraction_pipeline/pipeline.py` (monolith), `extraction_pipeline/cli_v2.py` (modular CLI)  
-> **Modular Core:** `extraction_pipeline/core/`, `extraction_pipeline/adapters/`, `extraction_pipeline/postprocessing/`  
-> **Archived:** All v1-v17 and extractor.py variants in `archive/extraction_pipeline_old/`  
+> **Active:** `extraction_pipeline/pipeline.py` (489 lines, orchestration only)  
+> **Modular Core:** 8 modules in `extraction_pipeline/` (core, parsing, classification, extraction, enrichment, postprocessing, batch, adapters)  
+> **Production Integration:** `api/routes/extraction.py` serves extracted data via REST API  
 > **Full docs:** See [extraction_pipeline/README.md](extraction_pipeline/README.md)
 
 | Pipeline | Status | Performance | Notes |
 | -------- | ------ | ----------- | ----- |
-| **V2 SOTA** (production) | ✅ Active | 100% coefficient coverage, 42 columns | Hybrid rules + LLM, 9-stage process |
-| **Modular Refactor** | ✅ Done | Same performance, better maintainability | See "Modular Architecture" below |
+| **V2 SOTA** (production) | ✅ Active | 100% coefficient coverage, 28 columns | Hybrid rules + LLM, 9-stage process |
+| **Modular Refactor** | ✅ Done | Same performance, 71% code reduction | 1,712 → 489 lines |
+| **Production Integration** | ✅ Done | 10 API endpoints | Supabase storage, chatbot context |
 | V11 (bulk, archived) | ⚠️ Deprecated | 71.3% recall, 43 studies | Superseded by V2 SOTA |
+
+#### Production Integration (February 2026)
+
+| Component | File | Purpose |
+| --------- | ---- | ------- |
+| Supabase Migration | `supabase/migrations/20260204_extracted_estimates.sql` | Table schema, RLS, views |
+| Pydantic Schemas | `api/schemas/extraction.py` | 15+ models for API responses |
+| Supabase Loader | `extraction_pipeline/adapters/supabase_loader.py` | Bulk upload CLI tool |
+| API Routes | `api/routes/extraction.py` | 10 endpoints for querying effects |
+
+**API Endpoints:**
+
+| Endpoint | Method | Description |
+| -------- | ------ | ----------- |
+| `/extraction/studies/{id}/effects` | GET | Effects for a study |
+| `/extraction/studies/{id}/summary` | GET | Aggregated study stats |
+| `/extraction/effects` | GET | Query effects with filters |
+| `/extraction/effects/query` | POST | Advanced query with body |
+| `/extraction/effects/bulk` | POST | Bulk upload (auth required) |
+| `/extraction/outcomes/summary` | GET | Cross-study meta-analysis |
+| `/extraction/evidence-panel` | GET | Full Evidence Panel data |
+| `/extraction/chatbot-context` | GET | Compact context for prompts |
+| `/extraction/chatbot-context/for-query` | POST | Query-relevant effects |
+| `/extraction/stats` | GET | Overall statistics |
+
+**Upload to Supabase:**
+```bash
+# Dry run (validate only)
+python -m extraction_pipeline.adapters.supabase_loader --all --dry-run
+
+# Upload all extracted data
+python -m extraction_pipeline.adapters.supabase_loader --all
+
+# Upload single study
+python -m extraction_pipeline.adapters.supabase_loader --study-id 121058356
+```
 
 #### Modular Architecture (January 2026)
 
