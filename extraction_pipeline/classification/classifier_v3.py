@@ -195,6 +195,78 @@ Body sample:
   Last row: Secondary | meal frequency | Number of meals per day | Survey
 Classification: DESCRIPTIVE
 Reason: Defines outcome variables and measurement methods, not actual results or response codes.
+
+EXAMPLE 8 - RESULTS (Spanish - Impactos del tratamiento):
+Caption: "Tabla 5: Impactos del tratamiento sobre ingresos"
+Section: "5. Resultados"
+Body sample:
+  Row 1: Variable | (1) MCO | (2) MCO | (3) VI
+  Row 2: Tratamiento | 0,234*** | 0,198*** | 0,312**
+  Row 3: | (0,067) | (0,065) | (0,142)
+  Row 4: Ingreso Laboral | 0,156** | 0,142** | 0,189*
+  Last row: Observaciones | 1.245 | 1.245 | 1.102
+Classification: RESULTS
+Reason: Spanish regression table - "Impactos del tratamiento" means treatment impacts, coefficients with SEs.
+
+EXAMPLE 9 - RESULTS (French - Effet du programme):
+Caption: "Tableau 3: Effet du programme sur la consommation"
+Section: "4. Résultats"
+Body sample:
+  Row 1: | (1) | (2) | (3)
+  Row 2: Traitement | 0,142*** | 0,138*** | 0,189**
+  Row 3: | (0,042) | (0,041) | (0,078)
+  Row 4: Traitement × Femme | 0,087* | 0,092** | 0,112*
+  Last row: Observations | 2.450 | 2.450 | 2.450
+Classification: RESULTS
+Reason: French regression table - "Effet du programme" means program effect, with treatment coefficients.
+
+EXAMPLE 10 - RESULTS (Appendix heterogeneity/subgroup):
+Caption: "Table B.3: Heterogeneous effects by baseline asset quartile"
+Section: "Appendix B: Additional Results"
+Body sample:
+  Row 1: | Q1 (poorest) | Q2 | Q3 | Q4 (richest)
+  Row 2: Treatment | 0.312*** | 0.198** | 0.089 | 0.023
+  Row 3: | (0.089) | (0.076) | (0.062) | (0.058)
+  Row 4: p-value (Q1=Q4) | | | | 0.003
+  Last row: Observations | 612 | 608 | 615 | 610
+Classification: RESULTS
+Reason: Heterogeneous treatment effects by subgroup (asset quartile) - appendix but still causal estimates.
+
+EXAMPLE 11 - RESULTS (Cost-effectiveness analysis):
+Caption: "Table 8: Cost-benefit analysis and cost-effectiveness"
+Section: "6. Discussion"
+Body sample:
+  Row 1: Outcome | Impact | Cost per unit | Benefit-cost ratio
+  Row 2: Income (yearly) | $234*** | $150 | 1.56
+  Row 3: | (67) | | 
+  Row 4: Assets (value) | $890*** | $150 | 5.93
+  Last row: | (234) | |
+Classification: RESULTS
+Reason: Cost-effectiveness table with treatment effects - combines costs with causal impacts.
+
+EXAMPLE 12 - DESCRIPTIVE (Attrition analysis):
+Caption: "Table A2: Attrition analysis"
+Section: "Appendix"
+Body sample:
+  Row 1: | Baseline | Endline | Attrition rate | p-value
+  Row 2: Treatment | 1,250 | 1,102 | 11.8% | 
+  Row 3: Control | 1,200 | 1,089 | 9.3% | 
+  Row 4: Difference | | | 2.5pp | 0.234
+  Last row: F-test (differential attrition) | | | | 0.189
+Classification: DESCRIPTIVE
+Reason: Attrition analysis compares sample loss, not treatment effects on outcomes.
+
+EXAMPLE 13 - RESULTS (Mechanism/pathway analysis):
+Caption: "Table 6: Mechanisms - Knowledge and behavior changes"
+Section: "5.2 Pathways of Impact"
+Body sample:
+  Row 1: | (1) Knowledge | (2) Savings | (3) Investment
+  Row 2: Treatment | 0.45*** | 0.23*** | 0.18**
+  Row 3: | (0.08) | (0.05) | (0.07)
+  Row 4: Knowledge mediator | | 0.12** | 0.09*
+  Last row: | | (0.04) | (0.05)
+Classification: RESULTS
+Reason: Mechanism analysis showing causal effects on intermediate outcomes (knowledge, behavior).
 """
 
 

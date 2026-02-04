@@ -363,7 +363,147 @@ devchat-pdfs/
 
 ## 🔧 Function & Prompt Reference (For Review)
 
-This section maps all key functions and LLM prompts for code review and improvement.
+This section maps **ALL** functions and LLM prompts in the extraction pipeline for systematic code review.
+
+---
+
+### 📋 Complete Function Inventory
+
+#### `pipeline.py` - Main Orchestration
+| Function | Uses LLM | Description |
+|----------|----------|-------------|
+| `run_pipeline()` | ✅ | Main entry point - runs all stages |
+| `extract_all_tables()` | ✅ | Extract from all tables in document |
+| `_extract_by_orientation()` | ❌ | Route to correct extractor based on table format |
+| `_filter_suspicious_rows()` | ❌ | Remove false positive extractions |
+| `_extract_metadata_stage()` | ✅ | Run metadata extraction |
+| `_fallback_extraction()` | ✅ | Prose/figure extraction when tables fail |
+| `_enrich_with_metadata()` | ❌ | Add paper metadata to rows |
+| `_extract_prose_sample_sizes()` | ✅ | Get sample sizes from prose |
+| `_run_enrichment_stages()` | ✅ | Run outcome classification, context, analysis type |
+| `_print_extraction_stats()` | ❌ | Print extraction summary |
+| `_print_final_summary()` | ❌ | Print final pipeline summary |
+
+#### `core/` - Infrastructure
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `storage.py` | `get_r2_client()` | ❌ | Initialize R2 client |
+| `storage.py` | `load_mineru_json()` | ❌ | Load MineRU JSON from R2 |
+| `storage.py` | `list_available_studies()` | ❌ | List all studies in R2 |
+| `storage.py` | `list_projects()` | ❌ | List R2 projects |
+| `llm_client.py` | `call_llm()` | ✅ | Main LLM call with caching |
+| `llm_client.py` | `sanitize_llm_response()` | ❌ | Clean markdown fences |
+| `llm_client.py` | `parse_llm_json()` | ❌ | Parse JSON from response |
+| `llm_client.py` | `validate_llm_json()` | ❌ | Validate against Pydantic schema |
+| `llm_client.py` | `get_prompt_hash()` | ❌ | Hash for caching |
+| `llm_client.py` | `get_cache()` | ❌ | Get cache instance |
+| `llm_client.py` | `get_cached_llm_response()` | ❌ | Check cache |
+| `llm_client.py` | `get_llm_client()` | ❌ | Get client singleton |
+| `errors.py` | `get_accumulator()` | ❌ | Get error accumulator |
+| `errors.py` | `set_accumulator()` | ❌ | Set error accumulator |
+| `errors.py` | `reset_accumulator()` | ❌ | Reset error state |
+| `registry.py` | `get_registry()` | ❌ | Get document registry |
+| `registry.py` | `register_upload()` | ❌ | Register uploaded document |
+| `registry.py` | `check_duplicate()` | ❌ | Check for duplicate uploads |
+| `registry.py` | `compute_content_hash()` | ❌ | Hash content for dedup |
+| `registry.py` | `compute_file_hash()` | ❌ | Hash file for dedup |
+
+#### `classification/` - Table Classification
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `rules.py` | `classify_table_rules()` | ❌ | Regex-based classification |
+| `llm.py` | `classify_all_tables_llm()` | ✅ | Batch LLM classification |
+| `llm.py` | `classify_table_llm()` | ✅ | Single-table LLM classification |
+| `classifier.py` | `classify_table()` | ✅ | Entry point (rules → LLM fallback) |
+| `classifier_v3.py` | `TableClassifierV3.run_pipeline()` | ✅ | Few-shot classifier (88%+ accuracy) |
+
+#### `extraction/` - Value Extraction
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `metadata.py` | `extract_metadata()` | ❌ | Basic metadata from MineRU |
+| `metadata.py` | `extract_metadata_llm()` | ✅ | LLM-enhanced metadata |
+| `sample_sizes.py` | `extract_sample_sizes_from_table()` | ❌ | Parse N rows from tables |
+| `sample_sizes.py` | `extract_sample_sizes_from_prose()` | ✅ | LLM extraction from text |
+| `prose.py` | `extract_effects_from_prose()` | ✅ | Extract from narrative text |
+| `prose.py` | `extract_effects_from_figures()` | ✅ | Extract from figure captions |
+
+#### `extraction/extractors/` - Table Format Handlers
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `base.py` | `detect_table_orientation()` | ❌ | Detect table format type |
+| `standard.py` | `extract_results_table()` | ❌ | Standard format (outcomes=rows) |
+| `standard.py` | `is_treatment_row()` | ❌ | Check if row is treatment arm |
+| `standard.py` | `normalize_treatment_arm()` | ❌ | **NEW** - Map T1/T2 to names |
+| `transposed.py` | `extract_transposed_table()` | ❌ | Transposed format (Mean|SE|p) |
+| `treatments_cols.py` | `extract_treatments_in_cols_table()` | ❌ | Multi-arm format (T1|T2|T3 cols) |
+| `outcomes_rows.py` | `extract_outcomes_in_rows_se_split()` | ❌ | SE in separate row |
+| `comparison.py` | `extract_comparison_format_table()` | ❌ | Comparison tables (T1 vs T2) |
+
+#### `parsing/` - Text/Cell Parsing
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `ocr.py` | `fix_ocr_spacing()` | ❌ | Clean MineRU OCR artifacts |
+| `cells.py` | `parse_cell_comprehensive()` | ❌ | Extract coef/SE/CI/p-value |
+| `cells.py` | `parse_coefficient_se()` | ❌ | Simplified coef+SE extraction |
+
+#### `enrichment/` - Post-Extraction LLM
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `outcomes.py` | `classify_outcomes()` | ✅ | Categorize outcomes |
+| `context.py` | `enrich_with_context()` | ✅ | Add outcome definitions |
+| `analysis_type.py` | `classify_analysis_type()` | ✅ | **IMPROVED** - Detect subgroups, spillovers |
+
+#### `postprocessing/` - Calculations & Cleanup
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `effect_sizes.py` | `calculate_cohens_d()` | ❌ | Cohen's d calculation |
+| `effect_sizes.py` | `calculate_hedges_g()` | ❌ | Hedges' g (bias-corrected) |
+| `effect_sizes.py` | `calculate_effect_variance()` | ❌ | Effect size variance |
+| `effect_sizes.py` | `calculate_effect_sizes_for_row()` | ❌ | Calculate for single row |
+| `effect_sizes.py` | `calculate_effect_sizes()` | ❌ | Main entry point |
+| `effect_sizes.py` | `summarize_effect_sizes()` | ❌ | Summary statistics |
+| `mineru.py` | `postprocess_mineru_doc()` | ❌ | 8-step artifact removal |
+| `lot_parser.py` | `parse_list_of_tables()` | ❌ | Parse LoT from markdown |
+| `lot_parser.py` | `match_tables_to_list()` | ❌ | Match tables to LoT entries |
+| `lot_parser.py` | `repair_table_captions()` | ❌ | Fix missing captions |
+| `lot_parser.py` | `analyze_tables_with_lot()` | ❌ | Full LoT analysis |
+
+#### `adapters/` - Schema Conversion
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `schema_adapter.py` | `row_to_extracted_estimate()` | ❌ | Convert row to Pydantic model |
+| `schema_adapter.py` | `convert_dataframe_to_schema()` | ❌ | Convert DataFrame to models |
+| `schema_adapter.py` | `validate_dataframe_columns()` | ❌ | Validate column presence |
+| `schema_adapter.py` | `estimates_to_dataframe()` | ❌ | Models back to DataFrame |
+| `schema_adapter.py` | `normalize_authors()` | ❌ | Normalize author format |
+| `schema_adapter.py` | `safe_int/float/str/bool()` | ❌ | Safe type conversions |
+| `supabase_loader.py` | `clean_value()` | ❌ | Clean NaN for database |
+| `supabase_loader.py` | `row_to_db_record()` | ❌ | Convert to DB record |
+| `supabase_loader.py` | `validate_record()` | ❌ | Validate before insert |
+| `supabase_loader.py` | `SupabaseLoader.*` | ❌ | Upload to Supabase |
+
+#### `batch/` - Batch Processing
+
+| File | Function | Uses LLM | Description |
+|------|----------|----------|-------------|
+| `classify.py` | `run_batch_classification()` | ✅ | Classify all tables in corpus |
+| `classify.py` | `process_single_pdf()` | ✅ | Process one PDF |
+| `classify.py` | `list_all_json_files()` | ❌ | List all JSONs in R2 |
+| `classify.py` | `extract_study_id_from_key()` | ❌ | Parse study ID from path |
+| `extract.py` | `run_batch_extraction()` | ✅ | Extract from all RESULTS tables |
+| `extract.py` | `load_document()` | ❌ | Load document from R2 |
+| `extract.py` | `extract_table_by_index()` | ❌ | Extract single table |
+| `extract.py` | `find_latest_results_csv()` | ❌ | Find classification results |
+
+---
 
 ### Stage 1: Metadata Extraction
 
@@ -638,30 +778,34 @@ Only include outcomes you can find definitions for in the text.
 - Link to survey questions if available
 - Add index composition (e.g., "food security index = sum of 5 items")
 
-**Prompt 9: Analysis Type Classification** ([analysis_type.py#L54](enrichment/analysis_type.py))
+**Prompt 9: Analysis Type Classification** ([analysis_type.py#L54](enrichment/analysis_type.py)) ✅ ENHANCED
 ```
 You are an expert at analyzing impact evaluation research papers.
 
-For each table below, classify the analysis type. Think step-by-step:
+Classify each result row into categories:
 
-1. Is this a MAIN EFFECT (primary treatment effect on full sample)?
-2. Is this a SUBGROUP analysis (heterogeneous effects by gender, age, region)?
-   - If yes, what is the subgroup variable?
-3. Is this a SPILLOVER analysis (effects on non-beneficiaries)?
-   - If yes, what type? (within-household, within-village, general equilibrium)
-4. Does this analyze COST outcomes?
-5. Is this a MECHANISM/MEDIATOR analysis?
+1. MAIN EFFECT (primary treatment effect on full sample)?
+2. SUBGROUP analysis (by gender, asset_quartile, region, etc.)?
+   - Use STANDARDIZED variables: gender, asset_quartile, age_group, baseline_outcome, education, region, urban_rural
+3. SPILLOVER analysis (effects on non-beneficiaries)?
+4. COST-EFFECTIVENESS analysis?
+5. MECHANISM/MEDIATOR analysis?
+6. ROBUSTNESS CHECK (placebo, IV, bounds)?
+7. ESTIMAND TYPE (ITT, ATT, LATE, TOT)?
 
-TABLES TO CLASSIFY:
-{table contexts}
+TREATMENT ARMS IN CAPTION: {from caption}
+TABLES TO CLASSIFY: {table contexts}
 
-Return one line per table in this EXACT format:
-[index]|main_effect:yes/no|subgroup:yes/no|subgroup_var:...|spillover:yes/no|...
+Return JSON with fields: main_effect, subgroup, subgroup_var, spillover,
+spillover_type, cost, mechanism, is_robustness, estimand_type
+
+Examples included for consistent output format.
 ```
-**🔍 Improvement Opportunities:**
-- Add robustness check detection
-- Detect placebo tests
-- Handle intent-to-treat vs treatment-on-treated distinction
+**✅ Implemented Improvements:**
+- Standardized subgroup variable vocabulary
+- Added robustness check detection
+- Added estimand type (ITT/ATT/LATE/TOT)
+- 8 example outputs in prompt
 
 ---
 
@@ -704,9 +848,18 @@ Return one line per table in this EXACT format:
 ## 🎯 Priority Improvement Areas
 
 ### High Impact (Accuracy)
-1. **Few-shot classification examples** - Add more edge cases to `classifier_v3.py`
-2. **Treatment arm normalization** - Map T1/T2 to descriptive names from caption
-3. **Subgroup variable extraction** - Improve `classify_analysis_type()` prompt
+1. ✅ **Few-shot classification examples** - Added 6 new edge cases to `classifier_v3.py`:
+   - Spanish regression tables, French effect tables
+   - Appendix heterogeneity tables, cost-effectiveness analysis
+   - Attrition analysis, mechanism analysis
+2. ✅ **Treatment arm normalization** - Added `normalize_treatment_arm()` in `standard.py`:
+   - Maps T1/T2 to descriptive names from caption patterns
+   - Supports multiple pattern formats (T1=Cash, T1: Cash, (T1) Cash)
+   - Multi-language support (Spanish, French, Portuguese)
+3. ✅ **Subgroup variable extraction** - Enhanced `classify_analysis_type()` prompt:
+   - Added standardized vocabulary (gender, asset_quartile, region, etc.)
+   - New fields: `is_robustness`, `estimand_type`
+   - 8 example outputs in prompt for consistency
 
 ### Medium Impact (Coverage)
 4. **Spanish/Portuguese prompts** - Translate enrichment prompts

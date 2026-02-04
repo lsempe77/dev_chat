@@ -68,6 +68,91 @@ EXCLUDE_PATTERNS = [
 ]
 
 
+def normalize_treatment_arm(raw_arm: str, caption: str = "") -> str:
+    """
+    Normalize treatment arm labels to descriptive names.
+    
+    Mappings:
+    - T1, T2, T3 → Look up in caption (e.g., "T1=Cash, T2=Training")
+    - "Treatment" → Keep as is (generic)
+    - "CCT + grant (T3)" → "CCT + grant"
+    
+    Args:
+        raw_arm: Raw treatment arm label from table (e.g., "T1", "Treatment")
+        caption: Table caption that may contain treatment definitions
+    
+    Returns:
+        Normalized treatment arm name
+    """
+    if not raw_arm:
+        return raw_arm
+    
+    arm_clean = raw_arm.strip()
+    arm_lower = arm_clean.lower()
+    
+    # Pattern 1: Caption contains "T1 = Description" or "T1: Description"
+    # e.g., "T1=Cash transfer, T2=Training, T3=Full package"
+    if re.match(r'^t\d+$', arm_lower) and caption:
+        arm_num = arm_clean.upper()  # T1, T2, etc.
+        
+        # Look for patterns like "T1 = Cash", "T1: Cash", "T1 (Cash)"
+        patterns = [
+            rf'{arm_num}\s*[=:]\s*([^,;]+)',           # T1 = Cash transfer
+            rf'{arm_num}\s*\(([^)]+)\)',              # T1 (Cash transfer)
+            rf'\({arm_num}\)\s*([^,;(]+)',            # (T1) Cash transfer
+            rf'{arm_num}\s*[-–]\s*([^,;]+)',          # T1 - Cash transfer
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, caption, re.IGNORECASE)
+            if match:
+                desc = match.group(1).strip()
+                # Clean up the description
+                desc = re.sub(r'\s+', ' ', desc)  # Normalize whitespace
+                desc = desc.rstrip('.,;:')  # Remove trailing punctuation
+                if len(desc) > 2 and len(desc) < 100:
+                    return f"{arm_num} ({desc})"
+        
+        # If no definition found, return as-is
+        return arm_clean
+    
+    # Pattern 2: "CCT + grant (T3)" → Keep descriptive part
+    match = re.match(r'^(.+?)\s*\(T\d+\)$', arm_clean, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    
+    # Pattern 3: Standard labels - title case
+    standard_labels = {
+        'treatment': 'Treatment',
+        'treated': 'Treatment',
+        'control': 'Control',
+        'full': 'Full Program',
+        'partial': 'Partial Program',
+        'capital': 'Capital',
+        'psychosocial': 'Psychosocial',
+        'cash': 'Cash Transfer',
+        'training': 'Training',
+        'coaching': 'Coaching',
+        'grant': 'Grant',
+        'savings': 'Savings',
+        'stipend': 'Stipend',
+        # Spanish
+        'tratamiento': 'Tratamiento',
+        'control': 'Control',
+        # French
+        'traitement': 'Traitement',
+        'témoin': 'Témoin',
+        # Portuguese
+        'tratamento': 'Tratamento',
+        'controle': 'Controle',
+    }
+    
+    if arm_lower in standard_labels:
+        return standard_labels[arm_lower]
+    
+    return arm_clean
+
+
 def is_treatment_row(cell_text: str, row_cells=None) -> tuple:
     """
     Check if row label indicates a treatment arm.
@@ -320,6 +405,9 @@ def extract_results_table(table: dict, study_id: str) -> List[Dict[str, Any]]:
                 n_ctrl = n_control_by_section.get(section_key, {}).get(outcome_names[i])
                 n_clust = n_clusters_by_section.get(section_key, {}).get(outcome_names[i])
                 
+                # Normalize treatment arm to descriptive name
+                normalized_arm = normalize_treatment_arm(treatment_arm, caption)
+                
                 if coef is not None:
                     results.append({
                         'study_id': study_id,
@@ -327,7 +415,7 @@ def extract_results_table(table: dict, study_id: str) -> List[Dict[str, Any]]:
                         'table_caption': caption,
                         'page_number': page_idx + 1,
                         'section': current_section,
-                        'treatment_arm': treatment_arm,
+                        'treatment_arm': normalized_arm,
                         'outcome_name': outcome_names[i],
                         'coefficient': coef,
                         'standard_error': se,
