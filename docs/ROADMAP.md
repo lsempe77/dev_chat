@@ -1,6 +1,6 @@
 # DevChat v2 - Roadmap
 
-**Last Updated:** January 31, 2026
+**Last Updated:** February 9, 2026
 
 > This document tracks **future features** and priorities.  
 > For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).  
@@ -10,40 +10,98 @@
 
 ## Upcoming Features
 
+### 🚨 Critical Gaps (Must Fix Before Any Other Improvement)
+
+These are foundational problems. Without solving them, every other "improvement" is unmeasurable guesswork.
+
+1. **Golden Ground Truth Database** - 16h ⬅️ **#1 BLOCKER**
+   - ❌ **No human-coded gold standard exists.** The "88% accuracy" is self-measured, not validated.
+   - Need: Hand-extract effect sizes (coefficient, SE, p-value, sample size, outcome, treatment arm) for 10-15 representative studies (~150-300 rows)
+   - Must cover: clean tables, messy OCR, multi-language, transposed formats, prose-only
+   - Compare pipeline output row-by-row against human ground truth
+   - Calculate real precision, recall, and F1 per field (coefficient, SE, outcome, etc.)
+   - `data/master_UPG.csv` exists but is NOT a complete ground truth — it's a partial reference
+   - **Output:** `data/ground_truth/` with verified CSVs per study + evaluation script
+   - Files: New `evaluation/ground_truth_eval.py`
+
+2. **Prompt Engineering Methodology** - 12h ⬅️ **#2 BLOCKER**
+   - ❌ **All 9 prompts were written once and iterated by feel.** No systematic testing.
+   - Need: Test prompt variants side-by-side on ground truth data
+   - Ablation studies: Do few-shot examples help? How many? Which ones?
+   - Temperature experiments: Does temp=0.0 vs 0.3 change accuracy?
+   - Model comparison: Haiku vs Sonnet vs GPT-4o on same tables (cost-accuracy tradeoff)
+   - Structured JSON mode vs free-text parsing comparison
+   - **Output:** `evaluation/prompt_experiments/` with results per variant
+   - Files: New `evaluation/prompt_ablation.py`
+
+3. **Regression Testing Suite** - 8h
+   - ❌ **No regression tests.** A prompt change can silently break 10 previously-working tables.
+   - Need: Fixed test set of ~30 tables with expected outputs
+   - Run after every prompt/parser change, fail if accuracy drops
+   - Track: classification accuracy, coefficient match rate, SE match rate
+   - **Output:** `tests/extraction/` with pytest fixtures from ground truth
+   - Files: New `tests/extraction/test_regression.py`
+
+4. **Coverage Measurement (Precision & Recall)** - 6h
+   - ❌ **No idea what % of effect sizes the pipeline finds vs misses.**
+   - Need: For ground truth studies, count how many real effects exist (from human coding)
+   - Compare: pipeline-found vs human-coded → precision (% correct), recall (% found)
+   - Break down by: table format, language, extraction method (table vs prose vs figure)
+   - **Output:** Coverage report per study + aggregate metrics
+   - Files: New `evaluation/coverage_analysis.py`
+
+5. **Confidence Scores on Extractions** - 6h
+   - ❌ **All outputs are point values with zero uncertainty.** Clean table extraction and blurry OCR guesses look identical.
+   - Need: Score each extracted row on extraction confidence (0-1)
+   - Factors: OCR quality, cell parsing ambiguity, LLM uncertainty, source type (table vs prose)
+   - Flag low-confidence rows for human review priority
+   - **Output:** `extraction_confidence` column in output CSVs
+   - Files: `extraction_pipeline/pipeline.py`, all extractors
+
+6. **Contradiction Resolution** - 4h
+   - ❌ **When prose says "effect = 0.15" and table parser extracts 0.051, no logic flags this.**
+   - Need: Cross-check table extraction vs prose extraction for same outcomes
+   - Flag contradictions, prefer table values (more structured) but log disagreements
+   - **Output:** `contradictions` column or separate log
+   - Files: `extraction_pipeline/pipeline.py`
+
+7. **Validation Against Published Meta-Analyses** - 8h
+   - ❌ **Several programs (BRAC, GiveDirectly) have existing systematic reviews we could validate against.**
+   - Need: Find published meta-analyses for overlapping studies
+   - Compare our extracted effect sizes to published ones
+   - Calculate: mean absolute error, correlation, systematic bias direction
+   - **Output:** `evaluation/meta_analysis_comparison.py`
+
+8. **User Feedback Loop** - 8h
+   - ❌ **Researchers can't flag extraction errors in the frontend.** No corrections feed back.
+   - Need: "Flag error" button on extracted estimates in Evidence Panel
+   - Store corrections in Supabase `extraction_corrections` table
+   - Use corrections to update ground truth and retrain/re-evaluate
+   - Files: Frontend component + `api/routes/extraction.py` + migration
+
+---
+
 ### Immediate (Next Sprint)
 
 1. **Full Extraction Dataset + Human Validation** - 6h (reduced from 8h)
-   - ✅ **V3 COMPLETE:** Pilot on 54 studies → 48 (89%) extract data, 3,351 rows
-   - ✅ **V4 COMPLETE:** SE-split parser, European format, treatments-in-cols → 51 (94%), 10,698 rows
-   - ✅ **V5 COMPLETE:** Multi-language (ES/FR/PT) → 52 (96%), 10,551 rows
-   - ✅ **V6 COMPLETE:** Figure caption extraction → 54 (100%), ~10,563 rows
-   - ✅ **P1 COMPLETE:** Suspicious row filter removes metadata/noise
-   - ✅ **P2 COMPLETE:** Transposed table detection (outcomes-in-rows)
-   - ✅ **P3 COMPLETE:** 4 table orientations: columns, rows, treatments_in_cols, outcomes_in_rows_se_split
-   - ✅ **P4 COMPLETE:** Prose + figure extraction fallbacks
+   - ✅ **V3-V6 COMPLETE:** 54 studies, 4 table orientations, multi-language, prose + figure fallbacks
    - ✅ **Step 1 COMPLETE:** Full corpus extraction → 92 studies (86 with data, 6 empty), 12,366 rows
    - **Step 2:** Human review of extracted data (spot-check ~10% of rows) ⬅️ **IN PROGRESS**
-   - **Step 3:** Document FP/FN, calculate precision/recall![alt text](image.png)
+   - **Step 3:** Document FP/FN, calculate precision/recall
    - **Output:** `extraction_pipeline/outputs/full_corpus_for_validation.csv` (current: 12,366 rows)
    - Files: `extraction_pipeline/cli_v2.py`, `extraction_pipeline/combine_outputs.py`
 
-2. **Ground Truth Validation** - 4h ⬅️ **NEXT PRIORITY**
-   - Compare extracted values to master_UPG.csv ground truth
-   - Calculate: outcome match rate, coefficient accuracy, SE accuracy
-   - Identify systematic extraction errors for targeted fixes
-   - Files: `validation_app/app_v2.py`, `data/master_UPG.csv`
-
-3. **Domain-Specific Intervention Components** - 6h
+2. **Domain-Specific Intervention Components** - 6h
    - Build LLM-based component extractor per `DOMAIN_CONFIGS` in `schemas.py`
    - Add CLI arg `--domain graduation|education|health`
    - Test on 3 domains
    - Files: `extraction_pipeline/pipeline.py`, `src/extraction/schemas.py`
 
-4. **Study Design Filter in Evidence Panel** - 4h
+3. **Study Design Filter in Evidence Panel** - 4h
    - Add dropdown to filter evidence by study design (RCT, DiD, etc.)
    - Files: `frontend/src/components/EvidencePanel.tsx`
 
-5. **"I Don't Know" Explicit Refusal** - 2h
+4. **"I Don't Know" Explicit Refusal** - 2h
    - When retrieval confidence is below threshold, explicitly refuse to answer
    - Prevents hallucination when no good sources found
    - Files: `src/agents/devchat_agent.py`, `src/generation/claim_ledger.py`
@@ -130,19 +188,28 @@
    - Sources: 3ie methods guidance, PRISMA guidelines, Cochrane handbook
    - Reference: [Context7 MCP](https://block.github.io/goose/docs/mcp/context7-mcp)
 
+8. **Aardvark** - 12h
+   - Test security
 ---
 
 ## Success Metrics (Targets)
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| **Extraction: Study coverage** | 54/54 (100%) | 95%+ ✅ |
-| **Extraction: Rows extracted** | 10,551 | - |
-| **Extraction: Table orientations** | 4 types | - |
-| **Extraction: Languages** | EN, ES, FR, PT | - |
-| **Extraction: Fallbacks** | Prose + Figures | - |
-| **RAG: Faithfulness** | 66.47% | 70%+ |
-| **RAG: Citation Recall** | 98.86% | 70%+ ✅ |
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| **Extraction: Study coverage** | 86/92 (93%) | 95%+ | 🟡 Close |
+| **Extraction: Rows extracted** | 12,366 | - | ✅ |
+| **Extraction: Table orientations** | 5 types | - | ✅ |
+| **Extraction: Languages** | EN, ES, FR, PT | - | ✅ |
+| **Extraction: Fallbacks** | Prose + Figures | - | ✅ |
+| **Extraction: Precision** | ❓ Unknown | 90%+ | ❌ Needs ground truth |
+| **Extraction: Recall** | ❓ Unknown | 80%+ | ❌ Needs ground truth |
+| **Extraction: Coefficient accuracy** | ❓ Unknown | ±0.01 | ❌ Needs ground truth |
+| **Extraction: SE accuracy** | ❓ Unknown | ±0.005 | ❌ Needs ground truth |
+| **Extraction: Classification accuracy** | ~88% (self-measured) | 95%+ | 🟡 Needs validation |
+| **Extraction: Confidence scores** | None | Per-row scores | ❌ Not started |
+| **Extraction: Regression tests** | None | 30+ test cases | ❌ Not started |
+| **RAG: Faithfulness** | 66.47% | 70%+ | 🟡 In progress |
+| **RAG: Citation Recall** | 98.86% | 70%+ | ✅ |
 
 ---
 
