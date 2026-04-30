@@ -84,15 +84,18 @@ Our systems have been rigorously evaluated:
 | 📚 **Citation Recall** | **98.9%** | All claims properly cited |
 | ✅ **Citation Precision** | **98.9%** | Citations point to correct sources |
 
-### Extraction Pipeline V3
+### Extraction Pipeline V6
 | Metric | Value | Description |
 | :----: | :---: | ----------- |
-| 📋 **Table Classification** | **88%+** | Accuracy on ground truth annotations |
+| 📋 **Table Classification** | **~88%** | Self-measured (no human ground truth yet) |
 | 📊 **RESULTS Tables** | **1,115** | From 86 studies in corpus |
-| 🔢 **Values Extracted** | **11,765** | Coefficients, SEs, p-values |
-| 📈 **Coefficient Coverage** | **100%** | All rows have coefficient value |
-| 📉 **SE Coverage** | **57.7%** | Standard errors found |
-| 📌 **P-value Coverage** | **30.2%** | P-values extracted |
+| 🔢 **Rows Extracted** | **12,366** | Coefficients, SEs, p-values |
+| 🌍 **Languages** | **EN/ES/FR/PT** | Multi-language support |
+| 📑 **Table Formats** | **5 types** | Standard, transposed, treatments-cols, outcomes-rows, comparison |
+| 🎯 **Precision** | **❓ Unknown** | Needs golden ground truth (see roadmap) |
+| 🔁 **Recall** | **❓ Unknown** | Needs golden ground truth (see roadmap) |
+
+> ⚠️ **Honest disclosure:** Extraction accuracy is currently **self-measured**. We do not yet have a human-coded golden ground truth dataset to validate precision/recall, no regression tests, and no systematic prompt engineering methodology. See [docs/ROADMAP.md](docs/ROADMAP.md#-critical-gaps-must-fix-before-any-other-improvement) for the full list of critical gaps.
 
 ---
 
@@ -364,10 +367,28 @@ devchat_v2_sota/
 - [x] Study design classification (22 types)
 - [x] Contextual retrieval (49% fewer failures)
 - [x] Parent-child chunking
-- [x] **Extraction Pipeline V3** - LLM table classification with 88%+ accuracy
+- [x] **Extraction Pipeline V6** - LLM table classification with ~88% self-measured accuracy
 - [x] **MinerU Post-Processing** - 8-step artifact removal (52→45 tables)
 - [x] **List of Tables Cross-Reference** - Caption repair from TOC
-- [x] **Batch Value Extraction** - 11,765 effect sizes from 1,115 RESULTS tables
+- [x] **Batch Value Extraction** - 12,366 rows from 1,115 RESULTS tables
+- [x] **Multi-Language Support** - EN, ES, FR, PT table extraction
+- [x] **5 Table Format Handlers** - Standard, transposed, treatments-cols, outcomes-rows, comparison
+- [x] **Prose & Figure Fallbacks** - LLM extraction when tables unavailable
+- [x] **Treatment Arm Normalization** - Map T1/T2 to descriptive names from captions
+- [x] **Production API Integration** - Supabase storage + `/extraction/*` endpoints
+
+### � Critical Gaps (Top Priority)
+
+Foundational issues that block measuring any future improvement. See [docs/ROADMAP.md](docs/ROADMAP.md#-critical-gaps-must-fix-before-any-other-improvement).
+
+1. **Golden ground truth database** — No human-coded gold standard exists
+2. **Prompt engineering methodology** — All 9 prompts iterated by feel, no variants tested
+3. **Regression testing suite** — Changes can silently break working extractions
+4. **Coverage measurement** — Real precision/recall unknown
+5. **Confidence scores** — All outputs are point values with zero uncertainty
+6. **Contradiction resolution** — Table vs prose disagreements undetected
+7. **Validation against published meta-analyses** — Existing reviews not used
+8. **User feedback loop** — No way for researchers to flag/correct errors
 
 ### 🔜 Coming Soon
 
@@ -377,6 +398,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full prioritized list.
 
 - Study design filter in Evidence Panel
 - Auto-classify on document ingest
+- Domain-specific intervention components
 
 **Short-Term:**
 
