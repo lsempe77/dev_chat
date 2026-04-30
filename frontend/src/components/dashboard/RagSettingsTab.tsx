@@ -113,6 +113,12 @@ interface StorageStats {
   totalFiles: number;
 }
 
+interface QdrantInfo {
+  exists: boolean | null;
+  pointsCount: number | null;
+  message: string | null;
+}
+
 interface RagSettingsTabProps {
   ragId: string;
   project: {
@@ -220,6 +226,13 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
     outputFiles: 0,
     totalFiles: 0,
   });
+
+  // Live Qdrant verification (separate from cached project.chunk_count)
+  const [qdrantInfo, setQdrantInfo] = useState<QdrantInfo>({
+    exists: null,
+    pointsCount: null,
+    message: null,
+  });
   
   // Fetch connection status
   const fetchStatus = useCallback(async () => {
@@ -255,16 +268,47 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
         newConnections.push({ name: "Cloudflare R2", status: "disconnected", details: "Backend unreachable" });
       }
       
-      // Check Qdrant for this project's collection
+      // Check Qdrant for this project's collection (uses live verification on backend)
       try {
         const qdrantRes = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}`);
         if (qdrantRes.ok) {
           const data = await qdrantRes.json();
-          newConnections.push({
-            name: "Qdrant Cloud",
-            status: "connected",
-            details: `${data.chunk_count.toLocaleString()} vectors in ${data.qdrant_collection}`,
-          });
+          const exists = data.qdrant_collection_exists ?? null;
+          const points = data.qdrant_points_count ?? null;
+          const cached = data.chunk_count ?? 0;
+          const message = data.qdrant_status_message ?? null;
+
+          setQdrantInfo({ exists, pointsCount: points, message });
+
+          if (exists === false) {
+            // Collection missing entirely
+            newConnections.push({
+              name: "Qdrant Cloud",
+              status: "disconnected",
+              details: `Collection "${data.qdrant_collection}" missing — needs re-indexing (Supabase reports ${cached.toLocaleString()} cached chunks)`,
+            });
+          } else if (exists === true && points === 0 && cached > 0) {
+            // Collection empty but Supabase says it should have data
+            newConnections.push({
+              name: "Qdrant Cloud",
+              status: "disconnected",
+              details: `Collection empty — Supabase reports ${cached.toLocaleString()} chunks. Re-index required.`,
+            });
+          } else if (exists === true) {
+            // Healthy or mismatch
+            newConnections.push({
+              name: "Qdrant Cloud",
+              status: "connected",
+              details: `${(points ?? 0).toLocaleString()} vectors in ${data.qdrant_collection}${message && message !== "Healthy" ? ` — ${message}` : ""}`,
+            });
+          } else {
+            // Unknown (verification could not run)
+            newConnections.push({
+              name: "Qdrant Cloud",
+              status: "disconnected",
+              details: message || "Could not verify collection",
+            });
+          }
         } else {
           newConnections.push({ name: "Qdrant Cloud", status: "disconnected", details: "Collection not found" });
         }
@@ -678,20 +722,50 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
           <div className="p-4 rounded-lg bg-muted/50 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Collection</span>
-              <Badge variant="secondary">{project.qdrant_collection}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{project.qdrant_collection}</Badge>
+                {qdrantInfo.exists === false && (
+                  <Badge variant="destructive" className="text-xs">Missing</Badge>
+                )}
+                {qdrantInfo.exists === true && qdrantInfo.pointsCount === 0 && project.chunk_count > 0 && (
+                  <Badge variant="destructive" className="text-xs">Empty</Badge>
+                )}
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Documents</span>
               <span className="text-sm font-medium">{project.document_count.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Vector Chunks</span>
-              <span className="text-sm font-medium">{project.chunk_count.toLocaleString()}</span>
+              <span className="text-sm text-muted-foreground">Vector Chunks (Qdrant)</span>
+              <span className="text-sm font-medium">
+                {qdrantInfo.pointsCount !== null
+                  ? qdrantInfo.pointsCount.toLocaleString()
+                  : qdrantInfo.exists === false
+                    ? "0 (collection missing)"
+                    : "—"}
+              </span>
             </div>
+            {qdrantInfo.pointsCount !== null &&
+              qdrantInfo.pointsCount !== project.chunk_count && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Cached chunks (Supabase)
+                  </span>
+                  <span className="text-sm font-medium text-amber-600">
+                    {project.chunk_count.toLocaleString()}
+                  </span>
+                </div>
+              )}
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">PDFs in R2</span>
               <span className="text-sm font-medium">{storageStats.inputFiles}</span>
             </div>
+            {qdrantInfo.message && qdrantInfo.message !== "Healthy" && (
+              <div className="pt-2 border-t border-border/40 text-xs text-amber-600">
+                {qdrantInfo.message}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

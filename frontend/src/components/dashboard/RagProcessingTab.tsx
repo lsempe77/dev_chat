@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Wifi,
   WifiOff,
+  AlertTriangle,
 } from "lucide-react";
 import { useProcessingRealtime, type ProcessingJob as RealtimeJob } from "@/hooks/useProcessingRealtime";
 
@@ -71,6 +72,40 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   const [error, setError] = useState<string | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
+
+  // Live Qdrant verification
+  const [qdrantInfo, setQdrantInfo] = useState<{
+    collection: string | null;
+    exists: boolean | null;
+    pointsCount: number | null;
+    cachedChunks: number;
+    message: string | null;
+  }>({
+    collection: null,
+    exists: null,
+    pointsCount: null,
+    cachedChunks: 0,
+    message: null,
+  });
+
+  const fetchQdrantStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/rags/${ragId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setQdrantInfo({
+        collection: data.qdrant_collection ?? null,
+        exists: data.qdrant_collection_exists ?? null,
+        pointsCount: data.qdrant_points_count ?? null,
+        cachedChunks: data.chunk_count ?? 0,
+        message: data.qdrant_status_message ?? null,
+      });
+    } catch {
+      // Silently ignore — banner just won't show
+    }
+  }, [ragId, accessToken]);
 
   // Fetch documents (for realtime refresh callback)
   const refreshDocuments = useCallback(async () => {
@@ -163,7 +198,8 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   useEffect(() => {
     refreshDocuments();
     fetchJobs();
-  }, [refreshDocuments, fetchJobs]);
+    fetchQdrantStatus();
+  }, [refreshDocuments, fetchJobs, fetchQdrantStatus]);
 
   // Auto-refresh documents - less frequent when realtime is connected
   useEffect(() => {
@@ -311,6 +347,38 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
           </Button>
         </div>
       )}
+
+      {/* Qdrant Status Warning - shown when documents are "completed" in Supabase
+          but Qdrant collection is missing or empty (e.g. cluster reset). */}
+      {qdrantInfo.exists !== null &&
+        (qdrantInfo.exists === false ||
+          (qdrantInfo.pointsCount === 0 && qdrantInfo.cachedChunks > 0)) && (
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 px-4 py-3 rounded-lg flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 text-sm space-y-1">
+              <p className="font-semibold">
+                Documents marked &ldquo;Completed&rdquo; but vectors are missing in Qdrant
+              </p>
+              <p>
+                {qdrantInfo.exists === false ? (
+                  <>
+                    Collection <code className="font-mono text-xs">{qdrantInfo.collection}</code>{" "}
+                    does not exist in the Qdrant cluster. Supabase still reports{" "}
+                    <strong>{qdrantInfo.cachedChunks.toLocaleString()}</strong> cached chunks.
+                  </>
+                ) : (
+                  <>
+                    Qdrant collection is empty (0 points), but Supabase reports{" "}
+                    <strong>{qdrantInfo.cachedChunks.toLocaleString()}</strong> chunks across{" "}
+                    completed documents.
+                  </>
+                )}{" "}
+                These documents need to be re-indexed before they can be queried.
+                {qdrantInfo.message ? ` (${qdrantInfo.message})` : ""}
+              </p>
+            </div>
+          </div>
+        )}
 
       {/* Active Job Progress */}
       {activeJob && (

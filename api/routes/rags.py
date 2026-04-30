@@ -156,8 +156,16 @@ class RAGProjectListResponse(BaseModel):
 
 class RAGProjectDetailResponse(RAGProjectResponse):
     """Detailed response for a single RAG project."""
-    # Additional stats can be added here
-    pass
+    # Live Qdrant verification (compare with cached chunk_count from Supabase)
+    qdrant_collection_exists: Optional[bool] = Field(
+        None, description="Whether the Qdrant collection actually exists in the cluster"
+    )
+    qdrant_points_count: Optional[int] = Field(
+        None, description="Live point count from Qdrant (None if collection missing or unreachable)"
+    )
+    qdrant_status_message: Optional[str] = Field(
+        None, description="Human-readable status of the Qdrant collection"
+    )
 
 
 # =============================================================================
@@ -320,9 +328,61 @@ async def get_rag_project(
 ) -> RAGProjectDetailResponse:
     """
     Get details of a specific RAG project.
+
+    Includes live Qdrant verification: checks whether the collection actually
+    exists and returns the real point count, so the dashboard can detect
+    stale Supabase metadata (e.g. after a Qdrant cluster reset).
     """
     project = await get_user_project(user, project_id)
-    
+
+    # Live Qdrant verification
+    collection_name = project["qdrant_collection"]
+    qdrant_collection_exists: Optional[bool] = None
+    qdrant_points_count: Optional[int] = None
+    qdrant_status_message: Optional[str] = None
+
+    try:
+        from qdrant_client import QdrantClient
+        from qdrant_client.http.exceptions import UnexpectedResponse
+
+        client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+            timeout=10,
+        )
+        try:
+            info = client.get_collection(collection_name)
+            qdrant_collection_exists = True
+            qdrant_points_count = info.points_count or 0
+            cached = project.get("chunk_count", 0) or 0
+            if qdrant_points_count == 0 and cached > 0:
+                qdrant_status_message = (
+                    f"Collection exists but is empty. Supabase metadata reports "
+                    f"{cached:,} chunks — documents need to be re-indexed."
+                )
+            elif qdrant_points_count != cached:
+                qdrant_status_message = (
+                    f"Mismatch: Qdrant has {qdrant_points_count:,} points but "
+                    f"Supabase reports {cached:,} chunks."
+                )
+            else:
+                qdrant_status_message = "Healthy"
+        except UnexpectedResponse as exc:
+            if getattr(exc, "status_code", None) == 404:
+                qdrant_collection_exists = False
+                qdrant_points_count = 0
+                cached = project.get("chunk_count", 0) or 0
+                qdrant_status_message = (
+                    f"Collection '{collection_name}' does not exist in Qdrant. "
+                    f"Supabase metadata reports {cached:,} chunks — documents "
+                    f"need to be re-indexed (Qdrant cluster was likely reset)."
+                )
+            else:
+                qdrant_status_message = f"Qdrant error: {exc}"
+    except Exception as exc:  # noqa: BLE001 - surface any connection issue
+        logger.warning(f"Qdrant verification failed for project {project_id}: {exc}")
+        qdrant_status_message = f"Could not reach Qdrant: {exc}"
+
     return RAGProjectDetailResponse(
         id=str(project["id"]),
         name=project["name"],
@@ -333,6 +393,9 @@ async def get_rag_project(
         status=project["status"],
         document_count=project.get("document_count", 0),
         chunk_count=project.get("chunk_count", 0),
+        qdrant_collection_exists=qdrant_collection_exists,
+        qdrant_points_count=qdrant_points_count,
+        qdrant_status_message=qdrant_status_message,
         created_at=project["created_at"],
         updated_at=project["updated_at"],
     )
